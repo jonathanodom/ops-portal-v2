@@ -33,4 +33,14 @@ class Organization extends Model
     {
         return $this->hasMany(ServiceLocation::class);
     }
+
+    public function serviceTickets(): HasMany
+    {
+        return $this->hasMany(ServiceTicket::class);
+    }
+
+    public function visits(): HasMany
+    {
+        return $this->hasMany(Visit::class);
+    }
 }

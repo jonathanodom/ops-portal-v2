@@ -4,9 +4,13 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
+use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
+use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\ServiceLocationController;
+use App\Http\Controllers\Office\ServiceTicketController;
+use App\Http\Controllers\Office\VisitController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -41,6 +45,25 @@ Route::middleware(['auth', 'active.organization'])->group(function (): void {
         ->middleware('capability:experience.office.access')
         ->group(function (): void {
             Route::view('/', 'office.home')->name('home');
+            Route::middleware('capability:service_tickets.view')->group(function (): void {
+                Route::get('/service-tickets', [ServiceTicketController::class, 'index'])->name('service-tickets.index');
+                Route::get('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'show'])->whereNumber('serviceTicket')->name('service-tickets.show');
+                Route::get('/dispatch', [DispatchController::class, 'index'])->name('dispatch.index');
+            });
+            Route::middleware('capability:dispatch.manage')->group(function (): void {
+                Route::get('/service-tickets/create', [ServiceTicketController::class, 'create'])->name('service-tickets.create');
+                Route::post('/service-tickets', [ServiceTicketController::class, 'store'])->name('service-tickets.store');
+                Route::get('/service-tickets/{serviceTicket}/edit', [ServiceTicketController::class, 'edit'])->whereNumber('serviceTicket')->name('service-tickets.edit');
+                Route::put('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'update'])->whereNumber('serviceTicket')->name('service-tickets.update');
+                Route::post('/service-tickets/{serviceTicket}/notes', [ServiceTicketController::class, 'addNote'])->whereNumber('serviceTicket')->name('service-tickets.notes.store');
+                Route::post('/service-tickets/{serviceTicket}/transition', [ServiceTicketController::class, 'transition'])->whereNumber('serviceTicket')->name('service-tickets.transition');
+                Route::get('/service-tickets/{serviceTicket}/visits/create', [VisitController::class, 'create'])->whereNumber('serviceTicket')->name('service-tickets.visits.create');
+                Route::post('/service-tickets/{serviceTicket}/visits', [VisitController::class, 'store'])->whereNumber('serviceTicket')->name('service-tickets.visits.store');
+                Route::get('/visits/{visit}/edit', [VisitController::class, 'edit'])->whereNumber('visit')->name('visits.edit');
+                Route::put('/visits/{visit}', [VisitController::class, 'update'])->whereNumber('visit')->name('visits.update');
+                Route::post('/visits/{visit}/cancel', [VisitController::class, 'cancel'])->whereNumber('visit')->name('visits.cancel');
+                Route::post('/visits/{visit}/return', [VisitController::class, 'createReturn'])->whereNumber('visit')->name('visits.return');
+            });
             Route::middleware('capability:customers.view')->group(function (): void {
                 Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customers.show');
@@ -67,7 +90,9 @@ Route::middleware(['auth', 'active.organization'])->group(function (): void {
         ->name('field.')
         ->middleware('capability:experience.field.access')
         ->group(function (): void {
-            Route::view('/', 'field.home')->name('home');
+            Route::get('/', [TodayController::class, 'index'])->name('home');
+            Route::get('/visits/{visit}', [TodayController::class, 'show'])->whereNumber('visit')->name('visits.show');
+            Route::post('/visits/{visit}/transition', [TodayController::class, 'transition'])->whereNumber('visit')->name('visits.transition');
             Route::middleware('capability:customers.view')->group(function (): void {
                 Route::get('/customers', [FieldCustomerDirectoryController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [FieldCustomerDirectoryController::class, 'showCustomer'])->whereNumber('customer')->name('customers.show');

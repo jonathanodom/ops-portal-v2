@@ -40,6 +40,11 @@ class Customer extends Model
         return $this->hasOne(Contact::class)->where('is_preferred', true)->where('active', true);
     }
 
+    public function serviceTickets(): HasMany
+    {
+        return $this->hasMany(ServiceTicket::class);
+    }
+
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
     {
         return $query->where('organization_id', $organizationId);

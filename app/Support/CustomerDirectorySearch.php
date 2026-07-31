@@ -45,6 +45,7 @@ class CustomerDirectorySearch
                                 ->orWhere('city', 'like', $like)
                                 ->orWhere('state', 'like', $like)
                                 ->orWhere('postal_code', 'like', $like)));
+                    $query->orWhereHas('serviceTickets', fn ($ticket) => $ticket->where('ticket_number', 'like', $like));
 
                     if ($digits !== null) {
                         $query->orWhere('phone_normalized', 'like', '%'.$digits.'%')

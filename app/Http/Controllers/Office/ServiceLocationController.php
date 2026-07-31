@@ -13,6 +13,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class ServiceLocationController extends Controller
@@ -98,6 +99,11 @@ class ServiceLocationController extends Controller
         $location = $this->location($request, $location);
         Gate::authorize('update', $location);
         $data = $this->validated($request, $location->customer);
+        if (! $data['active'] && $location->visits()->where('status', '!=', 'canceled')->exists()) {
+            throw ValidationException::withMessages([
+                'active' => 'Cancel or move this location’s active visits before archiving the location.',
+            ]);
+        }
 
         DB::transaction(function () use ($request, $location, $data, $audit): void {
             $location->customer->serviceLocations()->lockForUpdate()->get();

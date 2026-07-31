@@ -7,7 +7,8 @@ Customer → Service Location → Job → Visit → Field Execution → Closeout
 ```
 
 Phase 0 establishes authentication, organization-scoped authorization, and distinct office and field experiences.
-Phase 1 adds the narrow customer, contact, and service-location foundation required for field work. Jobs, visits, proposals, inventory, invoices, and broader CRM features remain out of scope.
+Phase 1 adds the narrow customer, contact, and service-location foundation required for field work.
+Phase 2 adds service tickets, visits, dispatch scheduling, crew assignment, and field Today workflows.
 
 See [the complete FSM-first handoff](docs/FSM_FIRST_CODEX_HANDOFF.md) for the product charter, lifecycle, scope lock, phased delivery plan, and quality gates.
 
@@ -74,6 +75,20 @@ Production must also set `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https
 - Customer creation saves the customer, optional preferred contact, and required first service location in one transaction.
 
 All customer records are created fresh in v2. There is no beta-data import, external CRM synchronization, address validation, or geocoding in this phase.
+
+## Phase 2 service tickets and visits
+
+- Office: `/office/service-tickets` and `/office/dispatch`
+- Field: `/field` for Today and the next seven days
+- Service-ticket identifiers use the organization/year sequence `NDT-ST-YYYY-0123`.
+- Super Admin and Dispatcher manage tickets, scheduling, assignments, and exceptions.
+- Reviewer and Billing receive read-only office access.
+- Assigned Technicians can move authorized visits from Assigned to En Route and On Site.
+- `visits.inspect_all` never grants execution; `visits.execute_any` remains an explicit override.
+- Visit windows are entered in the service-location timezone and stored in UTC.
+- Internal ticket notes remain office-only and append-only.
+
+See [Phase 2 validation](docs/PHASE_2_VALIDATION.md) for schema changes, lifecycle rules, authorization, validation results, and exclusions.
 
 ## Quality commands
 

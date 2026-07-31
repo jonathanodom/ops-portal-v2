@@ -7,6 +7,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
     'organization_id', 'customer_id', 'primary_contact_id', 'name', 'address_line_1',
@@ -31,6 +32,16 @@ class ServiceLocation extends Model
     public function primaryContact(): BelongsTo
     {
         return $this->belongsTo(Contact::class, 'primary_contact_id');
+    }
+
+    public function serviceTickets(): HasMany
+    {
+        return $this->hasMany(ServiceTicket::class);
+    }
+
+    public function visits(): HasMany
+    {
+        return $this->hasMany(Visit::class);
     }
 
     public function formattedAddress(): string

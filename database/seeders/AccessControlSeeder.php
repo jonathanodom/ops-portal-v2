@@ -20,6 +20,7 @@ class AccessControlSeeder extends Seeder
         'users.manage' => 'Manage staff access',
         'customers.view' => 'View customer and service-location records',
         'customers.manage' => 'Create and update customer and service-location records',
+        'service_tickets.view' => 'View service tickets and visits in the office experience',
     ];
 
     private const ROLES = [
@@ -29,6 +30,7 @@ class AccessControlSeeder extends Seeder
                 'experience.office.access', 'experience.field.access', 'visits.inspect_all',
                 'dispatch.manage', 'closeouts.review', 'billing_handoffs.view', 'users.manage',
                 'customers.view', 'customers.manage',
+                'service_tickets.view',
             ],
         ],
         'dispatcher' => [
@@ -36,6 +38,7 @@ class AccessControlSeeder extends Seeder
             'capabilities' => [
                 'experience.office.access', 'experience.field.access', 'visits.inspect_all', 'dispatch.manage',
                 'customers.view', 'customers.manage',
+                'service_tickets.view',
             ],
         ],
         'technician' => [
@@ -44,11 +47,11 @@ class AccessControlSeeder extends Seeder
         ],
         'reviewer' => [
             'name' => 'Reviewer',
-            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view'],
+            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view', 'service_tickets.view'],
         ],
         'billing' => [
             'name' => 'Billing',
-            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'customers.view'],
+            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'customers.view', 'service_tickets.view'],
         ],
     ];
 
