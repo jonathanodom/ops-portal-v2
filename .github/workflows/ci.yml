@@ -72,6 +72,9 @@ jobs:
           DB_DATABASE: newday_ops_beta
           DB_USERNAME: root
           DB_PASSWORD: root_password
+          SESSION_DRIVER: database
+          CACHE_STORE: database
+          QUEUE_CONNECTION: database
           BETA_DEMO_PASSWORD: BetaCiPassword123!
         run: |
           mysql -h 127.0.0.1 -uroot -proot_password -e "CREATE DATABASE newday_ops_beta CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
@@ -85,6 +88,9 @@ jobs:
           DB_DATABASE: newday_ops_beta
           DB_USERNAME: root
           DB_PASSWORD: root_password
+          SESSION_DRIVER: database
+          CACHE_STORE: database
+          QUEUE_CONNECTION: database
           BETA_DEMO_PASSWORD: BetaCiPassword123!
           BETA_BASE_URL: http://127.0.0.1:8001
         run: |
