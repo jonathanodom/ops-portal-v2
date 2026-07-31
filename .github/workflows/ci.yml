@@ -76,7 +76,7 @@ jobs:
         run: |
           mysql -h 127.0.0.1 -uroot -proot_password -e "CREATE DATABASE newday_ops_beta CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
           composer beta:setup
-          composer beta:validate
+          php artisan beta:validate --env=beta
           php artisan beta:benchmark --env=beta --runs=10 --fail-on-budget
       - name: Validate beta accessibility and responsive workflows
         env:
