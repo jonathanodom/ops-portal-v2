@@ -9,6 +9,7 @@ Customer → Service Location → Job → Visit → Field Execution → Closeout
 Phase 0 establishes authentication, organization-scoped authorization, and distinct office and field experiences.
 Phase 1 adds the narrow customer, contact, and service-location foundation required for field work.
 Phase 2 adds service tickets, visits, dispatch scheduling, crew assignment, and field Today workflows.
+Phase 3 adds mobile time capture, shared closeout drafts, private evidence, parts/equipment proposals, acknowledgment, and evidence-validated submission.
 
 See [the complete FSM-first handoff](docs/FSM_FIRST_CODEX_HANDOFF.md) for the product charter, lifecycle, scope lock, phased delivery plan, and quality gates.
 
@@ -84,11 +85,23 @@ All customer records are created fresh in v2. There is no beta-data import, exte
 - Super Admin and Dispatcher manage tickets, scheduling, assignments, and exceptions.
 - Reviewer and Billing receive read-only office access.
 - Assigned Technicians can move authorized visits from Assigned to En Route and On Site.
-- `visits.inspect_all` never grants execution; `visits.execute_any` remains an explicit override.
+- Super Admin receives every system capability, including unrestricted visit execution; other roles remain assignment/capability scoped.
 - Visit windows are entered in the service-location timezone and stored in UTC.
 - Internal ticket notes remain office-only and append-only.
 
 See [Phase 2 validation](docs/PHASE_2_VALIDATION.md) for schema changes, lifecycle rules, authorization, validation results, and exclusions.
+
+## Phase 3 mobile field execution
+
+- Assigned execution-capable crew share one optimistic-locking closeout draft.
+- Individual travel, on-site, and other timers enforce one active timer per user.
+- Only the assigned lead submits unless the membership has `visits.execute_any`; Super Admin receives that audited override by role.
+- Resolved work requires categorized photo evidence or a categorized no-photo fallback.
+- Private evidence is streamed through authorized endpoints and never receives a public storage URL.
+- Submitted narrative, time, media, and proposals remain immutable until Phase 4 corrections.
+- Office users see draft status and time totals; full submitted evidence requires `closeouts.inspect`.
+
+See [Phase 3 validation](docs/PHASE_3_VALIDATION.md) for the schema, authorization/evidence matrices, storage settings, local preservation record, validation results, rollback notes, and exclusions.
 
 ## Quality commands
 

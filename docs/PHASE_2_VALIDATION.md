@@ -18,7 +18,7 @@ No Phase 0 or Phase 1 migration was edited. `composer phase:update` applies the 
 
 | Role | Office ticket view | Ticket/dispatch management | Field inspection | Assigned execution |
 | --- | --- | --- | --- | --- |
-| Super Admin | Yes | Yes | All visits | No, unless explicitly granted `visits.execute_any` |
+| Super Admin | Yes | Yes | All visits | All visits through `visits.execute_any` |
 | Dispatcher | Yes | Yes | All visits | No, unless explicitly granted |
 | Technician | No | No | Assigned visits | Assigned visits |
 | Reviewer | Read only | No | No field access | No |

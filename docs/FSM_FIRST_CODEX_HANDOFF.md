@@ -61,7 +61,7 @@ Separate these concepts:
 
 Examples:
 
-- Super Admin: can enter both hosts; can inspect any visit; can perform test actions only if the explicit capability allows it.
+- Super Admin: can enter both hosts and receives every system capability, including inspection and execution of any visit.
 - Dispatcher: can schedule and assign; cannot approve billing unless granted.
 - Technician: can execute visits assigned to them; cannot approve their own closeout.
 - Reviewer: can approve/return closeouts; cannot impersonate a technician without an explicit, audited test mode.

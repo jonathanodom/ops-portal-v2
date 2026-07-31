@@ -26,6 +26,8 @@ return [
         'assigned' => 'Assigned',
         'en_route' => 'En route',
         'on_site' => 'On site',
+        'pending_closeout' => 'Pending closeout',
+        'customer_unavailable' => 'Customer unavailable',
         'canceled' => 'Canceled',
     ],
 ];

@@ -4,6 +4,7 @@ use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
+use App\Http\Controllers\Field\ExecutionController;
 use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
@@ -93,10 +94,19 @@ Route::middleware(['auth', 'active.organization'])->group(function (): void {
             Route::get('/', [TodayController::class, 'index'])->name('home');
             Route::get('/visits/{visit}', [TodayController::class, 'show'])->whereNumber('visit')->name('visits.show');
             Route::post('/visits/{visit}/transition', [TodayController::class, 'transition'])->whereNumber('visit')->name('visits.transition');
+            Route::post('/visits/{visit}/draft', [ExecutionController::class, 'save'])->name('visits.draft');
+            Route::post('/visits/{visit}/timer', [ExecutionController::class, 'timer'])->name('visits.timer');
+            Route::put('/visits/{visit}/time/{entry}', [ExecutionController::class, 'updateTime'])->name('visits.time.update');
+            Route::post('/visits/{visit}/parts', [ExecutionController::class, 'addPart'])->name('visits.parts.store');
+            Route::delete('/visits/{visit}/parts/{part}', [ExecutionController::class, 'removePart'])->name('visits.parts.remove');
+            Route::post('/visits/{visit}/media', [ExecutionController::class, 'upload'])->name('visits.media.store');
+            Route::delete('/visits/{visit}/media/{media}', [ExecutionController::class, 'removeMedia'])->name('visits.media.remove');
+            Route::post('/visits/{visit}/submit', [ExecutionController::class, 'submit'])->name('visits.submit');
             Route::middleware('capability:customers.view')->group(function (): void {
                 Route::get('/customers', [FieldCustomerDirectoryController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [FieldCustomerDirectoryController::class, 'showCustomer'])->whereNumber('customer')->name('customers.show');
                 Route::get('/locations/{location}', [FieldCustomerDirectoryController::class, 'showLocation'])->whereNumber('location')->name('locations.show');
             });
         });
+    Route::get('/field-media/{media}', [ExecutionController::class, 'media'])->whereNumber('media')->name('field.media.show');
 });

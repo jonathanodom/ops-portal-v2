@@ -2,10 +2,12 @@
 
 namespace App\Http\Controllers\Field;
 
+use App\Domain\FieldExecution;
 use App\Domain\ServiceTicketWorkflow;
 use App\Http\Controllers\Controller;
 use App\Models\OrganizationMembership;
 use App\Models\Visit;
+use App\Models\VisitTimeEntry;
 use App\Support\AuditRecorder;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -39,17 +41,28 @@ class TodayController extends Controller
             'serviceTicket.visits' => fn ($query) => $query->select(['id', 'service_ticket_id', 'status', 'scheduled_start_at', 'timezone'])->orderBy('id'),
             'serviceLocation.primaryContact',
             'assignments.membership.user',
+            'currentCloseout.lastSavedBy', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts',
         ]);
 
         return view('field.visits.show', compact('visit'));
     }
 
-    public function transition(Request $request, string $visit, ServiceTicketWorkflow $workflow): RedirectResponse
+    public function transition(Request $request, string $visit, ServiceTicketWorkflow $workflow, FieldExecution $execution): RedirectResponse
     {
         $visit = $this->visit($request, $visit);
         Gate::authorize('execute', $visit);
         $data = $request->validate(['status' => ['required', 'in:en_route,on_site']]);
+        $active = VisitTimeEntry::query()->where('active_user_id', $request->user()->id)->first();
+        if ($active && $active->visit_id !== $visit->id) {
+            return back()->withErrors(['time' => 'Stop the timer on your other visit before changing this visit status.']);
+        }
         $workflow->executeVisit($visit, $data['status'], $request->user());
+        $visit->refresh();
+        $closeout = $execution->draft($visit, $request->user());
+        if ($active) {
+            $execution->stopTimer($active, $request->user());
+        }
+        $execution->startTimer($visit, $closeout, $request->user(), $data['status'] === 'en_route' ? 'travel' : 'on_site');
 
         return back()->with('status', $data['status'] === 'en_route' ? 'Travel started.' : 'Marked on site.');
     }

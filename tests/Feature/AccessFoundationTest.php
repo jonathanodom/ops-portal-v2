@@ -28,7 +28,8 @@ class AccessFoundationTest extends TestCase
         $this->assertNull($user->technicianProfile);
         $this->actingAs($user)->get('/office')->assertOk()->assertSee('Customer operations');
         $this->actingAs($user)->get('/field')->assertOk()->assertSee('No visits today');
-        $this->assertFalse($membership->hasCapability('visits.execute_any'));
+        $this->assertTrue($membership->hasCapability('visits.execute_any'));
+        $this->assertSame(Capability::query()->count(), $membership->roles()->firstOrFail()->capabilities()->count());
     }
 
     public function test_role_access_matrix_is_enforced_server_side(): void
@@ -71,8 +72,10 @@ class AccessFoundationTest extends TestCase
         $executeAny = Capability::query()->where('key', 'visits.execute_any')->firstOrFail();
         $office = Capability::query()->where('key', 'experience.office.access')->firstOrFail();
 
-        $membership->capabilityOverrides()->attach($executeAny, ['effect' => 'grant']);
-        $this->assertTrue($membership->hasCapability('visits.execute_any'));
+        $membership->capabilityOverrides()->attach($executeAny, ['effect' => 'deny']);
+        $this->assertFalse($membership->hasCapability('visits.execute_any'));
+        $membership->capabilityOverrides()->updateExistingPivot($executeAny->id, ['effect' => 'grant']);
+        $this->assertTrue($membership->fresh()->hasCapability('visits.execute_any'));
 
         $membership->capabilityOverrides()->attach($office, ['effect' => 'deny']);
         $this->actingAs($user)->get('/office')->assertForbidden();
