@@ -27,6 +27,8 @@ return [
         'en_route' => 'En route',
         'on_site' => 'On site',
         'pending_closeout' => 'Pending closeout',
+        'returned_for_correction' => 'Returned for correction',
+        'approved' => 'Approved',
         'customer_unavailable' => 'Customer unavailable',
         'canceled' => 'Canceled',
     ],

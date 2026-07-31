@@ -148,7 +148,7 @@ class ServiceTicketController extends Controller
             'serviceLocation.primaryContact',
             'contact',
             'notes.author',
-            'visits' => fn ($query) => $query->with(['assignments.membership.user', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts'])->orderBy('scheduled_start_at')->orderBy('id'),
+            'visits' => fn ($query) => $query->with(['assignments.membership.user', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('id'),
         ]);
         $events = AuditEvent::query()->where('organization_id', $ticket->organization_id)
             ->with('actor')

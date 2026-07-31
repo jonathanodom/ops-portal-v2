@@ -4,6 +4,7 @@
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
+        $inheritedMedia = ($versions ?? collect())->where('id','!=',$closeout?->id)->flatMap->media->where('state','stored');
     @endphp
 
     @if (session('status'))
@@ -16,6 +17,15 @@
         </div>
     @endif
     <x-form-errors />
+
+    @if($visit->status === 'returned_for_correction' && $closeout?->parent)
+        @php($returnReview = $closeout->parent->reviews->firstWhere('decision','returned'))
+        <div class="mb-4 rounded-lg border border-orange-300 bg-orange-50 p-4 text-orange-950" role="alert">
+            <p class="font-bold">Returned for correction · Version {{ $closeout->version }}</p>
+            <p class="mt-1 text-sm">{{ $returnReview?->reason ?: 'Review the closeout and resubmit the corrected version.' }}</p>
+            <p class="mt-2 text-xs font-semibold">Original acknowledgment, time, and prior photos remain preserved as read-only evidence.</p>
+        </div>
+    @endif
 
     <a href="{{ route('field.home') }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">← Today</a>
     <p class="mt-2 text-sm font-bold text-brand-blue">{{ $visit->serviceTicket->ticket_number }}</p>
@@ -78,7 +88,7 @@
             <h2 class="text-lg font-bold">Time</h2>
             @forelse ($closeout?->timeEntries ?? collect() as $entry)
                 <div class="mt-3 border-t border-slate-200 pt-3 text-sm">
-                    <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · {{ $entry->started_at->format('g:i A') }}–{{ $entry->ended_at?->format('g:i A') ?? 'running' }}</p>
+                    <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · <x-local-time :value="$entry->started_at" :timezone="$visit->timezone" format="g:i A T" />–@if($entry->ended_at)<x-local-time :value="$entry->ended_at" :timezone="$visit->timezone" format="g:i A T" />@else running @endif</p>
                     @if ($closeout?->status === 'draft' && $entry->user_id === auth()->id() && $entry->ended_at)
                         <details class="mt-2">
                             <summary class="min-h-11 cursor-pointer py-3 font-bold text-brand-blue">Correct my entry</summary>
@@ -142,10 +152,10 @@
                     <button class="button-primary w-full">Save draft</button>
                 </form>
                 @if ($closeout?->lastSavedBy)
-                    <p class="mt-3 text-xs text-slate-500">Last saved by {{ $closeout->lastSavedBy->name }} {{ $closeout->updated_at->diffForHumans() }}.</p>
+                    <p class="mt-3 text-xs text-slate-500">Last saved by {{ $closeout->lastSavedBy->name }} · <x-local-time :value="$closeout->updated_at" :timezone="$visit->timezone" />.</p>
                 @endif
             @else
-                <p class="mt-3 font-semibold text-emerald-800">Submitted {{ $closeout->submitted_at?->format('M j, g:i A') }}</p>
+                <p class="mt-3 font-semibold text-emerald-800">Submitted <x-local-time :value="$closeout->submitted_at" :timezone="$visit->timezone" /></p>
             @endif
         </section>
 
@@ -172,6 +182,9 @@
                 @empty
                     <p class="mt-3 text-sm text-slate-500">No photos uploaded.</p>
                 @endforelse
+                @if($inheritedMedia->isNotEmpty())
+                    <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3"><p class="text-sm font-bold">Inherited read-only evidence</p><div class="mt-2 flex flex-wrap gap-2">@foreach($inheritedMedia as $media)<a class="button-secondary" href="{{ route('field.media.show',$media) }}">{{ ucfirst(str_replace('_',' ',$media->category)) }}</a>@endforeach</div></div>
+                @endif
             </section>
 
             <section class="surface mt-4 p-5">
@@ -211,4 +224,18 @@
             <p class="mt-2 text-sm">Visit #{{ $history->id }} · {{ ucfirst(str_replace('_', ' ', $history->status)) }}</p>
         @endforeach
     </section>
+    @if(($versions ?? collect())->count() > 1)
+        <section class="surface mt-4 p-5">
+            <h2 class="font-bold">Closeout version history</h2>
+            <div class="mt-3 space-y-3">
+                @foreach($versions as $version)
+                    <div class="rounded-lg border border-slate-200 p-3">
+                        <p class="font-semibold">Version {{ $version->version }} · {{ ucfirst($version->status) }}</p>
+                        @foreach($version->reviews as $review)<p class="mt-1 text-sm text-slate-600">{{ ucfirst($review->decision) }} by {{ $review->reviewer?->name ?? 'Office reviewer' }}</p>@endforeach
+                        <p class="mt-1 text-xs text-slate-500">{{ $version->media->where('state','stored')->count() }} preserved photo(s) · {{ $version->parts->whereNull('removed_at')->count() }} proposal(s)</p>
+                    </div>
+                @endforeach
+            </div>
+        </section>
+    @endif
 </x-layouts.field>

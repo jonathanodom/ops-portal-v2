@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'organization_id', 'customer_id', 'service_location_id', 'contact_id', 'ticket_number',
@@ -51,6 +52,11 @@ class ServiceTicket extends Model
     public function visits(): HasMany
     {
         return $this->hasMany(Visit::class);
+    }
+
+    public function billingHandoff(): HasOne
+    {
+        return $this->hasOne(BillingHandoff::class);
     }
 
     public function scopeForOrganization(Builder $query, int $organizationId): Builder

@@ -10,6 +10,7 @@ Phase 0 establishes authentication, organization-scoped authorization, and disti
 Phase 1 adds the narrow customer, contact, and service-location foundation required for field work.
 Phase 2 adds service tickets, visits, dispatch scheduling, crew assignment, and field Today workflows.
 Phase 3 adds mobile time capture, shared closeout drafts, private evidence, parts/equipment proposals, acknowledgment, and evidence-validated submission.
+Phase 4 adds immutable correction versions, office review and adjustments, operational approval, Service Ticket completion, and billing handoffs.
 
 See [the complete FSM-first handoff](docs/FSM_FIRST_CODEX_HANDOFF.md) for the product charter, lifecycle, scope lock, phased delivery plan, and quality gates.
 
@@ -102,6 +103,17 @@ See [Phase 2 validation](docs/PHASE_2_VALIDATION.md) for schema changes, lifecyc
 - Office users see draft status and time totals; full submitted evidence requires `closeouts.inspect`.
 
 See [Phase 3 validation](docs/PHASE_3_VALIDATION.md) for the schema, authorization/evidence matrices, storage settings, local preservation record, validation results, rollback notes, and exclusions.
+
+## Phase 4 closeout review and billing handoff
+
+- Office Review: `/office/closeout-reviews` for submitted evidence, version comparison, time/part adjustments, approval, and return-for-correction.
+- Returned closeouts create a new editable version while preserving earlier time, photos, acknowledgment, and decisions as immutable evidence.
+- Reviewer self-approval is denied except for an explicitly audited Super Admin override.
+- Approved resolved work completes its Service Ticket only when no active follow-up remains, then creates one idempotent ready billing handoff.
+- Billing: `/office/billing-handoffs` exposes effective approved totals and acknowledgment without granting private field-evidence access.
+- Non-resolved approvals retain operational state and never create a billing handoff.
+
+See [Phase 4 validation](docs/PHASE_4_VALIDATION.md) for schema changes, decision matrices, preservation evidence, exact validation results, rollback notes, and exclusions.
 
 ## Quality commands
 

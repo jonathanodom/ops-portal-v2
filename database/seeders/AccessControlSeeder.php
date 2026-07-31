@@ -17,6 +17,7 @@ class AccessControlSeeder extends Seeder
         'dispatch.manage' => 'Schedule and assign visits',
         'closeouts.review' => 'Review and return closeouts',
         'billing_handoffs.view' => 'View billing handoff records',
+        'billing_handoffs.manage' => 'Acknowledge billing handoff records',
         'users.manage' => 'Manage staff access',
         'customers.view' => 'View customer and service-location records',
         'customers.manage' => 'Create and update customer and service-location records',
@@ -48,7 +49,7 @@ class AccessControlSeeder extends Seeder
         ],
         'billing' => [
             'name' => 'Billing',
-            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'customers.view', 'service_tickets.view'],
+            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'customers.view', 'service_tickets.view'],
         ],
     ];
 
