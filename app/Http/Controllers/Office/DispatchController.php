@@ -36,15 +36,19 @@ class DispatchController extends Controller
             ->whereDoesntHave('visits')
             ->oldest()
             ->get();
-        $week = collect(range(0, 6))->map(function (int $offset) use ($date, $organization): array {
+        $weekCounts = Visit::query()->forOrganization($organization->id)
+            ->where('status', '!=', 'canceled')
+            ->where('scheduled_start_at', '>=', $date->startOfDay()->utc())
+            ->where('scheduled_start_at', '<', $date->addDays(7)->startOfDay()->utc())
+            ->pluck('scheduled_start_at')
+            ->map(fn ($value) => CarbonImmutable::parse($value)->timezone($organization->timezone)->format('Y-m-d'))
+            ->countBy();
+        $week = collect(range(0, 6))->map(function (int $offset) use ($date, $weekCounts): array {
             $day = $date->addDays($offset);
 
             return [
                 'date' => $day,
-                'count' => Visit::query()->forOrganization($organization->id)
-                    ->where('status', '!=', 'canceled')
-                    ->whereBetween('scheduled_start_at', [$day->startOfDay()->utc(), $day->endOfDay()->utc()])
-                    ->count(),
+                'count' => $weekCounts->get($day->format('Y-m-d'), 0),
             ];
         });
 

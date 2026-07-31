@@ -14,7 +14,7 @@
     <div class="min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
         <aside class="hidden border-r border-slate-200 bg-white p-5 lg:flex lg:flex-col">
             <img src="{{ asset('images/newday-logo.png') }}" alt="NewDay Tech LLC" class="w-48">
-            <div class="mt-9 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Office workspace</div>
+            <div class="mt-9 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Office workspace</div>
             <nav class="mt-3" aria-label="Office">
                 <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home')) aria-current="page" @endif class="flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.home') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Overview</a>
                 @if ($activeMembership->hasCapability('customers.view'))
@@ -30,6 +30,9 @@
                 @endif
                 @if ($activeMembership->hasCapability('billing_handoffs.view'))
                     <a href="{{ route('office.billing-handoffs.index') }}" @if(request()->routeIs('office.billing-handoffs.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.billing-handoffs.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Billing</a>
+                @endif
+                @if ($activeMembership->hasCapability('operations.health.view'))
+                    <a href="{{ route('office.operations.health') }}" @if(request()->routeIs('office.operations.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.operations.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Health</a>
                 @endif
             </nav>
             <div class="mt-auto border-t border-slate-200 pt-5">
@@ -65,6 +68,7 @@
                     @if($activeMembership->hasCapability('service_tickets.view'))<a href="{{ route('office.service-tickets.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Tickets</a><a href="{{ route('office.dispatch.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.dispatch.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Dispatch</a>@endif
                     @if($activeMembership->hasCapability('closeouts.inspect'))<a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.closeout-reviews.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Review</a>@endif
                     @if($activeMembership->hasCapability('billing_handoffs.view'))<a href="{{ route('office.billing-handoffs.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.billing-handoffs.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Billing</a>@endif
+                    @if($activeMembership->hasCapability('operations.health.view'))<a href="{{ route('office.operations.health') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.operations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Health</a>@endif
                 </nav>
             @endif
             <main id="main-content" class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">

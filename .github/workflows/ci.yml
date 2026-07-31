@@ -55,5 +55,40 @@ jobs:
       - run: php artisan migrate --force
       - run: php artisan db:seed --force
       - run: vendor/bin/pint --test
+      - run: php artisan view:cache
+      - run: php scripts/lint-compiled-views.php
       - run: php artisan test
+      - name: Rehearse MySQL backup and isolated restore
+        env:
+          DB_USERNAME: root
+          DB_PASSWORD: root_password
+        run: |
+          php artisan ops:backup --output=storage/app/backups/ci-phase5.sql
+          php artisan ops:restore-verify storage/app/backups/ci-phase5.sql
+      - name: Build isolated MySQL beta fixture
+        env:
+          APP_ENV: beta
+          DB_CONNECTION: mysql
+          DB_DATABASE: newday_ops_beta
+          DB_USERNAME: root
+          DB_PASSWORD: root_password
+          BETA_DEMO_PASSWORD: BetaCiPassword123!
+        run: |
+          mysql -h 127.0.0.1 -uroot -proot_password -e "CREATE DATABASE newday_ops_beta CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+          composer beta:setup
+          composer beta:validate
+          php artisan beta:benchmark --env=beta --runs=10 --fail-on-budget
+      - name: Validate beta accessibility and responsive workflows
+        env:
+          APP_ENV: beta
+          DB_CONNECTION: mysql
+          DB_DATABASE: newday_ops_beta
+          DB_USERNAME: root
+          DB_PASSWORD: root_password
+          BETA_DEMO_PASSWORD: BetaCiPassword123!
+          BETA_BASE_URL: http://127.0.0.1:8001
+        run: |
+          npx playwright install --with-deps chromium
+          php artisan serve --env=beta --host=127.0.0.1 --port=8001 > /tmp/ops-beta-server.log 2>&1 &
+          npm run test:e2e
       - run: git diff --check

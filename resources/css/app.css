@@ -9,7 +9,9 @@
     --font-sans: 'Inter', ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     --color-brand-blue: #1d80f7;
     --color-brand-blue-dark: #1269d3;
+    --color-brand-blue-deep: #0b56ad;
     --color-brand-orange: #f7941d;
+    --color-brand-orange-dark: #9a4d00;
     --color-ink: #102235;
     --color-canvas: #f5f7fa;
 }
@@ -49,7 +51,7 @@
     }
 
     .button-primary {
-        @apply inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-blue px-5 text-sm font-bold text-white transition-colors hover:bg-brand-blue-dark;
+        @apply inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-blue-dark px-5 text-sm font-bold text-white transition-colors hover:bg-brand-blue-deep;
     }
 
     .button-secondary {
@@ -79,4 +81,26 @@
     .button-action {
         @apply inline-flex min-h-14 items-center justify-center rounded-lg bg-brand-orange px-6 text-base font-bold text-slate-950 transition-colors hover:bg-orange-400;
     }
+}
+
+/* Unlayered accessibility overrides intentionally outrank generated utilities.
+   The original logo blue remains available for borders, focus, and branding. */
+.text-brand-blue {
+    color: var(--color-brand-blue-dark);
+}
+
+.bg-blue-50 .text-slate-500 {
+    color: var(--color-slate-600);
+}
+
+.text-brand-orange {
+    color: var(--color-brand-orange-dark);
+}
+
+.bg-slate-950 .text-brand-orange {
+    color: var(--color-brand-orange);
+}
+
+.bg-canvas .text-slate-500 {
+    color: var(--color-slate-600);
 }

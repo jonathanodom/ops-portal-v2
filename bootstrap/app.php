@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Middleware\CorrelateRequest;
+use App\Http\Middleware\RecordOperationalFailures;
 use App\Http\Middleware\RequireCapability;
 use App\Http\Middleware\ResolveActiveOrganization;
 use Illuminate\Foundation\Application;
@@ -13,9 +15,11 @@ return Application::configure(basePath: dirname(__DIR__))
         health: '/up',
     )
     ->withMiddleware(function (Middleware $middleware): void {
+        $middleware->append(CorrelateRequest::class);
         $middleware->alias([
             'active.organization' => ResolveActiveOrganization::class,
             'capability' => RequireCapability::class,
+            'record.operational.failures' => RecordOperationalFailures::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
