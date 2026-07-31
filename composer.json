@@ -42,6 +42,15 @@
             "npm ci",
             "npm run build"
         ],
+        "phase:update": [
+            "composer install --no-interaction --prefer-dist",
+            "docker compose up -d mysql",
+            "@php scripts/wait-for-mysql.php",
+            "@php artisan migrate --force",
+            "@php artisan db:seed --force",
+            "npm ci",
+            "npm run build"
+        ],
         "dev": [
             "Composer\\Config::disableProcessTimeout",
             "npx concurrently -c \"#93c5fd,#c4b5fd,#fb7185,#fdba74\" \"php artisan serve\" \"php artisan queue:listen --tries=1 --timeout=0\" \"php artisan pail --timeout=0\" \"npm run dev\" --names=server,queue,logs,vite --kill-others"
