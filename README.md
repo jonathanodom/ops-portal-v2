@@ -24,6 +24,7 @@ composer setup
 ```
 
 This installs dependencies, creates `.env`, starts MySQL on local port `3307`, migrates and seeds access-control records, and builds frontend assets.
+Run `composer setup` only when creating a new local environment.
 
 Create the first Super Admin:
 
@@ -32,6 +33,20 @@ php artisan portal:create-user owner@newdaytech.net --name="Jonathan Odom" --rol
 ```
 
 The command prompts securely for a password. Do not put real credentials in command history, source control, seeders, or documentation.
+
+## Update between phases without losing data
+
+After pulling a new phase, run:
+
+```powershell
+composer phase:update
+```
+
+This reuses the existing `newday_mysql` Docker volume, applies only pending migrations, runs idempotent system seeders, and rebuilds dependencies/assets. It does not recreate tables or remove users, customers, contacts, or service locations.
+
+Do not run `migrate:fresh`, `db:wipe`, or `docker compose down -v` against the local development database. Those commands intentionally destroy data. The automated test suite uses a separate disposable test database and may rebuild that database safely.
+
+See [Local data preservation](docs/LOCAL_DATA_PRESERVATION.md) for the phase-by-phase workflow, migration rules, backup guidance, and recovery boundaries.
 
 ## Run locally
 
@@ -63,7 +78,7 @@ All customer records are created fresh in v2. There is no beta-data import, exte
 ## Quality commands
 
 ```powershell
-php artisan migrate:fresh --seed
+php artisan migrate --seed
 php artisan test
 vendor/bin/pint --test
 npm ci
@@ -80,3 +95,4 @@ CI repeats the migrations, seed, tests, formatting check, and production asset b
 - Do not deploy, merge, or cut over production without explicit owner approval.
 - All tenant-owned records must be scoped through the active organization membership.
 - A TechnicianProfile is optional and never grants field access by itself.
+- Merged migrations are immutable. Every later schema change uses a new additive, reversible migration.
