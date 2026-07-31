@@ -8,6 +8,7 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
+use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable(['organization_id', 'user_id', 'status'])]
 class OrganizationMembership extends Model
@@ -35,6 +36,11 @@ class OrganizationMembership extends Model
         return $this->belongsToMany(Capability::class, 'organization_membership_capability')
             ->withPivot('effect')
             ->using(MembershipCapability::class);
+    }
+
+    public function visitAssignments(): HasMany
+    {
+        return $this->hasMany(VisitAssignment::class);
     }
 
     public function hasCapability(string $key): bool

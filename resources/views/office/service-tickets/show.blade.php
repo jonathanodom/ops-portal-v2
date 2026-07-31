@@ -1,0 +1,38 @@
+<x-layouts.office :title="$ticket->ticket_number">
+    @if(session('status'))<div class="mb-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900" role="status">{{ session('status') }}</div>@endif
+    <a href="{{ route('office.service-tickets.index') }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">← Service Tickets</a>
+    <div class="mt-2 flex flex-wrap items-start justify-between gap-4">
+        <div><p class="font-bold text-brand-blue">{{ $ticket->ticket_number }}</p><h1 class="mt-1 text-3xl font-bold text-slate-950">{{ $ticket->title }}</h1><p class="mt-2 text-sm text-slate-500">{{ ucfirst($ticket->priority) }} priority · {{ ucfirst(str_replace('_',' ',$ticket->status)) }}</p></div>
+        @if($activeMembership->hasCapability('dispatch.manage'))<div class="flex flex-wrap gap-2"><a href="{{ route('office.service-tickets.edit', $ticket) }}" class="button-secondary">Edit ticket</a>@if($ticket->status !== 'canceled')<a href="{{ route('office.service-tickets.visits.create', $ticket) }}" class="button-primary">Add visit</a>@endif</div>@endif
+    </div>
+    <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
+        <div class="space-y-6">
+            <section class="surface p-5"><h2 class="text-lg font-bold">Customer & location</h2><p class="mt-3 font-bold">{{ $ticket->customer->display_name }}</p><a class="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-brand-blue" href="{{ route('office.locations.show', $ticket->serviceLocation) }}">{{ $ticket->serviceLocation->name }} · {{ $ticket->serviceLocation->formattedAddress() }}</a>@if($ticket->contact)<p class="mt-2 text-sm text-slate-600">Contact: {{ $ticket->contact->name }} @if($ticket->contact->phone)· {{ $ticket->contact->phone }}@endif</p>@endif</section>
+            <section class="surface p-5"><h2 class="text-lg font-bold">Work scope</h2><p class="mt-3 whitespace-pre-line text-slate-700">{{ $ticket->description ?: 'No work scope recorded.' }}</p>@if($ticket->customer_visible_summary)<h3 class="mt-5 text-sm font-bold uppercase tracking-[.1em] text-slate-500">Customer-visible summary</h3><p class="mt-2 whitespace-pre-line text-slate-700">{{ $ticket->customer_visible_summary }}</p>@endif</section>
+            <section class="surface overflow-hidden">
+                <div class="flex items-center justify-between border-b border-slate-200 p-5"><h2 class="text-lg font-bold">Visits</h2></div>
+                @forelse($ticket->visits as $visit)
+                    <div class="border-b border-slate-200 p-5 last:border-0">
+                        <div class="flex flex-wrap justify-between gap-3"><div><p class="font-bold">Visit #{{ $visit->id }} @if($visit->return_of_visit_id)<span class="text-brand-orange">· Return of #{{ $visit->return_of_visit_id }}</span>@endif</p><p class="mt-1 text-sm text-slate-600">{{ ucfirst(str_replace('_',' ',$visit->status)) }} · {{ $visit->scheduledStartLocal()?->format('M j, Y g:i A T') ?? 'Unscheduled' }}@if($visit->scheduledEndLocal()) – {{ $visit->scheduledEndLocal()->format('g:i A T') }}@endif</p><p class="mt-1 text-sm text-slate-500">{{ $visit->assignments->map(fn($a) => ($a->is_lead ? 'Lead: ' : '').$a->membership->user->name)->join(', ') ?: 'No crew assigned' }}</p></div>@if($activeMembership->hasCapability('dispatch.manage') && !in_array($visit->status,['en_route','on_site','canceled']))<a class="button-secondary" href="{{ route('office.visits.edit', $visit) }}">Schedule / assign</a>@endif</div>
+                        @if($activeMembership->hasCapability('dispatch.manage') && $visit->status !== 'canceled')
+                            <div class="mt-4 grid gap-3 md:grid-cols-2">
+                                <form method="POST" action="{{ route('office.visits.cancel', $visit) }}" class="flex gap-2">@csrf<input class="form-input" name="reason" required placeholder="Cancellation reason"><button class="button-secondary">Cancel visit</button></form>
+                                @if($visit->status === 'on_site')<form method="POST" action="{{ route('office.visits.return', $visit) }}" class="flex gap-2">@csrf<input class="form-input" name="reason" required placeholder="Return reason"><button class="button-secondary">Create return</button></form>@endif
+                            </div>
+                        @endif
+                    </div>
+                @empty<div class="p-6 text-sm text-slate-500">No visits yet. This ticket remains in the unscheduled ticket list until a visit is created.</div>@endforelse
+            </section>
+            <section class="surface p-5"><h2 class="text-lg font-bold">Internal notes</h2>
+                @if($activeMembership->hasCapability('dispatch.manage'))<form method="POST" action="{{ route('office.service-tickets.notes.store', $ticket) }}" class="mt-4">@csrf<label class="form-label" for="body">Add note</label><textarea class="form-textarea" id="body" name="body" required maxlength="10000"></textarea><button class="button-primary mt-3">Add note</button></form>@endif
+                <div class="mt-5 space-y-4">@forelse($ticket->notes->sortByDesc('created_at') as $note)<article class="border-l-4 border-slate-200 pl-4"><p class="whitespace-pre-line text-sm text-slate-700">{{ $note->body }}</p><p class="mt-2 text-xs font-semibold text-slate-500">{{ $note->author?->name ?? 'Former user' }} · {{ $note->created_at->format('M j, Y g:i A') }}</p></article>@empty<p class="text-sm text-slate-500">No internal notes.</p>@endforelse</div>
+            </section>
+        </div>
+        <aside class="space-y-6">
+            @if($activeMembership->hasCapability('dispatch.manage') && $ticket->status !== 'canceled')
+                <section class="surface p-5"><h2 class="font-bold">Ticket status</h2><form method="POST" action="{{ route('office.service-tickets.transition', $ticket) }}" class="mt-4 space-y-3">@csrf<select class="form-input" name="status" aria-label="New ticket status">@if($ticket->status==='open')<option value="on_hold">Put on hold</option>@endif @if($ticket->status==='on_hold')<option value="open">Reopen</option>@endif<option value="canceled">Cancel ticket</option></select><textarea class="form-textarea" name="reason" placeholder="Reason required for hold or cancellation"></textarea><button class="button-secondary w-full">Update status</button></form></section>
+            @endif
+            <section class="surface p-5"><h2 class="font-bold">History</h2><div class="mt-4 space-y-4">@forelse($events as $event)<div><p class="text-sm font-semibold text-slate-700">{{ str_replace(['.','_'],' ',ucfirst($event->event_type)) }}</p><p class="mt-1 text-xs text-slate-500">{{ $event->actor?->name ?? 'System' }} · {{ $event->occurred_at->format('M j, g:i A') }}</p></div>@empty<p class="text-sm text-slate-500">No history yet.</p>@endforelse</div></section>
+        </aside>
+    </div>
+</x-layouts.office>

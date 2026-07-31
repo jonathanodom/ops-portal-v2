@@ -15,6 +15,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 class CustomerController extends Controller
@@ -153,6 +154,11 @@ class CustomerController extends Controller
         ]);
         $data['phone_normalized'] = Phone::normalize($data['phone'] ?? null);
         $data['updated_by_id'] = $request->user()->id;
+        if ($data['status'] === 'inactive' && $customer->serviceTickets()->whereNotIn('status', ['completed', 'canceled'])->exists()) {
+            throw ValidationException::withMessages([
+                'status' => 'Cancel or complete this customer’s open service tickets before archiving the customer.',
+            ]);
+        }
 
         $before = $customer->getAttributes();
         $customer->update($data);
