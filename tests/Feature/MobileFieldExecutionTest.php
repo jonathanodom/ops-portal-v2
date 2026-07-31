@@ -198,6 +198,27 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertTrue($metadata['execute_any_override']);
     }
 
+    public function test_super_admin_can_execute_any_visit_without_an_assignment(): void
+    {
+        [$organization, $visit] = $this->executionGraph('assigned');
+        [$superAdmin] = $this->userWithRole('super_admin', $organization);
+
+        $this->actingAs($superAdmin)->get("/field/visits/{$visit->id}")
+            ->assertOk()
+            ->assertSee('Start En Route');
+        $this->actingAs($superAdmin)->post("/field/visits/{$visit->id}/transition", ['status' => 'en_route'])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+
+        $this->assertSame('en_route', $visit->fresh()->status);
+        $this->assertDatabaseHas('visit_time_entries', [
+            'visit_id' => $visit->id,
+            'user_id' => $superAdmin->id,
+            'category' => 'travel',
+            'active_user_id' => $superAdmin->id,
+        ]);
+    }
+
     public function test_inactive_and_cross_organization_memberships_cannot_write(): void
     {
         [$organization, $visit, $lead] = $this->executionGraph('on_site');

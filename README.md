@@ -85,7 +85,7 @@ All customer records are created fresh in v2. There is no beta-data import, exte
 - Super Admin and Dispatcher manage tickets, scheduling, assignments, and exceptions.
 - Reviewer and Billing receive read-only office access.
 - Assigned Technicians can move authorized visits from Assigned to En Route and On Site.
-- `visits.inspect_all` never grants execution; `visits.execute_any` remains an explicit override.
+- Super Admin receives every system capability, including unrestricted visit execution; other roles remain assignment/capability scoped.
 - Visit windows are entered in the service-location timezone and stored in UTC.
 - Internal ticket notes remain office-only and append-only.
 
@@ -95,7 +95,7 @@ See [Phase 2 validation](docs/PHASE_2_VALIDATION.md) for schema changes, lifecyc
 
 - Assigned execution-capable crew share one optimistic-locking closeout draft.
 - Individual travel, on-site, and other timers enforce one active timer per user.
-- Only the assigned lead submits; `visits.execute_any` remains an explicit audited override.
+- Only the assigned lead submits unless the membership has `visits.execute_any`; Super Admin receives that audited override by role.
 - Resolved work requires categorized photo evidence or a categorized no-photo fallback.
 - Private evidence is streamed through authorized endpoints and never receives a public storage URL.
 - Submitted narrative, time, media, and proposals remain immutable until Phase 4 corrections.

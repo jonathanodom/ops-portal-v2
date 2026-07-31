@@ -27,13 +27,7 @@ class AccessControlSeeder extends Seeder
     private const ROLES = [
         'super_admin' => [
             'name' => 'Super Admin',
-            'capabilities' => [
-                'experience.office.access', 'experience.field.access', 'visits.inspect_all',
-                'dispatch.manage', 'closeouts.review', 'billing_handoffs.view', 'users.manage',
-                'customers.view', 'customers.manage',
-                'service_tickets.view',
-                'closeouts.inspect',
-            ],
+            'capabilities' => [],
         ],
         'dispatcher' => [
             'name' => 'Dispatcher',
@@ -67,7 +61,9 @@ class AccessControlSeeder extends Seeder
         foreach (self::ROLES as $key => $definition) {
             $role = Role::query()->updateOrCreate(['key' => $key], ['name' => $definition['name']]);
             $role->capabilities()->sync(
-                Capability::query()->whereIn('key', $definition['capabilities'])->pluck('id'),
+                $key === 'super_admin'
+                    ? Capability::query()->pluck('id')
+                    : Capability::query()->whereIn('key', $definition['capabilities'])->pluck('id'),
             );
         }
     }

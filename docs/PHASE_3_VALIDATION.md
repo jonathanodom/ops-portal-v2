@@ -18,13 +18,13 @@ Merged Phase 0–2 migrations were not changed.
 
 | Role | Field workspace | Edit assigned shared draft | Submit | Inspect submitted evidence in office |
 | --- | --- | --- | --- | --- |
-| Super Admin | Yes | No, unless assigned with execution capability | No automatic override | Yes |
+| Super Admin | Yes | All visits | Any visit through audited `visits.execute_any` | Yes |
 | Dispatcher | Yes | No by default | Explicit `visits.execute_any` only | Yes |
 | Technician | Yes | Assigned visits | Lead assignment only | No office access |
 | Reviewer | No | No | No | Yes |
 | Billing | No | No | No | No |
 
-`closeouts.inspect` is seeded for Super Admin, Dispatcher, and Reviewer. `visits.inspect_all` remains read-only. `visits.execute_any` remains unseeded and every use during submission is recorded in safe audit metadata. Inactive memberships and cross-organization URLs are denied server-side.
+Super Admin is synchronized to every seeded system capability, including `closeouts.inspect`, `visits.execute_assigned`, and `visits.execute_any`, so the sole administrator can use every current feature. Other roles remain narrowly scoped. Every `visits.execute_any` use during submission is recorded in safe audit metadata. Inactive memberships, explicit deny overrides, and cross-organization URLs remain enforced server-side.
 
 ## Outcome and evidence matrix
 
@@ -35,7 +35,7 @@ Merged Phase 0–2 migrations were not changed.
 | On hold | Hold reason, recommendations, and acknowledgment or fallback | Places the Service Ticket on hold and moves the visit to `pending_closeout` |
 | Customer unavailable | Categorized reason and detail | Visit becomes `customer_unavailable`; Service Ticket stays open |
 
-Submission is lead-only except for an explicit audited `visits.execute_any` grant. The submission token and a row lock make retries idempotent. Submission stops all active closeout timers with source `system_auto`; narrative, time, media, and proposals are immutable afterward.
+Submission is lead-only except for an audited `visits.execute_any` grant, which Super Admin now receives by role. The submission token and a row lock make retries idempotent. Submission stops all active closeout timers with source `system_auto`; narrative, time, media, and proposals are immutable afterward.
 
 ## Mobile and privacy behavior
 
@@ -62,14 +62,14 @@ A verified backup was created at:
 - Size: 344,064 bytes
 - SHA-256: `149D10ED4BB3713EDAC8663469831EE749F0A5BC776D3DD9D419A9ED826C1087`
 
-After `php artisan migrate --force` and `php artisan db:seed --force`, every pre-existing business row count was unchanged. The four new Phase 3 tables contained zero rows, migration count increased from 10 to 11, capabilities increased from 12 to 13, and role-capability pivots increased from 28 to 31. `.env` was not replaced or edited.
+After `php artisan migrate --force` and `php artisan db:seed --force`, every pre-existing business row count was unchanged. The four new Phase 3 tables contained zero rows, migration count increased from 10 to 11, capabilities increased from 12 to 13, and role-capability pivots are now 33 after granting Super Admin every system capability. `.env` was not replaced or edited.
 
 ## Validation results
 
 Completed locally on July 31, 2026:
 
-- `php artisan test`: **45 passed, 273 assertions**.
-- Phase 3 feature matrix: **9 passed, 80 assertions**.
+- `php artisan test`: **46 passed, 281 assertions**.
+- Phase 3 feature matrix: **10 passed, 86 assertions**.
 - `php artisan view:cache`: passed.
 - `vendor/bin/pint --test`: passed.
 - `composer validate --strict`: passed.
