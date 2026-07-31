@@ -41,6 +41,10 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         VisitTimeEntry::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'user_id' => $technician->id, 'category' => 'on_site', 'started_at' => now()->subHour(), 'ended_at' => now(), 'source' => 'timer']);
         VisitMedia::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'uploader_id' => $technician->id, 'storage_disk' => 'local', 'storage_key' => 'field-media/opaque.jpg', 'mime_type' => 'image/jpeg', 'byte_size' => 100, 'category' => 'after', 'state' => 'stored']);
 
+        $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
+            ->assertOk()
+            ->assertSee('title="America/Chicago"', false);
+
         $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/return", ['decision_token' => (string) Str::uuid(), 'reason' => 'Clarify the repair details.'])->assertRedirect()->assertSessionHasNoErrors();
 
         $next = $visit->fresh()->currentCloseout;

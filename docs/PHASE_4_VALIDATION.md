@@ -67,7 +67,7 @@ The migration was first applied to a disposable copy and verified to retain all 
 Completed locally on July 31, 2026:
 
 - Phase 4 lifecycle suite: **10 passed, 74 assertions**.
-- Full PHPUnit suite after the local-time UI correction: **57 passed, 360 assertions**.
+- Full PHPUnit suite after the local-time UI correction and review-detail regression test: **57 passed, 362 assertions**.
 - `composer validate --strict`: passed.
 - `vendor/bin/pint --test`: passed.
 - `php artisan view:cache`: passed.
