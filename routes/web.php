@@ -6,6 +6,8 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
 use App\Http\Controllers\Field\TodayController;
+use App\Http\Controllers\Office\BillingHandoffController;
+use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\DispatchController;
@@ -65,6 +67,19 @@ Route::middleware(['auth', 'active.organization'])->group(function (): void {
                 Route::post('/visits/{visit}/cancel', [VisitController::class, 'cancel'])->whereNumber('visit')->name('visits.cancel');
                 Route::post('/visits/{visit}/return', [VisitController::class, 'createReturn'])->whereNumber('visit')->name('visits.return');
             });
+            Route::middleware('capability:closeouts.inspect')->group(function (): void {
+                Route::get('/closeout-reviews', [CloseoutReviewController::class, 'index'])->name('closeout-reviews.index');
+                Route::get('/closeout-reviews/{closeout}', [CloseoutReviewController::class, 'show'])->whereNumber('closeout')->name('closeout-reviews.show');
+            });
+            Route::middleware('capability:closeouts.review')->group(function (): void {
+                Route::post('/closeout-reviews/{closeout}/approve', [CloseoutReviewController::class, 'approve'])->whereNumber('closeout')->name('closeout-reviews.approve');
+                Route::post('/closeout-reviews/{closeout}/return', [CloseoutReviewController::class, 'returnForCorrection'])->whereNumber('closeout')->name('closeout-reviews.return');
+            });
+            Route::middleware('capability:billing_handoffs.view')->group(function (): void {
+                Route::get('/billing-handoffs', [BillingHandoffController::class, 'index'])->name('billing-handoffs.index');
+            });
+            Route::post('/billing-handoffs/{handoff}/acknowledge', [BillingHandoffController::class, 'acknowledge'])
+                ->whereNumber('handoff')->middleware('capability:billing_handoffs.manage')->name('billing-handoffs.acknowledge');
             Route::middleware('capability:customers.view')->group(function (): void {
                 Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customers.show');

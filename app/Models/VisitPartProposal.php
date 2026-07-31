@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['organization_id', 'visit_id', 'closeout_id', 'proposed_by_id', 'description', 'quantity', 'unit', 'serial_mac', 'billing_treatment', 'technician_note', 'removed_at'])]
+#[Fillable(['organization_id', 'visit_id', 'closeout_id', 'source_proposal_id', 'proposed_by_id', 'description', 'quantity', 'unit', 'serial_mac', 'billing_treatment', 'technician_note', 'removed_at'])]
 class VisitPartProposal extends Model
 {
     protected function casts(): array
@@ -17,5 +17,10 @@ class VisitPartProposal extends Model
     public function closeout(): BelongsTo
     {
         return $this->belongsTo(Closeout::class);
+    }
+
+    public function sourceProposal(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'source_proposal_id');
     }
 }

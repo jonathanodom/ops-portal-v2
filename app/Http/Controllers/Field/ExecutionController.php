@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Field;
 use App\Domain\FieldExecution;
 use App\Http\Controllers\Controller;
 use App\Jobs\DeleteRemovedVisitMedia;
+use App\Models\Closeout;
 use App\Models\Visit;
 use App\Models\VisitMedia;
 use App\Models\VisitPartProposal;
@@ -60,7 +61,9 @@ class ExecutionController extends Controller
                 'currentCloseout.lastSavedBy', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts',
             ]);
 
-            return response()->view('field.visits.show', ['visit' => $v, 'draftConflict' => true], 409);
+            $versions = Closeout::query()->where('visit_id', $v->id)->where('organization_id', $v->organization_id)->with(['reviews.reviewer', 'media', 'parts'])->orderBy('version')->get();
+
+            return response()->view('field.visits.show', ['visit' => $v, 'versions' => $versions, 'draftConflict' => true], 409);
         }
 
         return back()->with('status', 'Draft saved.');
@@ -154,6 +157,9 @@ class ExecutionController extends Controller
         $m = VisitMedia::where('organization_id', $r->attributes->get('organization')->id)->where('state', 'stored')->findOrFail($media);
         Gate::authorize('view', $m->visit);
         if ($m->closeout->status === 'draft' && ! Gate::allows('execute', $m->visit)) {
+            abort(403);
+        }
+        if (! Gate::allows('execute', $m->visit) && ! $r->attributes->get('membership')->hasCapability('closeouts.inspect')) {
             abort(403);
         }
 

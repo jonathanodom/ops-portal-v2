@@ -25,6 +25,12 @@
                     <a href="{{ route('office.service-tickets.index') }}" @if(request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Service Tickets</a>
                     <a href="{{ route('office.dispatch.index') }}" @if(request()->routeIs('office.dispatch.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.dispatch.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Dispatch</a>
                 @endif
+                @if ($activeMembership->hasCapability('closeouts.inspect'))
+                    <a href="{{ route('office.closeout-reviews.index') }}" @if(request()->routeIs('office.closeout-reviews.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.closeout-reviews.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Review</a>
+                @endif
+                @if ($activeMembership->hasCapability('billing_handoffs.view'))
+                    <a href="{{ route('office.billing-handoffs.index') }}" @if(request()->routeIs('office.billing-handoffs.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.billing-handoffs.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Billing</a>
+                @endif
             </nav>
             <div class="mt-auto border-t border-slate-200 pt-5">
                 <p class="text-sm font-bold text-slate-900">{{ auth()->user()->name }}</p>
@@ -57,6 +63,8 @@
                     <a href="{{ route('office.customers.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.customers.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Customers</a>
                     <a href="{{ route('office.locations.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.locations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Locations</a>
                     @if($activeMembership->hasCapability('service_tickets.view'))<a href="{{ route('office.service-tickets.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Tickets</a><a href="{{ route('office.dispatch.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.dispatch.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Dispatch</a>@endif
+                    @if($activeMembership->hasCapability('closeouts.inspect'))<a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.closeout-reviews.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Review</a>@endif
+                    @if($activeMembership->hasCapability('billing_handoffs.view'))<a href="{{ route('office.billing-handoffs.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.billing-handoffs.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Billing</a>@endif
                 </nav>
             @endif
             <main id="main-content" class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">

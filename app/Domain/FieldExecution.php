@@ -7,6 +7,7 @@ use App\Models\OrganizationMembership;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Models\Visit;
+use App\Models\VisitMedia;
 use App\Models\VisitTimeEntry;
 use App\Support\AuditRecorder;
 use Illuminate\Support\Facades\DB;
@@ -112,10 +113,11 @@ class FieldExecution
             $c->timeEntries()->whereNull('ended_at')->update(['ended_at' => now(), 'active_user_id' => null, 'source' => 'system_auto']);
             $return = null;
             if ($c->outcome === 'needs_return_trip') {
-                $return = Visit::create(['organization_id' => $v->organization_id, 'service_ticket_id' => $v->service_ticket_id, 'service_location_id' => $v->service_location_id, 'return_of_visit_id' => $v->id, 'status' => 'planned', 'timezone' => $v->timezone, 'return_reason' => $c->return_reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
+                $return = $c->return_visit_id ? Visit::query()->find($c->return_visit_id) : null;
+                $return ??= Visit::create(['organization_id' => $v->organization_id, 'service_ticket_id' => $v->service_ticket_id, 'service_location_id' => $v->service_location_id, 'return_of_visit_id' => $v->id, 'status' => 'planned', 'timezone' => $v->timezone, 'return_reason' => $c->return_reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
             } if ($c->outcome === 'on_hold') {
                 ServiceTicket::whereKey($v->service_ticket_id)->update(['status' => 'on_hold', 'status_reason' => $c->hold_reason, 'status_changed_at' => now(), 'status_changed_by_id' => $actor->id]);
-            } $c->update(['status' => 'submitted', 'submitted_token' => $token, 'submitted_by_id' => $actor->id, 'submitted_at' => now(), 'acknowledged_at' => filled($c->representative_name) ? now() : null, 'return_visit_id' => $return?->id]);
+            } $c->update(['status' => 'submitted', 'submitted_token' => $token, 'submitted_by_id' => $actor->id, 'submitted_at' => now(), 'acknowledged_at' => filled($c->representative_name) ? ($c->acknowledged_at ?? now()) : null, 'return_visit_id' => $return?->id]);
             $v->update(['status' => $c->outcome === 'customer_unavailable' ? 'customer_unavailable' : 'pending_closeout', 'updated_by_id' => $actor->id]);
             $this->audit->record($v->serviceTicket->organization, $actor, 'closeout.submitted', $c, ['visit_id' => $v->id, 'outcome' => $c->outcome, 'return_visit_id' => $return?->id, 'execute_any_override' => $executeAny]);
 
@@ -146,10 +148,22 @@ class FieldExecution
             $e['unavailable_detail'] = 'Category and detail are required.';
         } if (in_array($c->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true) && blank($c->representative_name) && (blank($c->ack_unavailable_category) || blank($c->ack_unavailable_detail))) {
             $e['representative_name'] = 'Acknowledgment or fallback is required.';
-        } if ($c->outcome === 'resolved' && ! $c->media()->where('state', 'stored')->exists() && (blank($c->no_photo_category) || blank($c->no_photo_detail))) {
+        } if ($c->outcome === 'resolved' && ! VisitMedia::query()->whereIn('closeout_id', $this->versionIds($c))->where('state', 'stored')->exists() && (blank($c->no_photo_category) || blank($c->no_photo_detail))) {
             $e['no_photo_detail'] = 'A photo or categorized no-photo reason is required.';
         } if ($e) {
             throw ValidationException::withMessages($e);
         }
+    }
+
+    /** @return array<int, int> */
+    private function versionIds(Closeout $closeout): array
+    {
+        $ids = [];
+        do {
+            $ids[] = $closeout->id;
+            $closeout = $closeout->parent;
+        } while ($closeout);
+
+        return $ids;
     }
 }

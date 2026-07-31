@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Field;
 use App\Domain\FieldExecution;
 use App\Domain\ServiceTicketWorkflow;
 use App\Http\Controllers\Controller;
+use App\Models\Closeout;
 use App\Models\OrganizationMembership;
 use App\Models\Visit;
 use App\Models\VisitTimeEntry;
@@ -42,9 +43,13 @@ class TodayController extends Controller
             'serviceLocation.primaryContact',
             'assignments.membership.user',
             'currentCloseout.lastSavedBy', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts',
+            'currentCloseout.parent.reviews.reviewer',
         ]);
 
-        return view('field.visits.show', compact('visit'));
+        $versions = Closeout::query()->where('visit_id', $visit->id)->where('organization_id', $visit->organization_id)
+            ->with(['reviews.reviewer', 'media', 'parts'])->orderBy('version')->get();
+
+        return view('field.visits.show', compact('visit', 'versions'));
     }
 
     public function transition(Request $request, string $visit, ServiceTicketWorkflow $workflow, FieldExecution $execution): RedirectResponse
