@@ -50,10 +50,10 @@ jobs:
           cache: npm
       - run: composer validate --strict
       - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: npm run build
       - run: php artisan migrate --force
       - run: php artisan db:seed --force
       - run: vendor/bin/pint --test
       - run: php artisan test
-      - run: npm ci
-      - run: npm run build
       - run: git diff --check
