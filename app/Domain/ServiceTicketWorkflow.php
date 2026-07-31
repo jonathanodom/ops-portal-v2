@@ -26,6 +26,9 @@ class ServiceTicketWorkflow
         if (in_array($to, ['on_hold', 'canceled'], true) && blank($reason)) {
             throw ValidationException::withMessages(['reason' => 'A reason is required for this status change.']);
         }
+        if ($to === 'canceled' && $ticket->visits()->whereHas('currentCloseout', fn ($query) => $query->where('status', 'submitted'))->exists()) {
+            throw ValidationException::withMessages(['status' => 'A ticket with submitted field evidence cannot be canceled before office disposition.']);
+        }
 
         return DB::transaction(function () use ($ticket, $to, $actor, $reason): ServiceTicket {
             $ticket = ServiceTicket::query()->lockForUpdate()->findOrFail($ticket->id);
@@ -97,7 +100,7 @@ class ServiceTicketWorkflow
 
     public function cancelVisit(Visit $visit, User $actor, string $reason): Visit
     {
-        if ($visit->status === 'canceled') {
+        if (in_array($visit->status, ['canceled', 'pending_closeout', 'customer_unavailable'], true)) {
             $this->rejected($visit->serviceTicket->organization, $actor, 'visit.transition_rejected', $visit, 'canceled', 'canceled');
         }
 
