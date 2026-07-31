@@ -18,7 +18,10 @@ class OrganizationFactory extends Factory
     public function definition(): array
     {
         return [
-            //
+            'name' => fake()->company(),
+            'slug' => fake()->unique()->slug(2),
+            'timezone' => 'America/Chicago',
+            'active' => true,
         ];
     }
 }

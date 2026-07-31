@@ -6,7 +6,8 @@ An FSM-first operations portal for NewDay Tech. The product is intentionally nar
 Customer → Service Location → Job → Visit → Field Execution → Closeout → Office Review → Billing Handoff
 ```
 
-Phase 0 establishes authentication, organization-scoped authorization, and distinct office and field experiences. It does not include customer, job, visit, proposal, inventory, invoice, or finance features.
+Phase 0 establishes authentication, organization-scoped authorization, and distinct office and field experiences.
+Phase 1 adds the narrow customer, contact, and service-location foundation required for field work. Jobs, visits, proposals, inventory, invoices, and broader CRM features remain out of scope.
 
 See [the complete FSM-first handoff](docs/FSM_FIRST_CODEX_HANDOFF.md) for the product charter, lifecycle, scope lock, phased delivery plan, and quality gates.
 
@@ -46,6 +47,18 @@ Open:
 
 Local password-reset mail is written to the Laravel log. Production mail and runtime secrets must be configured outside the repository.
 Production must also set `APP_ENV=production`, `APP_DEBUG=false`, `APP_URL=https://portal.newdaytech.net`, and `SESSION_SECURE_COOKIE=true`.
+
+## Phase 1 customer directory
+
+- Office: `/office/customers` and `/office/locations`
+- Field: `/field/customers`
+- Super Admin and Dispatcher can create and update records.
+- Reviewer and Billing have office read access.
+- Technician has a read-only field directory containing active operational details only.
+- Customer removal is archive-only: customer status becomes inactive and contacts/locations use their active flag.
+- Customer creation saves the customer, optional preferred contact, and required first service location in one transaction.
+
+All customer records are created fresh in v2. There is no beta-data import, external CRM synchronization, address validation, or geocoding in this phase.
 
 ## Quality commands
 

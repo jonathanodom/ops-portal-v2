@@ -23,4 +23,14 @@ class Organization extends Model
     {
         return $this->hasMany(OrganizationMembership::class);
     }
+
+    public function customers(): HasMany
+    {
+        return $this->hasMany(Customer::class);
+    }
+
+    public function serviceLocations(): HasMany
+    {
+        return $this->hasMany(ServiceLocation::class);
+    }
 }

@@ -24,4 +24,17 @@ class BrandFoundationTest extends TestCase
         $this->assertStringContainsString('--color-brand-orange: #f7941d', $css);
         $this->assertStringContainsString('min-h-11', $css);
     }
+
+    public function test_customer_interfaces_keep_accessible_operational_controls(): void
+    {
+        $css = file_get_contents(resource_path('css/app.css'));
+        $office = file_get_contents(resource_path('views/office/customers/index.blade.php'));
+        $field = file_get_contents(resource_path('views/components/layouts/field.blade.php'));
+
+        $this->assertStringContainsString('min-h-11', $css);
+        $this->assertStringContainsString('status-active', $css);
+        $this->assertStringContainsString('label for="search"', $office);
+        $this->assertStringContainsString("request()->routeIs('field.customers.*')", $field);
+        $this->assertStringContainsString('min-h-14', $field);
+    }
 }
