@@ -1,0 +1,59 @@
+name: CI
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main, "codex/**"]
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: newday_ops_test
+          MYSQL_USER: newday
+          MYSQL_PASSWORD: test_password
+          MYSQL_ROOT_PASSWORD: root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot_password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:1ZJGqQmsi4O9P38qKJFrF/eeHixOrfd3M+4c7dA8kgc=
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: newday_ops_test
+      DB_USERNAME: newday
+      DB_PASSWORD: test_password
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, pdo_mysql
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: composer validate --strict
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: npm run build
+      - run: php artisan migrate --force
+      - run: php artisan db:seed --force
+      - run: vendor/bin/pint --test
+      - run: php artisan test
+      - run: git diff --check
