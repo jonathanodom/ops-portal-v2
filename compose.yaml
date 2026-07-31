@@ -1,0 +1,21 @@
+services:
+  mysql:
+    image: mysql:8.4
+    restart: unless-stopped
+    environment:
+      MYSQL_DATABASE: newday_ops
+      MYSQL_USER: newday
+      MYSQL_PASSWORD: newday_local_only
+      MYSQL_ROOT_PASSWORD: root_local_only
+    ports:
+      - "3307:3306"
+    volumes:
+      - newday_mysql:/var/lib/mysql
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-uroot", "-proot_local_only"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+volumes:
+  newday_mysql:
