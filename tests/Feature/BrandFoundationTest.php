@@ -2,6 +2,8 @@
 
 namespace Tests\Feature;
 
+use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\Blade;
 use Tests\TestCase;
 
 class BrandFoundationTest extends TestCase
@@ -36,5 +38,23 @@ class BrandFoundationTest extends TestCase
         $this->assertStringContainsString('label for="search"', $office);
         $this->assertStringContainsString("request()->routeIs('field.customers.*')", $field);
         $this->assertStringContainsString('min-h-14', $field);
+    }
+
+    public function test_operational_timestamps_render_in_the_requested_local_timezone(): void
+    {
+        $html = Blade::render(
+            '<x-local-time :value="$value" timezone="America/Chicago" />',
+            ['value' => Carbon::parse('2026-07-31 18:00:00', 'UTC')],
+        );
+
+        $this->assertStringContainsString('Jul 31, 2026 1:00 PM CDT', $html);
+        $this->assertStringContainsString('datetime="2026-07-31T18:00:00+00:00"', $html);
+        $this->assertStringContainsString('title="America/Chicago"', $html);
+
+        $field = file_get_contents(resource_path('views/field/visits/show.blade.php'));
+        $office = file_get_contents(resource_path('views/office/service-tickets/show.blade.php'));
+
+        $this->assertStringContainsString(':timezone="$visit->timezone"', $field);
+        $this->assertStringContainsString(':timezone="$activeOrganization->timezone"', $office);
     }
 }

@@ -67,7 +67,7 @@ The migration was first applied to a disposable copy and verified to retain all 
 Completed locally on July 31, 2026:
 
 - Phase 4 lifecycle suite: **10 passed, 74 assertions**.
-- Full PHPUnit suite: **56 passed, 355 assertions**.
+- Full PHPUnit suite after the local-time UI correction: **57 passed, 360 assertions**.
 - `composer validate --strict`: passed.
 - `vendor/bin/pint --test`: passed.
 - `php artisan view:cache`: passed.
@@ -76,6 +76,7 @@ Completed locally on July 31, 2026:
 - `git diff --check`: passed.
 - Disposable SQLite migration and preservation check: passed.
 - Responsive browser smoke at 390 x 844: passed with no horizontal overflow, 44px email and submit controls, and a visible keyboard-focus ring. The unauthenticated desktop login shell was also verified at 1440 x 900. Authenticated review and billing flows are covered by the feature suite because local credentials were not changed for manual testing.
+- Operational timestamps retain UTC storage and machine-readable values but render in the applicable organization or visit timezone with an explicit timezone abbreviation.
 
 Docker is not installed on this workstation, so the MySQL 8.4 validation is delegated to GitHub Actions. CI repeats fresh migrations, idempotent seeding, tests, formatting, frontend build, and diff checks against MySQL 8.4.
 

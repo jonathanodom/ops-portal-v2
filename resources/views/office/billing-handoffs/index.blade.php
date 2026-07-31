@@ -31,7 +31,7 @@
                     </div>
                     <div class="text-right">
                         <p class="font-bold {{ $handoff->status==='ready' ? 'text-orange-700' : 'text-emerald-700' }}">{{ ucfirst(str_replace('_',' ',$handoff->status)) }}</p>
-                        @if($handoff->handed_off_at)<p class="mt-1 text-xs text-slate-500">{{ $handoff->handedOffBy?->name ?? 'Former user' }} · {{ $handoff->handed_off_at->format('M j, Y g:i A') }}</p>@endif
+                        @if($handoff->handed_off_at)<p class="mt-1 text-xs text-slate-500">{{ $handoff->handedOffBy?->name ?? 'Former user' }} · <x-local-time :value="$handoff->handed_off_at" :timezone="$activeOrganization->timezone" /></p>@endif
                         @if($handoff->status==='ready' && $activeMembership->hasCapability('billing_handoffs.manage'))
                             <form method="POST" action="{{ route('office.billing-handoffs.acknowledge',$handoff) }}" class="mt-3">@csrf<input type="hidden" name="acknowledgment_token" value="{{ Str::uuid() }}"><button class="button-primary">Mark handed off</button></form>
                         @endif

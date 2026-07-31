@@ -88,7 +88,7 @@
             <h2 class="text-lg font-bold">Time</h2>
             @forelse ($closeout?->timeEntries ?? collect() as $entry)
                 <div class="mt-3 border-t border-slate-200 pt-3 text-sm">
-                    <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · {{ $entry->started_at->format('g:i A') }}–{{ $entry->ended_at?->format('g:i A') ?? 'running' }}</p>
+                    <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · <x-local-time :value="$entry->started_at" :timezone="$visit->timezone" format="g:i A T" />–@if($entry->ended_at)<x-local-time :value="$entry->ended_at" :timezone="$visit->timezone" format="g:i A T" />@else running @endif</p>
                     @if ($closeout?->status === 'draft' && $entry->user_id === auth()->id() && $entry->ended_at)
                         <details class="mt-2">
                             <summary class="min-h-11 cursor-pointer py-3 font-bold text-brand-blue">Correct my entry</summary>
@@ -152,10 +152,10 @@
                     <button class="button-primary w-full">Save draft</button>
                 </form>
                 @if ($closeout?->lastSavedBy)
-                    <p class="mt-3 text-xs text-slate-500">Last saved by {{ $closeout->lastSavedBy->name }} {{ $closeout->updated_at->diffForHumans() }}.</p>
+                    <p class="mt-3 text-xs text-slate-500">Last saved by {{ $closeout->lastSavedBy->name }} · <x-local-time :value="$closeout->updated_at" :timezone="$visit->timezone" />.</p>
                 @endif
             @else
-                <p class="mt-3 font-semibold text-emerald-800">Submitted {{ $closeout->submitted_at?->format('M j, g:i A') }}</p>
+                <p class="mt-3 font-semibold text-emerald-800">Submitted <x-local-time :value="$closeout->submitted_at" :timezone="$visit->timezone" /></p>
             @endif
         </section>
 
