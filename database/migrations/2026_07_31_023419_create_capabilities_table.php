@@ -26,13 +26,21 @@ return new class extends Migration
         });
 
         Schema::create('organization_membership_capability', function (Blueprint $table) {
-            $table->foreignId('organization_membership_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('capability_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('organization_membership_id');
+            $table->unsignedBigInteger('capability_id');
             $table->string('effect', 10);
             $table->primary(
                 ['organization_membership_id', 'capability_id'],
                 'membership_capability_primary',
             );
+            $table->foreign('organization_membership_id', 'membership_capability_membership_fk')
+                ->references('id')
+                ->on('organization_memberships')
+                ->cascadeOnDelete();
+            $table->foreign('capability_id', 'membership_capability_capability_fk')
+                ->references('id')
+                ->on('capabilities')
+                ->cascadeOnDelete();
         });
     }
 
