@@ -76,8 +76,8 @@ class BetaHardeningTest extends TestCase
 
         $transitionIncident = OperationalIncident::query()->where('category', 'transition_rejected')->firstOrFail();
         $storageIncident = OperationalIncident::query()->where('category', 'storage_failure')->firstOrFail();
-        $this->assertSame(['route' => 'field.visits.transition', 'invalid_fields' => ['reason'], 'visit_id' => 10], $transitionIncident->context);
-        $this->assertSame(['route' => 'field.media.show', 'reason_code' => 'RuntimeException', 'media_id' => 22], $storageIncident->context);
+        $this->assertEquals(['route' => 'field.visits.transition', 'invalid_fields' => ['reason'], 'visit_id' => 10], $transitionIncident->context);
+        $this->assertEquals(['route' => 'field.media.show', 'reason_code' => 'RuntimeException', 'media_id' => 22], $storageIncident->context);
         $this->assertStringNotContainsString('private', json_encode([$transitionIncident->context, $storageIncident->context], JSON_THROW_ON_ERROR));
     }
 
