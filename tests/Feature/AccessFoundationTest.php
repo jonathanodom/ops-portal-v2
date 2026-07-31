@@ -26,7 +26,7 @@ class AccessFoundationTest extends TestCase
         [$user, $membership] = $this->userWithRole('super_admin');
 
         $this->assertNull($user->technicianProfile);
-        $this->actingAs($user)->get('/office')->assertOk()->assertSee('Operations foundation');
+        $this->actingAs($user)->get('/office')->assertOk()->assertSee('Customer operations');
         $this->actingAs($user)->get('/field')->assertOk()->assertSee('Field foundation is ready');
         $this->assertFalse($membership->hasCapability('visits.execute_any'));
     }

@@ -3,6 +3,10 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
+use App\Http\Controllers\Office\ContactController;
+use App\Http\Controllers\Office\CustomerController;
+use App\Http\Controllers\Office\ServiceLocationController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -37,6 +41,26 @@ Route::middleware(['auth', 'active.organization'])->group(function (): void {
         ->middleware('capability:experience.office.access')
         ->group(function (): void {
             Route::view('/', 'office.home')->name('home');
+            Route::middleware('capability:customers.view')->group(function (): void {
+                Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
+                Route::get('/customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customers.show');
+                Route::get('/locations', [ServiceLocationController::class, 'index'])->name('locations.index');
+                Route::get('/locations/{location}', [ServiceLocationController::class, 'show'])->whereNumber('location')->name('locations.show');
+            });
+            Route::middleware('capability:customers.manage')->group(function (): void {
+                Route::get('/customers/create', [CustomerController::class, 'create'])->name('customers.create');
+                Route::post('/customers', [CustomerController::class, 'store'])->name('customers.store');
+                Route::get('/customers/{customer}/edit', [CustomerController::class, 'edit'])->whereNumber('customer')->name('customers.edit');
+                Route::put('/customers/{customer}', [CustomerController::class, 'update'])->whereNumber('customer')->name('customers.update');
+                Route::get('/customers/{customer}/contacts/create', [ContactController::class, 'create'])->whereNumber('customer')->name('customers.contacts.create');
+                Route::post('/customers/{customer}/contacts', [ContactController::class, 'store'])->whereNumber('customer')->name('customers.contacts.store');
+                Route::get('/customers/{customer}/contacts/{contact}/edit', [ContactController::class, 'edit'])->whereNumber(['customer', 'contact'])->name('customers.contacts.edit');
+                Route::put('/customers/{customer}/contacts/{contact}', [ContactController::class, 'update'])->whereNumber(['customer', 'contact'])->name('customers.contacts.update');
+                Route::get('/customers/{customer}/locations/create', [ServiceLocationController::class, 'create'])->whereNumber('customer')->name('customers.locations.create');
+                Route::post('/customers/{customer}/locations', [ServiceLocationController::class, 'store'])->whereNumber('customer')->name('customers.locations.store');
+                Route::get('/locations/{location}/edit', [ServiceLocationController::class, 'edit'])->whereNumber('location')->name('locations.edit');
+                Route::put('/locations/{location}', [ServiceLocationController::class, 'update'])->whereNumber('location')->name('locations.update');
+            });
         });
 
     Route::prefix('field')
@@ -44,5 +68,10 @@ Route::middleware(['auth', 'active.organization'])->group(function (): void {
         ->middleware('capability:experience.field.access')
         ->group(function (): void {
             Route::view('/', 'field.home')->name('home');
+            Route::middleware('capability:customers.view')->group(function (): void {
+                Route::get('/customers', [FieldCustomerDirectoryController::class, 'index'])->name('customers.index');
+                Route::get('/customers/{customer}', [FieldCustomerDirectoryController::class, 'showCustomer'])->whereNumber('customer')->name('customers.show');
+                Route::get('/locations/{location}', [FieldCustomerDirectoryController::class, 'showLocation'])->whereNumber('location')->name('locations.show');
+            });
         });
 });

@@ -16,7 +16,11 @@
             <img src="{{ asset('images/newday-logo.png') }}" alt="NewDay Tech LLC" class="w-48">
             <div class="mt-9 text-xs font-bold uppercase tracking-[0.14em] text-slate-400">Office workspace</div>
             <nav class="mt-3" aria-label="Office">
-                <a href="{{ route('office.home') }}" aria-current="page" class="flex min-h-11 items-center rounded-lg border-l-4 border-brand-blue bg-blue-50 px-4 text-sm font-bold text-brand-blue-dark">Overview</a>
+                <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home')) aria-current="page" @endif class="flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.home') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Overview</a>
+                @if ($activeMembership->hasCapability('customers.view'))
+                    <a href="{{ route('office.customers.index') }}" @if(request()->routeIs('office.customers.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.customers.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Customers</a>
+                    <a href="{{ route('office.locations.index') }}" @if(request()->routeIs('office.locations.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.locations.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Service locations</a>
+                @endif
             </nav>
             <div class="mt-auto border-t border-slate-200 pt-5">
                 <p class="text-sm font-bold text-slate-900">{{ auth()->user()->name }}</p>
@@ -43,7 +47,14 @@
                     @endif
                 </div>
             </header>
-            <main class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+            @if ($activeMembership->hasCapability('customers.view'))
+                <nav class="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">
+                    <a href="{{ route('office.home') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.home') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Overview</a>
+                    <a href="{{ route('office.customers.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.customers.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Customers</a>
+                    <a href="{{ route('office.locations.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.locations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Locations</a>
+                </nav>
+            @endif
+            <main id="main-content" class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
                 {{ $slot }}
             </main>
         </div>

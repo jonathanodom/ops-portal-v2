@@ -28,7 +28,9 @@
 
     button,
     a,
-    input {
+    input,
+    select,
+    textarea {
         @apply focus-visible:outline-none focus-visible:ring-3 focus-visible:ring-brand-blue/35 focus-visible:ring-offset-2;
     }
 }
@@ -42,6 +44,10 @@
         @apply min-h-11 w-full rounded-lg border border-slate-300 bg-white px-3.5 text-base text-slate-900 shadow-none transition-colors placeholder:text-slate-400 hover:border-slate-400 focus:border-brand-blue;
     }
 
+    .form-textarea {
+        @apply min-h-28 w-full rounded-lg border border-slate-300 bg-white px-3.5 py-3 text-base text-slate-900 shadow-none placeholder:text-slate-400 hover:border-slate-400 focus:border-brand-blue;
+    }
+
     .button-primary {
         @apply inline-flex min-h-11 items-center justify-center rounded-lg bg-brand-blue px-5 text-sm font-bold text-white transition-colors hover:bg-brand-blue-dark;
     }
@@ -52,5 +58,17 @@
 
     .surface {
         @apply rounded-xl border border-slate-200 bg-white;
+    }
+
+    .status-active {
+        @apply inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800;
+    }
+
+    .status-hold {
+        @apply inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900;
+    }
+
+    .status-inactive {
+        @apply inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700;
     }
 }
