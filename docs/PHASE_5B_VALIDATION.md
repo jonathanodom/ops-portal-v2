@@ -31,6 +31,7 @@ Phase 5B adds no migration and does not replace `.env`. Existing organizations, 
 - Authenticated Playwright Chromium: desktop and 390×844 mobile projects passed; project-inapplicable variants were skipped.
 - Axe reported no serious or critical findings on the office execution dialog or field workflow.
 - Modal viewport, Escape close, focus return, mobile overflow, 44px controls, offline write prevention, and retry messaging passed.
+- Post-optimization beta benchmark: Today 18 queries, Dispatch 16, Service Ticket detail 17, Review detail 22; all response and query budgets passed.
 - `git diff --check` passed.
 
 The isolated beta SQLite database was deterministically reset for browser validation. The active development database and `.env` were not migrated, reset, or replaced.

@@ -156,8 +156,17 @@ class ServiceTicketController extends Controller
                 ->where(fn ($inner) => $inner->where('subject_type', $ticket->getMorphClass())->where('subject_id', $ticket->id))
                 ->orWhere(fn ($inner) => $inner->where('subject_type', (new Visit)->getMorphClass())->whereIn('subject_id', $ticket->visits->pluck('id'))))
             ->latest('occurred_at')->limit(100)->get();
+        $membership = $request->attributes->get('membership');
+        $executableVisitIds = $ticket->visits->filter(function (Visit $visit) use ($membership): bool {
+            if ($membership->hasCapability('visits.execute_any')) {
+                return true;
+            }
 
-        return view('office.service-tickets.show', compact('ticket', 'events'));
+            return $membership->hasCapability('visits.execute_assigned')
+                && $visit->assignments->contains('organization_membership_id', $membership->id);
+        })->pluck('id')->all();
+
+        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds'));
     }
 
     public function edit(Request $request, string $serviceTicket): View
