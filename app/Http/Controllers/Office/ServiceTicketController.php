@@ -148,7 +148,7 @@ class ServiceTicketController extends Controller
             'serviceLocation.primaryContact',
             'contact',
             'notes.author',
-            'visits' => fn ($query) => $query->with(['assignments.membership.user', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('id'),
+            'visits' => fn ($query) => $query->with(['assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('id'),
         ]);
         $events = AuditEvent::query()->where('organization_id', $ticket->organization_id)
             ->with('actor')
@@ -222,8 +222,9 @@ class ServiceTicketController extends Controller
         $data = $request->validate([
             'status' => ['required', Rule::in(['open', 'on_hold', 'canceled'])],
             'reason' => ['nullable', 'string', 'max:2000'],
+            'confirm_stop_active_timers' => ['sometimes', 'accepted'],
         ]);
-        $workflow->changeTicketStatus($ticket, $data['status'], $request->user(), $data['reason'] ?? null);
+        $workflow->changeTicketStatus($ticket, $data['status'], $request->user(), $data['reason'] ?? null, $request->boolean('confirm_stop_active_timers'));
 
         return back()->with('status', 'Service ticket status updated.');
     }

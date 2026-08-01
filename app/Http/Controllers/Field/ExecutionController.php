@@ -19,6 +19,7 @@ use Illuminate\Http\Response;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class ExecutionController extends Controller
@@ -45,9 +46,19 @@ class ExecutionController extends Controller
         return $v;
     }
 
+    private function writable(Request $request, string $id): Visit
+    {
+        $visit = $this->authorized($request, $id);
+        if ($visit->status === 'canceled') {
+            throw ValidationException::withMessages(['visit' => 'Canceled visits are read-only.']);
+        }
+
+        return $visit;
+    }
+
     public function save(Request $r, string $visit, FieldExecution $flow): RedirectResponse|Response
     {
-        $v = $this->authorized($r, $visit);
+        $v = $this->writable($r, $visit);
         $c = $flow->draft($v, $r->user());
         $d = $r->validate(['content_version' => 'required|integer', 'outcome' => ['nullable', Rule::in(['resolved', 'needs_return_trip', 'customer_unavailable', 'on_hold'])], 'diagnosis' => 'nullable|string|max:10000', 'work_performed' => 'nullable|string|max:10000', 'exceptions' => 'nullable|string|max:10000', 'recommendations' => 'nullable|string|max:10000', 'return_reason' => 'nullable|string|max:5000', 'unfinished_work' => 'nullable|string|max:5000', 'needed_equipment' => 'nullable|string|max:5000', 'hold_reason' => 'nullable|string|max:5000', 'unavailable_category' => ['nullable', Rule::in(array_keys(config('field_execution.unavailable_reasons')))], 'unavailable_detail' => 'nullable|string|max:5000', 'representative_name' => 'nullable|string|max:255', 'ack_unavailable_category' => ['nullable', Rule::in(array_keys(config('field_execution.ack_fallbacks')))], 'ack_unavailable_detail' => 'nullable|string|max:5000', 'no_photo_category' => ['nullable', Rule::in(array_keys(config('field_execution.no_photo_reasons')))], 'no_photo_detail' => 'nullable|string|max:5000']);
         $version = (int) $d['content_version'];
@@ -71,13 +82,13 @@ class ExecutionController extends Controller
 
     public function timer(Request $r, string $visit, FieldExecution $flow): RedirectResponse
     {
-        $v = $this->authorized($r, $visit);
+        $v = $this->writable($r, $visit);
         $c = $flow->draft($v, $r->user());
         $d = $r->validate(['action' => 'required|in:start,stop', 'category' => 'nullable|in:travel,on_site,other']);
         $active = VisitTimeEntry::where('active_user_id', $r->user()->id)->first();
         if ($d['action'] === 'stop') {
-            if (! $active) {
-                return back()->withErrors(['time' => 'No timer is running.']);
+            if (! $active || $active->visit_id !== $v->id) {
+                return back()->withErrors(['time' => 'No timer is running for this visit.']);
             }$flow->stopTimer($active, $r->user());
         } else {
             if ($active) {
@@ -92,22 +103,16 @@ class ExecutionController extends Controller
     {
         $v = $this->authorized($r, $visit);
         $e = VisitTimeEntry::where('visit_id', $v->id)->where('user_id', $r->user()->id)->findOrFail($entry);
-        abort_if($e->closeout->status !== 'draft', 422);
         $d = $r->validate(['started_at' => 'required|date_format:Y-m-d\TH:i', 'ended_at' => 'required|date_format:Y-m-d\TH:i', 'correction_reason' => 'required|string|max:1000']);
         $window = $scheduleWindow->fromLocal($d['started_at'], $d['ended_at'], $v->timezone);
-        $changed = collect(['started_at', 'ended_at'])->filter(fn (string $field) => ! $e->$field?->equalTo($window[$field === 'started_at' ? 'start' : 'end']))->values()->all();
-        $e->update(['started_at' => $window['start'], 'ended_at' => $window['end'], 'correction_reason' => $d['correction_reason'], 'active_user_id' => null, 'source' => 'manual']);
-        $audit->record($r->attributes->get('organization'), $r->user(), 'visit_time.corrected', $e, [
-            'visit_id' => $v->id,
-            'changed_fields' => $changed,
-        ]);
+        app(FieldExecution::class)->correctTime($e, $r->user(), $window['start'], $window['end'], $d['correction_reason']);
 
         return back()->with('status', 'Time correction saved.');
     }
 
     public function addPart(Request $r, string $visit, FieldExecution $flow): RedirectResponse
     {
-        $v = $this->authorized($r, $visit);
+        $v = $this->writable($r, $visit);
         $c = $flow->draft($v, $r->user());
         abort_if($c->status !== 'draft', 422);
         $d = $r->validate(['description' => 'required|string|max:255', 'quantity' => 'required|numeric|min:0.01|max:999999', 'unit' => 'nullable|string|max:40', 'serial_mac' => 'nullable|string|max:255', 'billing_treatment' => ['required', Rule::in(array_keys(config('field_execution.billing_treatments')))], 'technician_note' => 'nullable|string|max:5000']);
@@ -119,7 +124,7 @@ class ExecutionController extends Controller
 
     public function removePart(Request $r, string $visit, string $part): RedirectResponse
     {
-        $v = $this->authorized($r, $visit);
+        $v = $this->writable($r, $visit);
         $p = VisitPartProposal::where('visit_id', $v->id)->findOrFail($part);
         abort_if($p->closeout_id !== $v->current_closeout_id || $v->currentCloseout->status !== 'draft', 422);
         $p->update(['removed_at' => now()]);
@@ -130,7 +135,7 @@ class ExecutionController extends Controller
 
     public function upload(Request $r, string $visit, FieldExecution $flow, AuditRecorder $audit): JsonResponse
     {
-        $v = $this->authorized($r, $visit);
+        $v = $this->writable($r, $visit);
         $c = $flow->draft($v, $r->user());
         abort_if($c->status !== 'draft', 422);
         if ($c->media()->where('state', 'stored')->count() >= config('field_execution.max_photos')) {
@@ -168,7 +173,7 @@ class ExecutionController extends Controller
 
     public function removeMedia(Request $r, string $visit, string $media, AuditRecorder $audit): RedirectResponse
     {
-        $v = $this->authorized($r, $visit);
+        $v = $this->writable($r, $visit);
         $m = VisitMedia::where('visit_id', $v->id)->where('state', 'stored')->findOrFail($media);
         abort_if($m->closeout->status !== 'draft', 422);
         $m->update(['state' => 'removed', 'removed_at' => now(), 'removed_by_id' => $r->user()->id]);
@@ -180,7 +185,7 @@ class ExecutionController extends Controller
 
     public function submit(Request $r, string $visit, FieldExecution $flow): RedirectResponse
     {
-        $v = $this->authorized($r, $visit);
+        $v = $this->writable($r, $visit);
         $c = $v->currentCloseout ?: $flow->draft($v, $r->user());
         $d = $r->validate(['submission_token' => 'required|uuid', 'acknowledgment_confirmed' => 'sometimes|accepted']);
         if (filled($c->representative_name) && ! $r->boolean('acknowledgment_confirmed')) {

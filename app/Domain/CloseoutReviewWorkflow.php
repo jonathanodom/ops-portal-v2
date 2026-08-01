@@ -11,6 +11,7 @@ use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
+use App\Support\IncidentRecorder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -100,6 +101,17 @@ class CloseoutReviewWorkflow
             return $existing;
         }
         $selfReview = $this->authorizeReviewer($closeout, $actor);
+        if ($disposition === 'cancel') {
+            $activeTimerCount = $closeout->visit->serviceTicket->visits()->whereHas('timeEntries', fn ($query) => $query->whereNull('ended_at'))->withCount(['timeEntries as active_timer_count' => fn ($query) => $query->whereNull('ended_at')])->get()->sum('active_timer_count');
+            if ($activeTimerCount) {
+                app(IncidentRecorder::class)->record($closeout->visit->serviceTicket->organization, $actor, 'transition_failure', 'error', $closeout->visit->serviceTicket, [
+                    'reason_code' => 'submitted_closeout_active_timer',
+                    'ticket_id' => $closeout->visit->service_ticket_id,
+                    'active_timer_count' => $activeTimerCount,
+                ]);
+                throw ValidationException::withMessages(['disposition' => 'Cancellation is blocked because submitted work has an active timer.']);
+            }
+        }
 
         return DB::transaction(function () use ($closeout, $actor, $token, $disposition, $dispositionReason, $timeAdjustments, $partAdjustments, $selfReview): CloseoutReview {
             $closeout = Closeout::query()->lockForUpdate()->findOrFail($closeout->id);

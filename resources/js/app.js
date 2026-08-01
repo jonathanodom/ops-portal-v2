@@ -77,3 +77,40 @@ document.querySelectorAll('[data-upload-form]').forEach((form) => form.addEventL
     request.open('POST', form.action);
     request.send(new FormData(form));
 }));
+
+document.querySelectorAll('[data-dialog-open]').forEach((button) => button.addEventListener('click', () => {
+    const dialog = document.getElementById(button.dataset.dialogOpen);
+    if (!dialog) return;
+    const url = new URL(window.location.href);
+    url.searchParams.set('execution_visit', dialog.dataset.visitId);
+    history.replaceState({}, '', url);
+    dialog.showModal();
+}));
+
+document.querySelectorAll('[data-execution-dialog]').forEach((dialog) => {
+    const close = () => {
+        dialog.close();
+        const url = new URL(window.location.href);
+        url.searchParams.delete('execution_visit');
+        history.replaceState({}, '', url);
+    };
+    dialog.querySelector('[data-dialog-close]')?.addEventListener('click', close);
+    dialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+    dialog.querySelectorAll('[data-modal-form]').forEach((form) => form.addEventListener('submit', () => {
+        const url = new URL(window.location.href);
+        url.searchParams.set('execution_visit', dialog.dataset.visitId);
+        history.replaceState({}, '', url);
+    }));
+});
+
+const requestedDialog = new URL(window.location.href).searchParams.get('execution_visit');
+if (requestedDialog) {
+    const dialog = document.querySelector(`[data-execution-dialog][data-visit-id="${CSS.escape(requestedDialog)}"]`);
+    if (dialog) {
+        dialog.showModal();
+        dialog.querySelector('[data-dialog-status]')?.focus();
+    }
+}

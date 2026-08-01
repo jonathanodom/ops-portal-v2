@@ -15,6 +15,7 @@ use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\VisitController;
+use App\Http\Controllers\Office\VisitExecutionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -81,6 +82,10 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             });
             Route::post('/billing-handoffs/{handoff}/acknowledge', [BillingHandoffController::class, 'acknowledge'])
                 ->whereNumber('handoff')->middleware('capability:billing_handoffs.manage')->name('billing-handoffs.acknowledge');
+            Route::post('/visits/{visit}/execution/transition', [VisitExecutionController::class, 'transition'])->whereNumber('visit')->name('visits.execution.transition');
+            Route::post('/visits/{visit}/execution/timer', [VisitExecutionController::class, 'timer'])->whereNumber('visit')->name('visits.execution.timer');
+            Route::post('/visits/{visit}/execution/time', [VisitExecutionController::class, 'storeTime'])->whereNumber('visit')->name('visits.execution.time.store');
+            Route::put('/visits/{visit}/execution/time/{entry}', [VisitExecutionController::class, 'updateTime'])->whereNumber(['visit', 'entry'])->name('visits.execution.time.update');
             Route::get('/operations/health', [OperationalHealthController::class, 'index'])
                 ->middleware('capability:operations.health.view')->name('operations.health');
             Route::post('/operations/incidents/{incident}/resolve', [OperationalHealthController::class, 'resolve'])

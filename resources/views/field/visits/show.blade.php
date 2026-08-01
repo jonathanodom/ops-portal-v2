@@ -32,6 +32,10 @@
     <h1 class="text-2xl font-bold">{{ $visit->serviceTicket->title }}</h1>
     <p class="mt-2 text-sm font-semibold text-slate-600">{{ ucfirst(str_replace('_', ' ', $visit->status)) }} · {{ $visit->scheduledStartLocal()?->format('M j, g:i A T') ?? 'Unscheduled' }}</p>
 
+    @if($visit->status === 'canceled')
+        <div class="mt-4 rounded-lg border border-slate-300 bg-slate-100 p-4" role="status"><p class="font-bold">This visit was canceled.</p><p class="mt-1 text-sm text-slate-700">Execution and closeout are read-only. You may correct your completed time with a reason.</p></div>
+    @endif
+
     @can('execute', $visit)
         @if ($visit->status === 'assigned')
             <form method="POST" action="{{ route('field.visits.transition', $visit) }}" class="mt-5">
@@ -108,7 +112,7 @@
             @empty
                 <p class="mt-2 text-sm text-slate-500">No time captured.</p>
             @endforelse
-            @if (! $closeout || $closeout->status === 'draft')
+            @if ($visit->status !== 'canceled' && (! $closeout || $closeout->status === 'draft'))
                 <form method="POST" action="{{ route('field.visits.timer', $visit) }}" class="mt-4 grid grid-cols-2 gap-2">
                     @csrf
                     <select class="form-input col-span-2" name="category" aria-label="Time category">
@@ -120,6 +124,7 @@
             @endif
         </section>
 
+        @if($visit->status !== 'canceled')
         <section class="surface mt-4 p-5">
             <h2 class="text-lg font-bold">Closeout</h2>
             @if (! $closeout || $closeout->status === 'draft')
@@ -215,6 +220,7 @@
                     <button class="button-action mt-3 w-full">Submit closeout</button>
                 </form>
             </section>
+        @endif
         @endif
     @endcan
 

@@ -32,7 +32,7 @@ class VisitPolicy
     public function execute(User $user, Visit $visit): bool
     {
         $membership = $this->membership($user, $visit->organization_id);
-        if (! $membership || ! $membership->hasCapability('experience.field.access')) {
+        if (! $membership) {
             return false;
         }
 

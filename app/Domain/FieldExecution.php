@@ -10,6 +10,7 @@ use App\Models\Visit;
 use App\Models\VisitMedia;
 use App\Models\VisitTimeEntry;
 use App\Support\AuditRecorder;
+use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
 
@@ -75,6 +76,105 @@ class FieldExecution
         ]);
 
         return $entry;
+    }
+
+    public function transition(Visit $visit, User $actor, string $status, ServiceTicketWorkflow $workflow): Visit
+    {
+        $workflow->assertVisitExecutionAllowed($visit, $status, $actor);
+
+        return DB::transaction(function () use ($visit, $actor, $status, $workflow): Visit {
+            $visit = Visit::query()->lockForUpdate()->findOrFail($visit->id);
+            $active = VisitTimeEntry::query()->where('active_user_id', $actor->id)->lockForUpdate()->first();
+            if ($active && $active->visit_id !== $visit->id) {
+                throw ValidationException::withMessages(['time' => 'Stop the timer on your other visit before changing this visit status.']);
+            }
+
+            $workflow->executeVisit($visit, $status, $actor);
+            $visit->refresh();
+            $closeout = $this->draft($visit, $actor);
+            if ($active) {
+                $this->stopTimer($active, $actor);
+            }
+            $this->startTimer($visit, $closeout, $actor, $status === 'en_route' ? 'travel' : 'on_site');
+
+            return $visit->refresh();
+        });
+    }
+
+    public function createManualTime(
+        Visit $visit,
+        Closeout $closeout,
+        User $owner,
+        User $actor,
+        string $category,
+        CarbonInterface $start,
+        CarbonInterface $end,
+        string $reason,
+    ): VisitTimeEntry {
+        return DB::transaction(function () use ($visit, $closeout, $owner, $actor, $category, $start, $end, $reason): VisitTimeEntry {
+            $closeout = Closeout::query()->lockForUpdate()->findOrFail($closeout->id);
+            if ($closeout->status !== 'draft') {
+                throw ValidationException::withMessages(['time' => 'Submitted closeout time is immutable.']);
+            }
+            $this->assertNoOverlap($owner->id, $start, $end);
+            $entry = VisitTimeEntry::query()->create([
+                'organization_id' => $visit->organization_id,
+                'visit_id' => $visit->id,
+                'closeout_id' => $closeout->id,
+                'user_id' => $owner->id,
+                'category' => $category,
+                'started_at' => $start,
+                'ended_at' => $end,
+                'source' => 'manual',
+                'correction_reason' => $reason,
+            ]);
+            $this->audit->record($visit->serviceTicket->organization, $actor, 'visit_time.created_manually', $entry, [
+                'visit_id' => $visit->id,
+                'owner_id' => $owner->id,
+                'category' => $category,
+                'changed_fields' => ['started_at', 'ended_at', 'category'],
+            ]);
+
+            return $entry;
+        });
+    }
+
+    public function correctTime(
+        VisitTimeEntry $entry,
+        User $actor,
+        CarbonInterface $start,
+        CarbonInterface $end,
+        string $reason,
+    ): VisitTimeEntry {
+        return DB::transaction(function () use ($entry, $actor, $start, $end, $reason): VisitTimeEntry {
+            $entry = VisitTimeEntry::query()->lockForUpdate()->findOrFail($entry->id);
+            if ($entry->closeout->status !== 'draft') {
+                throw ValidationException::withMessages(['time' => 'Submitted closeout time is immutable.']);
+            }
+            if ($entry->active_user_id || ! $entry->ended_at) {
+                throw ValidationException::withMessages(['time' => 'Stop the timer before correcting it.']);
+            }
+            $this->assertNoOverlap($entry->user_id, $start, $end, $entry->id);
+            $changed = collect(['started_at', 'ended_at'])->filter(function (string $field) use ($entry, $start, $end): bool {
+                $value = $field === 'started_at' ? $start : $end;
+
+                return ! $entry->$field?->equalTo($value);
+            })->values()->all();
+            $entry->update([
+                'started_at' => $start,
+                'ended_at' => $end,
+                'correction_reason' => $reason,
+                'active_user_id' => null,
+                'source' => 'manual',
+            ]);
+            $this->audit->record($entry->closeout->visit->serviceTicket->organization, $actor, 'visit_time.corrected', $entry, [
+                'visit_id' => $entry->visit_id,
+                'owner_id' => $entry->user_id,
+                'changed_fields' => $changed,
+            ]);
+
+            return $entry->refresh();
+        });
     }
 
     public function stopTimer(VisitTimeEntry $e, User $u, string $source = 'timer'): void
@@ -165,5 +265,19 @@ class FieldExecution
         } while ($closeout);
 
         return $ids;
+    }
+
+    private function assertNoOverlap(int $userId, CarbonInterface $start, CarbonInterface $end, ?int $exceptId = null): void
+    {
+        $overlap = VisitTimeEntry::query()
+            ->where('user_id', $userId)
+            ->when($exceptId, fn ($query) => $query->whereKeyNot($exceptId))
+            ->where('started_at', '<', $end)
+            ->where(fn ($query) => $query->whereNull('ended_at')->orWhere('ended_at', '>', $start))
+            ->lockForUpdate()
+            ->exists();
+        if ($overlap) {
+            throw ValidationException::withMessages(['time' => 'That time overlaps another entry for this user.']);
+        }
     }
 }
