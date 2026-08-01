@@ -11,6 +11,7 @@ use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\DispatchController;
+use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\VisitController;
@@ -26,7 +27,7 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/reset-password', [NewPasswordController::class, 'store'])->name('password.update');
 });
 
-Route::middleware(['auth', 'active.organization'])->group(function (): void {
+Route::middleware(['auth', 'active.organization', 'record.operational.failures'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
 
     Route::get('/', function (Request $request) {
@@ -80,6 +81,12 @@ Route::middleware(['auth', 'active.organization'])->group(function (): void {
             });
             Route::post('/billing-handoffs/{handoff}/acknowledge', [BillingHandoffController::class, 'acknowledge'])
                 ->whereNumber('handoff')->middleware('capability:billing_handoffs.manage')->name('billing-handoffs.acknowledge');
+            Route::get('/operations/health', [OperationalHealthController::class, 'index'])
+                ->middleware('capability:operations.health.view')->name('operations.health');
+            Route::post('/operations/incidents/{incident}/resolve', [OperationalHealthController::class, 'resolve'])
+                ->whereNumber('incident')->middleware('capability:operations.health.manage')->name('operations.resolve');
+            Route::post('/operations/incidents/{incident}/reopen', [OperationalHealthController::class, 'reopen'])
+                ->whereNumber('incident')->middleware('capability:operations.health.manage')->name('operations.reopen');
             Route::middleware('capability:customers.view')->group(function (): void {
                 Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customers.show');

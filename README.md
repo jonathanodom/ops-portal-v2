@@ -11,6 +11,7 @@ Phase 1 adds the narrow customer, contact, and service-location foundation requi
 Phase 2 adds service tickets, visits, dispatch scheduling, crew assignment, and field Today workflows.
 Phase 3 adds mobile time capture, shared closeout drafts, private evidence, parts/equipment proposals, acknowledgment, and evidence-validated submission.
 Phase 4 adds immutable correction versions, office review and adjustments, operational approval, Service Ticket completion, and billing handoffs.
+Phase 5 adds an isolated beta rehearsal environment, operational health diagnostics, guarded recovery tools, accessibility coverage, and performance regression budgets.
 
 See [the complete FSM-first handoff](docs/FSM_FIRST_CODEX_HANDOFF.md) for the product charter, lifecycle, scope lock, phased delivery plan, and quality gates.
 
@@ -114,6 +115,22 @@ See [Phase 3 validation](docs/PHASE_3_VALIDATION.md) for the schema, authorizati
 - Non-resolved approvals retain operational state and never create a billing handoff.
 
 See [Phase 4 validation](docs/PHASE_4_VALIDATION.md) for schema changes, decision matrices, preservation evidence, exact validation results, rollback notes, and exclusions.
+
+## Phase 5 beta hardening
+
+Copy `.env.beta.example` to the untracked `.env.beta`, set a local-only `BETA_DEMO_PASSWORD`, then run:
+
+```powershell
+composer beta:setup
+composer beta:serve
+composer beta:validate
+php artisan beta:benchmark --env=beta --runs=20 --fail-on-budget
+php artisan ops:health-scan
+```
+
+The beta reset guard requires `APP_ENV=beta`, a database name/path containing `beta`, and—when using SQLite—a path inside this repository's `database` directory. It cannot reset the normal development database. The beta seeders are intentionally absent from `DatabaseSeeder`.
+
+See the [Phase 5 beta runbook](docs/PHASE_5_BETA_RUNBOOK.md), [validation record](docs/PHASE_5_VALIDATION.md), and [deferred decision log](docs/PHASE_5_DECISION_LOG.md). Phase 5 remains a local/CI gate and makes no production-readiness or deployment claim.
 
 ## Quality commands
 

@@ -3,6 +3,7 @@
 .env
 .env.backup
 .env.production
+.env.beta
 .phpactor.json
 .phpunit.result.cache
 /.fleet
@@ -14,12 +15,14 @@
 /.zed
 /auth.json
 /node_modules
+/playwright-report
 /public/build
 /public/hot
 /public/storage
 /storage/*.key
 /storage/backups/*.sqlite
 /storage/pail
+/test-results
 /vendor
 Homestead.json
 Homestead.yaml

@@ -12,7 +12,10 @@ use App\Policies\CustomerPolicy;
 use App\Policies\ServiceLocationPolicy;
 use App\Policies\ServiceTicketPolicy;
 use App\Policies\VisitPolicy;
+use App\Support\IncidentRecorder;
+use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -37,5 +40,12 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(ServiceLocation::class, ServiceLocationPolicy::class);
         Gate::policy(ServiceTicket::class, ServiceTicketPolicy::class);
         Gate::policy(Visit::class, VisitPolicy::class);
+        Queue::failing(function (JobFailed $event): void {
+            app(IncidentRecorder::class)->record(null, null, 'queue_failure', 'error', null, [
+                'connection' => $event->connectionName,
+                'job_class' => $event->job->resolveName(),
+                'reason_code' => class_basename($event->exception),
+            ]);
+        });
     }
 }

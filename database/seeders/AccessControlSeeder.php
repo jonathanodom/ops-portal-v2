@@ -23,6 +23,8 @@ class AccessControlSeeder extends Seeder
         'customers.manage' => 'Create and update customer and service-location records',
         'service_tickets.view' => 'View service tickets and visits in the office experience',
         'closeouts.inspect' => 'Inspect submitted field closeout evidence',
+        'operations.health.view' => 'View operational health incidents',
+        'operations.health.manage' => 'Resolve operational health incidents',
     ];
 
     private const ROLES = [
