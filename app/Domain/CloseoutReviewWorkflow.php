@@ -2,8 +2,6 @@
 
 namespace App\Domain;
 
-use App\Events\BillingHandoffCreated;
-use App\Models\BillingHandoff;
 use App\Models\Closeout;
 use App\Models\CloseoutReview;
 use App\Models\OrganizationMembership;
@@ -11,6 +9,7 @@ use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
+use App\Support\IncidentRecorder;
 use Illuminate\Support\Arr;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -25,7 +24,10 @@ class CloseoutReviewWorkflow
         'no_photo_category', 'no_photo_detail', 'return_visit_id',
     ];
 
-    public function __construct(private readonly AuditRecorder $audit) {}
+    public function __construct(
+        private readonly AuditRecorder $audit,
+        private readonly ServiceTicketCompletion $ticketCompletion,
+    ) {}
 
     public function returnForCorrection(Closeout $closeout, User $actor, string $reason, string $token): CloseoutReview
     {
@@ -100,6 +102,17 @@ class CloseoutReviewWorkflow
             return $existing;
         }
         $selfReview = $this->authorizeReviewer($closeout, $actor);
+        if ($disposition === 'cancel') {
+            $activeTimerCount = $closeout->visit->serviceTicket->visits()->whereHas('timeEntries', fn ($query) => $query->whereNull('ended_at'))->withCount(['timeEntries as active_timer_count' => fn ($query) => $query->whereNull('ended_at')])->get()->sum('active_timer_count');
+            if ($activeTimerCount) {
+                app(IncidentRecorder::class)->record($closeout->visit->serviceTicket->organization, $actor, 'transition_failure', 'error', $closeout->visit->serviceTicket, [
+                    'reason_code' => 'submitted_closeout_active_timer',
+                    'ticket_id' => $closeout->visit->service_ticket_id,
+                    'active_timer_count' => $activeTimerCount,
+                ]);
+                throw ValidationException::withMessages(['disposition' => 'Cancellation is blocked because submitted work has an active timer.']);
+            }
+        }
 
         return DB::transaction(function () use ($closeout, $actor, $token, $disposition, $dispositionReason, $timeAdjustments, $partAdjustments, $selfReview): CloseoutReview {
             $closeout = Closeout::query()->lockForUpdate()->findOrFail($closeout->id);
@@ -127,25 +140,12 @@ class CloseoutReviewWorkflow
                 $visit->update(['status' => 'approved', 'updated_by_id' => $actor->id]);
             }
 
-            if ($closeout->outcome === 'resolved' && ! $ticket->visits()->whereKeyNot($visit->id)->whereNotIn('status', ['approved', 'canceled', 'customer_unavailable'])->exists()) {
-                $ticket->update(['status' => 'completed', 'status_reason' => null, 'status_changed_at' => now(), 'status_changed_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
-                $handoff = BillingHandoff::query()->firstOrCreate(
-                    ['service_ticket_id' => $ticket->id],
-                    [
-                        'organization_id' => $ticket->organization_id,
-                        'visit_id' => $visit->id,
-                        'closeout_id' => $closeout->id,
-                        'status' => 'ready',
-                        'approved_time_minutes' => $this->approvedTimeMinutes($review, $visit),
-                        'approved_parts_count' => $this->approvedPartsCount($review, $closeout),
-                        'created_by_id' => $actor->id,
-                    ],
-                );
-                if ($handoff->wasRecentlyCreated) {
-                    BillingHandoffCreated::dispatch($handoff);
-                    $this->audit->record($ticket->organization, $actor, 'billing_handoff.created', $handoff, ['ticket_id' => $ticket->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id]);
-                }
-            }
+            $this->ticketCompletion->completeIfEligible(
+                $ticket,
+                $actor,
+                $closeout->outcome === 'resolved' ? $closeout : null,
+                $closeout->outcome === 'resolved' ? $review : null,
+            );
 
             $this->audit->record($ticket->organization, $actor, 'closeout.approved', $closeout, [
                 'visit_id' => $visit->id,
@@ -223,26 +223,5 @@ class CloseoutReviewWorkflow
             }
             $review->adjustments()->create(['organization_id' => $closeout->organization_id, 'type' => 'part', 'visit_part_proposal_id' => $part->id, 'excluded' => (bool) ($values['excluded'] ?? false), 'approved_quantity' => $values['approved_quantity'] ?? $part->quantity, 'approved_unit' => $values['approved_unit'] ?? $part->unit, 'approved_billing_treatment' => $values['approved_billing_treatment'] ?? $part->billing_treatment, 'reason' => $values['reason']]);
         }
-    }
-
-    private function approvedTimeMinutes(CloseoutReview $review, Visit $visit): int
-    {
-        $adjustments = $review->adjustments->where('type', 'time')->keyBy('visit_time_entry_id');
-
-        return (int) $visit->timeEntries->sum(function ($entry) use ($adjustments): int {
-            $adjustment = $adjustments->get($entry->id);
-            if ($adjustment?->excluded || ! $entry->ended_at) {
-                return 0;
-            }
-
-            return $adjustment?->approved_minutes ?? (int) ceil($entry->started_at->diffInSeconds($entry->ended_at) / 60);
-        });
-    }
-
-    private function approvedPartsCount(CloseoutReview $review, Closeout $closeout): int
-    {
-        $adjustments = $review->adjustments->where('type', 'part')->keyBy('visit_part_proposal_id');
-
-        return $closeout->parts->whereNull('removed_at')->reject(fn ($part) => $adjustments->get($part->id)?->excluded)->count();
     }
 }

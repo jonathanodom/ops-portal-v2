@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\AdminManualCloseoutWorkflow;
 use App\Domain\ServiceTicketWorkflow;
 use App\Domain\VisitScheduler;
 use App\Http\Controllers\Controller;
@@ -139,7 +140,7 @@ class ServiceTicketController extends Controller
         return redirect()->route('office.service-tickets.show', $ticket)->with('status', 'Service ticket created.');
     }
 
-    public function show(Request $request, string $serviceTicket): View
+    public function show(Request $request, string $serviceTicket, AdminManualCloseoutWorkflow $manualCloseout): View
     {
         $ticket = $this->ticket($request, $serviceTicket);
         Gate::authorize('view', $ticket);
@@ -148,7 +149,7 @@ class ServiceTicketController extends Controller
             'serviceLocation.primaryContact',
             'contact',
             'notes.author',
-            'visits' => fn ($query) => $query->with(['assignments.membership.user', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('id'),
+            'visits' => fn ($query) => $query->with(['assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('id'),
         ]);
         $events = AuditEvent::query()->where('organization_id', $ticket->organization_id)
             ->with('actor')
@@ -156,8 +157,28 @@ class ServiceTicketController extends Controller
                 ->where(fn ($inner) => $inner->where('subject_type', $ticket->getMorphClass())->where('subject_id', $ticket->id))
                 ->orWhere(fn ($inner) => $inner->where('subject_type', (new Visit)->getMorphClass())->whereIn('subject_id', $ticket->visits->pluck('id'))))
             ->latest('occurred_at')->limit(100)->get();
+        $membership = $request->attributes->get('membership');
+        $executableVisitIds = $ticket->visits->filter(function (Visit $visit) use ($membership): bool {
+            if ($membership->hasCapability('visits.execute_any')) {
+                return true;
+            }
 
-        return view('office.service-tickets.show', compact('ticket', 'events'));
+            return $membership->hasCapability('visits.execute_assigned')
+                && $visit->assignments->contains('organization_membership_id', $membership->id);
+        })->pluck('id')->all();
+        $archivableVisitIds = $membership->hasCapability('visits.archive.manage')
+            ? $ticket->visits->filter(function (Visit $visit) use ($ticket): bool {
+                return in_array($visit->status, ['planned', 'scheduled', 'assigned', 'canceled'], true)
+                    && $visit->timeEntries->whereNull('ended_at')->isEmpty()
+                    && $visit->currentCloseout?->status !== 'submitted'
+                    && ! $ticket->visits->contains('return_of_visit_id', $visit->id);
+            })->pluck('id')->all()
+            : [];
+        $manualCloseoutVisitIds = $membership->hasCapability('closeouts.manual_complete')
+            ? $ticket->visits->filter(fn (Visit $visit): bool => $manualCloseout->canStart($visit))->pluck('id')->all()
+            : [];
+
+        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds'));
     }
 
     public function edit(Request $request, string $serviceTicket): View
@@ -222,8 +243,9 @@ class ServiceTicketController extends Controller
         $data = $request->validate([
             'status' => ['required', Rule::in(['open', 'on_hold', 'canceled'])],
             'reason' => ['nullable', 'string', 'max:2000'],
+            'confirm_stop_active_timers' => ['sometimes', 'accepted'],
         ]);
-        $workflow->changeTicketStatus($ticket, $data['status'], $request->user(), $data['reason'] ?? null);
+        $workflow->changeTicketStatus($ticket, $data['status'], $request->user(), $data['reason'] ?? null, $request->boolean('confirm_stop_active_timers'));
 
         return back()->with('status', 'Service ticket status updated.');
     }

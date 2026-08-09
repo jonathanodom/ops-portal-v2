@@ -104,3 +104,11 @@
 .bg-canvas .text-slate-500 {
     color: var(--color-slate-600);
 }
+
+dialog[data-execution-dialog]::backdrop {
+    background: rgb(15 23 42 / 65%);
+}
+
+body:has(dialog[data-execution-dialog][open]) {
+    overflow: hidden;
+}

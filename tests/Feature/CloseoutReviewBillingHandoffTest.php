@@ -72,7 +72,14 @@ class CloseoutReviewBillingHandoffTest extends TestCase
             'part_adjustments' => [$part->id => ['enabled' => 1, 'approved_quantity' => 1, 'approved_unit' => 'each', 'approved_billing_treatment' => 'warranty', 'reason' => 'One assembly used']],
         ];
 
-        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", $payload)->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
+            ->assertOk()
+            ->assertSee('This is the final resolved visit.')
+            ->assertSee('Approve closeout &amp; complete Service Ticket', false);
+
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", $payload)
+            ->assertRedirect()->assertSessionHasNoErrors()
+            ->assertSessionHas('status', fn (string $status) => str_contains($status, 'Service Ticket is complete'));
         $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", $payload)->assertRedirect();
 
         $this->assertSame('approved', $visit->fresh()->status);
@@ -111,10 +118,104 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $return = Visit::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $visit->service_ticket_id, 'service_location_id' => $visit->service_location_id, 'return_of_visit_id' => $visit->id, 'status' => 'planned', 'timezone' => $visit->timezone]);
         $closeout->update(['return_visit_id' => $return->id]);
 
+        $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
+            ->assertOk()
+            ->assertSee('This Service Ticket will remain open.')
+            ->assertSee("planned return visit #{$return->id}");
+
         $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", ['decision_token' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame('open', $visit->serviceTicket->fresh()->status);
         $this->assertDatabaseCount('billing_handoffs', 0);
         $this->assertDatabaseCount('visits', 2);
+    }
+
+    public function test_final_resolved_return_trip_clearly_completes_a_multi_visit_ticket(): void
+    {
+        [$organization, $finalVisit, $closeout] = $this->submittedCloseout();
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        $firstVisit = Visit::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $finalVisit->service_ticket_id, 'service_location_id' => $finalVisit->service_location_id, 'status' => 'approved', 'timezone' => $finalVisit->timezone]);
+        $secondVisit = Visit::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $finalVisit->service_ticket_id, 'service_location_id' => $finalVisit->service_location_id, 'return_of_visit_id' => $firstVisit->id, 'status' => 'approved', 'timezone' => $finalVisit->timezone]);
+        $finalVisit->update(['return_of_visit_id' => $secondVisit->id]);
+
+        $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
+            ->assertOk()
+            ->assertSee('This is the final resolved visit.')
+            ->assertSee('Approving this closeout will complete');
+
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", ['decision_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('completed', $finalVisit->serviceTicket->fresh()->status);
+        $this->assertDatabaseCount('billing_handoffs', 1);
+    }
+
+    public function test_approval_order_does_not_leave_a_multi_visit_ticket_open(): void
+    {
+        [$organization, $firstVisit] = $this->submittedCloseout('needs_return_trip');
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        $ticket = $firstVisit->serviceTicket;
+        $finalVisit = Visit::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $ticket->id,
+            'service_location_id' => $firstVisit->service_location_id,
+            'status' => 'pending_closeout',
+            'timezone' => 'America/Chicago',
+        ]);
+        $finalCloseout = Closeout::query()->create([
+            'organization_id' => $organization->id,
+            'visit_id' => $finalVisit->id,
+            'version' => 1,
+            'status' => 'submitted',
+            'content_version' => 2,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Final diagnosis',
+            'work_performed' => 'Final repair',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Customer unavailable for acknowledgment',
+            'no_photo_category' => 'not_applicable',
+            'no_photo_detail' => 'Evidence not applicable',
+            'submitted_token' => (string) Str::uuid(),
+            'submitted_by_id' => $firstVisit->currentCloseout->submitted_by_id,
+            'submitted_at' => now()->addMinute(),
+        ]);
+        $finalVisit->update(['current_closeout_id' => $finalCloseout->id]);
+
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$finalCloseout->id}/approve", [
+            'decision_token' => (string) Str::uuid(),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame('open', $ticket->fresh()->status);
+
+        $firstCloseout = $firstVisit->currentCloseout;
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$firstCloseout->id}/approve", [
+            'decision_token' => (string) Str::uuid(),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('completed', $ticket->fresh()->status);
+        $this->assertDatabaseHas('billing_handoffs', [
+            'service_ticket_id' => $ticket->id,
+            'visit_id' => $finalVisit->id,
+            'closeout_id' => $finalCloseout->id,
+        ]);
+    }
+
+    public function test_resolved_review_lists_visits_that_still_block_ticket_completion(): void
+    {
+        [$organization, $visit, $closeout] = $this->submittedCloseout();
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        $blockingVisit = Visit::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $visit->service_ticket_id, 'service_location_id' => $visit->service_location_id, 'return_of_visit_id' => $visit->id, 'status' => 'planned', 'timezone' => $visit->timezone]);
+
+        $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
+            ->assertOk()
+            ->assertSee('Approval will not close the Service Ticket yet.')
+            ->assertSee("Visit #{$blockingVisit->id}")
+            ->assertSee('Planned');
+
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", ['decision_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors()
+            ->assertSessionHas('status', fn (string $status) => str_contains($status, 'remains open'));
+
+        $this->assertSame('open', $visit->serviceTicket->fresh()->status);
+        $this->assertDatabaseCount('billing_handoffs', 0);
     }
 
     public function test_customer_unavailable_requires_and_applies_a_safe_disposition(): void

@@ -15,6 +15,7 @@ class RecordOperationalFailures
         'field.visits.transition', 'field.visits.submit', 'office.service-tickets.transition',
         'office.visits.cancel', 'office.visits.return', 'office.closeout-reviews.approve',
         'office.closeout-reviews.return',
+        'office.visits.manual-closeout.complete',
     ];
 
     public function __construct(private IncidentRecorder $incidents) {}
@@ -39,8 +40,8 @@ class RecordOperationalFailures
             throw $exception;
         } catch (Throwable $exception) {
             $route = $request->route()?->getName();
-            $category = $route === 'field.visits.media.store' ? 'upload_failure' : 'request_failure';
-            if ($route === 'field.media.show') {
+            $category = in_array($route, ['field.visits.media.store', 'office.visits.manual-closeout.media.store'], true) ? 'upload_failure' : 'request_failure';
+            if (in_array($route, ['field.media.show', 'office.manual-closeout.media.show'], true)) {
                 $category = 'storage_failure';
             }
             if (in_array($route, self::TRANSITION_ROUTES, true)) {

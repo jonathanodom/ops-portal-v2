@@ -105,8 +105,11 @@ class VisitController extends Controller
     {
         $visit = $this->visit($request, $visit);
         Gate::authorize('dispatch', [Visit::class, $this->organization($request)]);
-        $data = $request->validate(['reason' => ['required', 'string', 'max:2000']]);
-        $workflow->cancelVisit($visit, $request->user(), $data['reason']);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:2000'],
+            'confirm_stop_active_timers' => ['sometimes', 'accepted'],
+        ]);
+        $workflow->cancelVisit($visit, $request->user(), $data['reason'], $request->boolean('confirm_stop_active_timers'));
 
         return back()->with('status', 'Visit canceled.');
     }

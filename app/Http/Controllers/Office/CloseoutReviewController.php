@@ -42,14 +42,19 @@ class CloseoutReviewController extends Controller
         $visit = $closeout->visit;
         $versions = Closeout::query()->where('organization_id', $closeout->organization_id)->where('visit_id', $visit->id)
             ->with(['submittedBy', 'lastSavedBy', 'timeEntries.user', 'media', 'parts', 'reviews.reviewer', 'reviews.adjustments'])->orderBy('version')->get();
-        $visit->load(['serviceTicket.customer', 'serviceTicket.contact', 'serviceLocation.primaryContact', 'assignments.membership.user', 'timeEntries.user']);
+        $visit->load(['serviceTicket.customer', 'serviceTicket.contact', 'serviceTicket.visits.currentCloseout', 'serviceLocation.primaryContact', 'assignments.membership.user', 'timeEntries.user']);
+        $completionBlockingVisits = $visit->serviceTicket->visits
+            ->where('id', '!=', $visit->id)
+            ->whereNotIn('status', ['approved', 'canceled', 'customer_unavailable'])
+            ->sortBy('id')
+            ->values();
         $events = AuditEvent::query()->where('organization_id', $closeout->organization_id)
             ->where(function ($query) use ($visit): void {
                 $query->where(fn ($q) => $q->where('subject_type', $visit->getMorphClass())->where('subject_id', $visit->id))
                     ->orWhere(fn ($q) => $q->where('subject_type', $visit->serviceTicket->getMorphClass())->where('subject_id', $visit->service_ticket_id));
             })->with('actor')->latest('occurred_at')->limit(50)->get();
 
-        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'events'));
+        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'events', 'completionBlockingVisits'));
     }
 
     public function approve(Request $request, string $closeout, CloseoutReviewWorkflow $workflow, AuditRecorder $audit): RedirectResponse
@@ -81,7 +86,14 @@ class CloseoutReviewController extends Controller
             throw $exception;
         }
 
-        return redirect()->route('office.closeout-reviews.index')->with('status', 'Closeout approved and disposition applied.');
+        $ticketCompleted = $closeout->visit->serviceTicket()->where('status', 'completed')->exists();
+
+        return redirect()->route('office.closeout-reviews.index')->with(
+            'status',
+            $ticketCompleted
+                ? 'Closeout approved. The Service Ticket is complete and its billing handoff is ready.'
+                : 'Closeout approved. The Service Ticket remains open for its remaining visit or disposition.',
+        );
     }
 
     public function returnForCorrection(Request $request, string $closeout, CloseoutReviewWorkflow $workflow, AuditRecorder $audit): RedirectResponse

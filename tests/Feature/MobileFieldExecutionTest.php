@@ -97,6 +97,25 @@ class MobileFieldExecutionTest extends TestCase
         $this->actingAs($lead)->post("/field/visits/{$visit->id}/draft", $this->resolvedDraft(2))->assertSessionHasErrors('closeout');
     }
 
+    public function test_submission_errors_render_beside_each_required_closeout_field(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->post("/field/visits/{$visit->id}/draft", [
+            'content_version' => 1,
+            'outcome' => 'customer_unavailable',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->from("/field/visits/{$visit->id}")->followingRedirects()->post("/field/visits/{$visit->id}/submit", [
+            'submission_token' => (string) Str::uuid(),
+        ])
+            ->assertOk()
+            ->assertSee('id="unavailable_category-error"', false)
+            ->assertSee('id="unavailable_detail-error"', false)
+            ->assertSee('aria-invalid="true"', false)
+            ->assertSee('Choose a customer unavailable reason.')
+            ->assertSee('Customer unavailable details are required.');
+    }
+
     public function test_all_submission_outcomes_apply_their_atomic_effects(): void
     {
         [$organization, $returnVisit, $lead] = $this->executionGraph('on_site');
@@ -180,7 +199,7 @@ class MobileFieldExecutionTest extends TestCase
 
         $token = (string) Str::uuid();
         $this->actingAs($dispatcher)->post("/field/visits/{$visit->id}/submit", ['submission_token' => $token])
-            ->assertSessionHasErrors('no_photo_detail');
+            ->assertSessionHasErrors('no_photo_category');
 
         $this->actingAs($dispatcher)->post("/field/visits/{$visit->id}/draft", [
             'content_version' => 2,

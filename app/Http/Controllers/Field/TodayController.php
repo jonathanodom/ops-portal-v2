@@ -8,7 +8,6 @@ use App\Http\Controllers\Controller;
 use App\Models\Closeout;
 use App\Models\OrganizationMembership;
 use App\Models\Visit;
-use App\Models\VisitTimeEntry;
 use App\Support\AuditRecorder;
 use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
@@ -27,8 +26,10 @@ class TodayController extends Controller
 
         return view('field.today', [
             'today' => (clone $query)->whereBetween('scheduled_start_at', [$today->utc(), $today->endOfDay()->utc()])->orderBy('scheduled_start_at')->get(),
-            'upcoming' => (clone $query)->where('scheduled_start_at', '>=', $today->addDay()->utc())
+            'upcoming' => (clone $query)->where('status', '!=', 'canceled')->where('scheduled_start_at', '>=', $today->addDay()->utc())
                 ->where('scheduled_start_at', '<', $today->addDays(8)->utc())->orderBy('scheduled_start_at')->get(),
+            'past' => (clone $query)->where('scheduled_start_at', '>=', $today->subDays(7)->utc())
+                ->where('scheduled_start_at', '<', $today->utc())->orderByDesc('scheduled_start_at')->orderByDesc('id')->get(),
         ]);
     }
 
@@ -57,17 +58,7 @@ class TodayController extends Controller
         $visit = $this->visit($request, $visit);
         Gate::authorize('execute', $visit);
         $data = $request->validate(['status' => ['required', 'in:en_route,on_site']]);
-        $active = VisitTimeEntry::query()->where('active_user_id', $request->user()->id)->first();
-        if ($active && $active->visit_id !== $visit->id) {
-            return back()->withErrors(['time' => 'Stop the timer on your other visit before changing this visit status.']);
-        }
-        $workflow->executeVisit($visit, $data['status'], $request->user());
-        $visit->refresh();
-        $closeout = $execution->draft($visit, $request->user());
-        if ($active) {
-            $execution->stopTimer($active, $request->user());
-        }
-        $execution->startTimer($visit, $closeout, $request->user(), $data['status'] === 'en_route' ? 'travel' : 'on_site');
+        $execution->transition($visit, $request->user(), $data['status'], $workflow);
 
         return back()->with('status', $data['status'] === 'en_route' ? 'Travel started.' : 'Marked on site.');
     }
@@ -75,7 +66,6 @@ class TodayController extends Controller
     private function authorizedQuery(OrganizationMembership $membership)
     {
         return Visit::query()->forOrganization($membership->organization_id)
-            ->where('status', '!=', 'canceled')
             ->when(! $membership->hasCapability('visits.inspect_all'), function ($query) use ($membership): void {
                 if ($membership->hasCapability('visits.execute_any')) {
                     return;

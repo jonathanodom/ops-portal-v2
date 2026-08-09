@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
 use App\Http\Controllers\Field\TodayController;
+use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
 use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\ContactController;
@@ -14,7 +15,9 @@ use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
+use App\Http\Controllers\Office\VisitArchiveController;
 use App\Http\Controllers\Office\VisitController;
+use App\Http\Controllers\Office\VisitExecutionController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -76,17 +79,37 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/closeout-reviews/{closeout}/approve', [CloseoutReviewController::class, 'approve'])->whereNumber('closeout')->name('closeout-reviews.approve');
                 Route::post('/closeout-reviews/{closeout}/return', [CloseoutReviewController::class, 'returnForCorrection'])->whereNumber('closeout')->name('closeout-reviews.return');
             });
+            Route::middleware('capability:closeouts.manual_complete')->group(function (): void {
+                Route::post('/visits/{visit}/manual-closeout/start', [AdminManualCloseoutController::class, 'start'])->whereNumber('visit')->name('visits.manual-closeout.start');
+                Route::post('/visits/{visit}/manual-closeout/draft', [AdminManualCloseoutController::class, 'save'])->whereNumber('visit')->name('visits.manual-closeout.save');
+                Route::post('/visits/{visit}/manual-closeout/complete', [AdminManualCloseoutController::class, 'complete'])->whereNumber('visit')->name('visits.manual-closeout.complete');
+                Route::post('/visits/{visit}/manual-closeout/parts', [AdminManualCloseoutController::class, 'addPart'])->whereNumber('visit')->name('visits.manual-closeout.parts.store');
+                Route::delete('/visits/{visit}/manual-closeout/parts/{part}', [AdminManualCloseoutController::class, 'removePart'])->whereNumber(['visit', 'part'])->name('visits.manual-closeout.parts.remove');
+                Route::post('/visits/{visit}/manual-closeout/media', [AdminManualCloseoutController::class, 'upload'])->whereNumber('visit')->name('visits.manual-closeout.media.store');
+                Route::delete('/visits/{visit}/manual-closeout/media/{media}', [AdminManualCloseoutController::class, 'removeMedia'])->whereNumber(['visit', 'media'])->name('visits.manual-closeout.media.remove');
+                Route::get('/manual-closeout-media/{media}', [AdminManualCloseoutController::class, 'media'])->whereNumber('media')->name('manual-closeout.media.show');
+            });
             Route::middleware('capability:billing_handoffs.view')->group(function (): void {
                 Route::get('/billing-handoffs', [BillingHandoffController::class, 'index'])->name('billing-handoffs.index');
             });
             Route::post('/billing-handoffs/{handoff}/acknowledge', [BillingHandoffController::class, 'acknowledge'])
                 ->whereNumber('handoff')->middleware('capability:billing_handoffs.manage')->name('billing-handoffs.acknowledge');
+            Route::post('/visits/{visit}/execution/transition', [VisitExecutionController::class, 'transition'])->whereNumber('visit')->name('visits.execution.transition');
+            Route::post('/visits/{visit}/execution/timer', [VisitExecutionController::class, 'timer'])->whereNumber('visit')->name('visits.execution.timer');
+            Route::post('/visits/{visit}/execution/time', [VisitExecutionController::class, 'storeTime'])->whereNumber('visit')->name('visits.execution.time.store');
+            Route::put('/visits/{visit}/execution/time/{entry}', [VisitExecutionController::class, 'updateTime'])->whereNumber(['visit', 'entry'])->name('visits.execution.time.update');
             Route::get('/operations/health', [OperationalHealthController::class, 'index'])
                 ->middleware('capability:operations.health.view')->name('operations.health');
             Route::post('/operations/incidents/{incident}/resolve', [OperationalHealthController::class, 'resolve'])
                 ->whereNumber('incident')->middleware('capability:operations.health.manage')->name('operations.resolve');
             Route::post('/operations/incidents/{incident}/reopen', [OperationalHealthController::class, 'reopen'])
                 ->whereNumber('incident')->middleware('capability:operations.health.manage')->name('operations.reopen');
+            Route::middleware('capability:visits.archive.manage')->group(function (): void {
+                Route::get('/admin/archive', [VisitArchiveController::class, 'index'])->name('admin.archive.index');
+                Route::post('/admin/archive/visits/{visit}', [VisitArchiveController::class, 'archive'])->whereNumber('visit')->name('admin.archive.visits.store');
+                Route::post('/admin/archive/visits/{visit}/restore', [VisitArchiveController::class, 'restore'])->whereNumber('visit')->name('admin.archive.visits.restore');
+                Route::delete('/admin/archive/visits/{visit}', [VisitArchiveController::class, 'destroy'])->whereNumber('visit')->name('admin.archive.visits.destroy');
+            });
             Route::middleware('capability:customers.view')->group(function (): void {
                 Route::get('/customers', [CustomerController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [CustomerController::class, 'show'])->whereNumber('customer')->name('customers.show');
