@@ -132,6 +132,8 @@ The beta reset guard requires `APP_ENV=beta`, a database name/path containing `b
 
 See the [Phase 5 beta runbook](docs/PHASE_5_BETA_RUNBOOK.md), [validation record](docs/PHASE_5_VALIDATION.md), and [deferred decision log](docs/PHASE_5_DECISION_LOG.md). Phase 5 remains a local/CI gate and makes no production-readiness or deployment claim.
 
+Phase 6 invoicing architecture, calculation rules, authorization, recovery, and acceptance gates are documented in [Phase 6 Invoicing](docs/PHASE_6_INVOICING.md).
+
 ## Quality commands
 
 ```powershell

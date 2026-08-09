@@ -3,6 +3,7 @@
 namespace App\Support;
 
 use App\Models\BillingHandoff;
+use App\Models\Invoice;
 use App\Models\Organization;
 use App\Models\ServiceTicket;
 use App\Models\Visit;
@@ -13,7 +14,7 @@ class OperationalHealthScan
 
     public function scan(Organization $organization): array
     {
-        $created = ['missing_handoffs' => 0, 'aging_handoffs' => 0, 'stuck_visits' => 0];
+        $created = ['missing_handoffs' => 0, 'aging_handoffs' => 0, 'stuck_visits' => 0, 'failed_invoice_pdfs' => 0];
 
         ServiceTicket::query()->where('organization_id', $organization->id)->where('status', 'completed')
             ->whereDoesntHave('billingHandoff')->each(function (ServiceTicket $ticket) use ($organization, &$created): void {
@@ -45,6 +46,12 @@ class OperationalHealthScan
                     'age_hours' => (int) $visit->updated_at->diffInHours(now()),
                 ]);
                 $created['stuck_visits']++;
+            });
+
+        Invoice::query()->where('organization_id', $organization->id)->where('status', 'issued')->where('pdf_status', 'failed')
+            ->each(function (Invoice $invoice) use ($organization, &$created): void {
+                $this->incidents->record($organization, null, 'storage_failure', 'error', $invoice, ['reason_code' => 'invoice_pdf_generation', 'invoice_id' => $invoice->id, 'ticket_id' => $invoice->service_ticket_id]);
+                $created['failed_invoice_pdfs']++;
             });
 
         return $created;

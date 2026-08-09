@@ -4,11 +4,13 @@ namespace App\Providers;
 
 use App\Models\Contact;
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\Visit;
 use App\Policies\ContactPolicy;
 use App\Policies\CustomerPolicy;
+use App\Policies\InvoicePolicy;
 use App\Policies\ServiceLocationPolicy;
 use App\Policies\ServiceTicketPolicy;
 use App\Policies\VisitPolicy;
@@ -36,6 +38,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn () => Password::min(12)->mixedCase()->numbers());
         Gate::policy(Customer::class, CustomerPolicy::class);
+        Gate::policy(Invoice::class, InvoicePolicy::class);
         Gate::policy(Contact::class, ContactPolicy::class);
         Gate::policy(ServiceLocation::class, ServiceLocationPolicy::class);
         Gate::policy(ServiceTicket::class, ServiceTicketPolicy::class);

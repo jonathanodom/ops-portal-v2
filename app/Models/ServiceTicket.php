@@ -59,6 +59,11 @@ class ServiceTicket extends Model
         return $this->hasOne(BillingHandoff::class);
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
     {
         return $query->where('organization_id', $organizationId);

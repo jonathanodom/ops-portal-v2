@@ -20,6 +20,13 @@ class AccessControlSeeder extends Seeder
         'closeouts.manual_complete' => 'Administratively close and complete eligible visits',
         'billing_handoffs.view' => 'View billing handoff records',
         'billing_handoffs.manage' => 'Acknowledge billing handoff records',
+        'invoices.view' => 'View invoice summaries',
+        'invoices.manage' => 'Create and edit invoice drafts',
+        'invoices.issue' => 'Issue ready invoices',
+        'invoices.present' => 'Present issued invoices to customers',
+        'invoices.discount' => 'Apply invoice discounts',
+        'invoices.void' => 'Void and reissue invoices',
+        'billing.settings.manage' => 'Manage organization billing settings and labor rates',
         'users.manage' => 'Manage staff access',
         'customers.view' => 'View customer and service-location records',
         'customers.manage' => 'Create and update customer and service-location records',
@@ -49,11 +56,11 @@ class AccessControlSeeder extends Seeder
         ],
         'reviewer' => [
             'name' => 'Reviewer',
-            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view', 'service_tickets.view', 'closeouts.inspect'],
+            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view', 'service_tickets.view', 'closeouts.inspect', 'invoices.view'],
         ],
         'billing' => [
             'name' => 'Billing',
-            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'customers.view', 'service_tickets.view'],
+            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'customers.view', 'service_tickets.view'],
         ],
     ];
 

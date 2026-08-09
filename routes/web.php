@@ -6,12 +6,15 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
 use App\Http\Controllers\Field\TodayController;
+use App\Http\Controllers\InvoicePresentationController;
 use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
+use App\Http\Controllers\Office\BillingSettingsController;
 use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\DispatchController;
+use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
@@ -92,8 +95,27 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::middleware('capability:billing_handoffs.view')->group(function (): void {
                 Route::get('/billing-handoffs', [BillingHandoffController::class, 'index'])->name('billing-handoffs.index');
             });
-            Route::post('/billing-handoffs/{handoff}/acknowledge', [BillingHandoffController::class, 'acknowledge'])
-                ->whereNumber('handoff')->middleware('capability:billing_handoffs.manage')->name('billing-handoffs.acknowledge');
+            Route::post('/billing-handoffs/{handoff}/invoice', [BillingHandoffController::class, 'createInvoice'])
+                ->whereNumber('handoff')->middleware('capability:invoices.manage')->name('billing-handoffs.invoice.store');
+            Route::middleware('capability:invoices.view')->group(function (): void {
+                Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->whereNumber('invoice')->name('invoices.show');
+            });
+            Route::middleware('capability:invoices.manage')->group(function (): void {
+                Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->whereNumber('invoice')->name('invoices.update');
+                Route::post('/invoices/{invoice}/lines', [InvoiceController::class, 'storeLine'])->whereNumber('invoice')->name('invoices.lines.store');
+                Route::put('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'updateLine'])->whereNumber(['invoice', 'line'])->name('invoices.lines.update');
+                Route::post('/invoices/{invoice}/proposals/{part}', [InvoiceController::class, 'includeProposal'])->whereNumber(['invoice', 'part'])->name('invoices.proposals.include');
+                Route::post('/invoices/{invoice}/ready', [InvoiceController::class, 'ready'])->whereNumber('invoice')->name('invoices.ready');
+            });
+            Route::post('/invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.issue');
+            Route::post('/invoices/{invoice}/void', [InvoiceController::class, 'void'])->whereNumber('invoice')->middleware('capability:invoices.void')->name('invoices.void');
+            Route::post('/invoices/{invoice}/pdf/retry', [InvoiceController::class, 'retryPdf'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.pdf.retry');
+            Route::middleware('capability:billing.settings.manage')->group(function (): void {
+                Route::get('/billing/settings', [BillingSettingsController::class, 'edit'])->name('billing.settings.edit');
+                Route::put('/billing/settings', [BillingSettingsController::class, 'update'])->name('billing.settings.update');
+                Route::post('/billing/settings/labor-rates', [BillingSettingsController::class, 'storeRate'])->name('billing.settings.rates.store');
+                Route::put('/billing/settings/labor-rates/{rate}', [BillingSettingsController::class, 'updateRate'])->whereNumber('rate')->name('billing.settings.rates.update');
+            });
             Route::post('/visits/{visit}/execution/transition', [VisitExecutionController::class, 'transition'])->whereNumber('visit')->name('visits.execution.transition');
             Route::post('/visits/{visit}/execution/timer', [VisitExecutionController::class, 'timer'])->whereNumber('visit')->name('visits.execution.timer');
             Route::post('/visits/{visit}/execution/time', [VisitExecutionController::class, 'storeTime'])->whereNumber('visit')->name('visits.execution.time.store');
@@ -154,4 +176,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             });
         });
     Route::get('/field-media/{media}', [ExecutionController::class, 'media'])->whereNumber('media')->name('field.media.show');
+    Route::get('/invoices/{invoice}/present', [InvoicePresentationController::class, 'show'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.present');
+    Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'download'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.pdf');
+    Route::post('/invoices/{invoice}/acknowledge', [InvoicePresentationController::class, 'acknowledge'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.acknowledge');
 });

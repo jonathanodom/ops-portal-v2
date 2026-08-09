@@ -1,0 +1,199 @@
+<?php
+
+namespace App\Http\Controllers\Office;
+
+use App\Domain\InvoiceWorkflow;
+use App\Http\Controllers\Controller;
+use App\Jobs\RenderInvoicePdf;
+use App\Models\BillingLaborRate;
+use App\Models\Invoice;
+use App\Models\InvoiceLine;
+use App\Models\VisitPartProposal;
+use App\Support\AuditRecorder;
+use Illuminate\Http\RedirectResponse;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Validation\Rule;
+use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
+
+class InvoiceController extends Controller
+{
+    public function show(Request $request, string $invoice): View
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('view', $invoice);
+        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'lines.laborRate', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf']);
+        if (! $request->attributes->get('membership')->hasCapability('invoices.manage')) {
+            return view('office.invoices.summary', compact('invoice'));
+        }
+        $rates = BillingLaborRate::query()->forOrganization($invoice->organization_id)->where('active', true)->orderByDesc('is_default')->orderBy('name')->get();
+
+        return view('office.invoices.show', compact('invoice', 'rates'));
+    }
+
+    public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $rules = [
+            'payment_terms' => ['required', Rule::in(['due_on_receipt', 'custom'])], 'due_on' => ['nullable', 'date'],
+            'billing_name' => ['required', 'string', 'max:255'], 'billing_legal_name' => ['nullable', 'string', 'max:255'],
+            'billing_contact_name' => ['nullable', 'string', 'max:255'], 'billing_email' => ['nullable', 'email', 'max:255'], 'billing_phone' => ['nullable', 'string', 'max:50'],
+            'billing_address_line_1' => ['nullable', 'string', 'max:255'], 'billing_address_line_2' => ['nullable', 'string', 'max:255'],
+            'billing_city' => ['nullable', 'string', 'max:100'], 'billing_state' => ['nullable', 'string', 'size:2'], 'billing_postal_code' => ['nullable', 'string', 'max:20'],
+            'customer_note' => ['nullable', 'string', 'max:5000'], 'internal_note' => ['nullable', 'string', 'max:5000'],
+            'tax_rate_percent' => ['required', 'numeric', 'min:0', 'max:100', 'regex:/^\d{1,3}(\.\d{1,2})?$/'], 'tax_override_reason' => ['nullable', 'string', 'max:2000'],
+        ];
+        if ($request->attributes->get('membership')->hasCapability('invoices.discount')) {
+            $rules += ['discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_value_input' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'discount_reason' => ['nullable', 'string', 'max:2000']];
+        }
+        $data = $request->validate($rules);
+        $data['tax_rate_basis_points'] = $this->decimalToScaled($data['tax_rate_percent'], 100);
+        unset($data['tax_rate_percent']);
+        if (array_key_exists('discount_type', $data)) {
+            $data['discount_value'] = $data['discount_type'] === 'percent'
+                ? $this->decimalToScaled((string) ($data['discount_value_input'] ?? '0'), 100)
+                : $this->decimalToScaled((string) ($data['discount_value_input'] ?? '0'), 100);
+            unset($data['discount_value_input']);
+        }
+        $workflow->update($invoice, $request->user(), $data);
+
+        return back()->with('status', 'Invoice draft saved.');
+    }
+
+    public function storeLine(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $data = $request->validate($this->lineRules());
+        $workflow->addLine($invoice, $request->user(), $this->lineValues($data));
+
+        return back()->with('status', 'Invoice line added.');
+    }
+
+    public function updateLine(Request $request, string $invoice, string $line, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $line = InvoiceLine::query()->where('organization_id', $invoice->organization_id)->where('invoice_id', $invoice->id)->findOrFail($line);
+        $data = $request->validate($this->lineRules(true));
+        $values = $this->lineValues($data);
+        if (! empty($values['labor_rate_id'])) {
+            $rate = BillingLaborRate::query()->forOrganization($invoice->organization_id)->where('active', true)->findOrFail($values['labor_rate_id']);
+            $values['unit_price_cents'] = $rate->hourly_rate_cents;
+        }
+        if ($line->source_part_proposal_id && $values['billing_treatment'] !== $line->billing_treatment && blank($values['override_reason'])) {
+            return back()->withErrors(['override_reason' => 'A reason is required to change source billing treatment.'])->withInput();
+        }
+        $workflow->updateLine($invoice, $line, $request->user(), $values);
+
+        return back()->with('status', 'Invoice line updated.');
+    }
+
+    public function includeProposal(Request $request, string $invoice, string $part, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $part = VisitPartProposal::query()->where('organization_id', $invoice->organization_id)->findOrFail($part);
+        $data = $request->validate(['override_reason' => ['required', 'string', 'max:2000']]);
+        $workflow->includeProposal($invoice, $part, $request->user(), $data['override_reason']);
+
+        return back()->with('status', 'Proposal added as a billable invoice line. Enter its price before issue.');
+    }
+
+    public function ready(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $workflow->markReady($invoice, $request->user());
+
+        return back()->with('status', 'Invoice is ready for review.');
+    }
+
+    public function issue(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('issue', $invoice);
+        $data = $request->validate(['issue_token' => ['required', 'uuid'], 'confirm_issue' => ['accepted']]);
+        $workflow->issue($invoice, $request->user(), $data['issue_token']);
+
+        return back()->with('status', 'Invoice issued. PDF generation has started.');
+    }
+
+    public function void(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('void', $invoice);
+        $data = $request->validate(['void_reason' => ['required', 'string', 'max:2000'], 'void_token' => ['required', 'uuid'], 'confirm_void' => ['accepted']]);
+        $replacement = $workflow->voidAndReissue($invoice, $request->user(), $data['void_reason'], $data['void_token']);
+
+        return redirect()->route('office.invoices.show', $replacement)->with('status', 'Invoice voided and replacement draft created.');
+    }
+
+    public function download(Request $request, string $invoice): StreamedResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('present', $invoice);
+        abort_unless($invoice->pdf_status === 'ready' && $invoice->pdf_disk && $invoice->pdf_key, 404);
+        abort_unless(Storage::disk($invoice->pdf_disk)->exists($invoice->pdf_key), 404);
+
+        return Storage::disk($invoice->pdf_disk)->download($invoice->pdf_key, $invoice->invoice_number.'.pdf', ['Content-Type' => 'application/pdf']);
+    }
+
+    public function retryPdf(Request $request, string $invoice): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('issue', $invoice);
+        abort_unless($invoice->status === 'issued' && $invoice->pdf_status === 'failed', 422);
+        $invoice->update(['pdf_status' => 'pending', 'pdf_failure_code' => null]);
+        RenderInvoicePdf::dispatch($invoice->id)->afterCommit();
+
+        return back()->with('status', 'PDF generation retry queued.');
+    }
+
+    /** @return array<string, mixed> */
+    private function lineRules(bool $editing = false): array
+    {
+        return [
+            'line_type' => ['required', Rule::in(['labor', 'travel', 'service_charge', 'part', 'equipment', 'other'])],
+            'description' => ['required', 'string', 'max:1000'], 'quantity' => ['required', 'regex:/^\d{1,7}(\.\d{1,3})?$/'],
+            'unit' => ['nullable', 'string', 'max:40'], 'unit_price' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'],
+            'included' => ['nullable', 'boolean'], 'taxable' => ['nullable', 'boolean'],
+            'billing_treatment' => ['nullable', Rule::in(['billable', 'warranty', 'customer_owned', 'no_charge'])],
+            'labor_rate_id' => ['nullable', 'integer'], 'override_reason' => [$editing ? 'required' : 'nullable', 'string', 'max:2000'],
+        ];
+    }
+
+    /** @param array<string, mixed> $data @return array<string, mixed> */
+    private function lineValues(array $data): array
+    {
+        return [
+            'line_type' => $data['line_type'], 'description' => $data['description'],
+            'quantity_millis' => $this->decimalToScaled($data['quantity'], 1000), 'unit' => $data['unit'] ?? null,
+            'unit_price_cents' => $this->decimalToScaled($data['unit_price'], 100), 'included' => (bool) ($data['included'] ?? false),
+            'taxable' => (bool) ($data['taxable'] ?? false), 'billing_treatment' => $data['billing_treatment'] ?? null,
+            'labor_rate_id' => $data['labor_rate_id'] ?? null, 'override_reason' => $data['override_reason'] ?? null,
+        ];
+    }
+
+    private function decimalToScaled(string $value, int $scale): int
+    {
+        $digits = strlen((string) $scale) - 1;
+        [$whole, $decimal] = array_pad(explode('.', $value, 2), 2, '');
+
+        return ((int) $whole * $scale) + (int) str_pad(substr($decimal, 0, $digits), $digits, '0');
+    }
+
+    private function invoice(Request $request, string $id): Invoice
+    {
+        $organization = $request->attributes->get('organization');
+        $invoice = Invoice::query()->forOrganization($organization->id)->find($id);
+        if (! $invoice && Invoice::query()->whereKey($id)->exists()) {
+            app(AuditRecorder::class)->record($organization, $request->user(), 'security.cross_organization_record_denied', $organization, ['record_type' => 'invoice', 'record_id' => (int) $id]);
+        }
+
+        return $invoice ?? abort(404);
+    }
+}
