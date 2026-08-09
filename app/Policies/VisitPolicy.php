@@ -44,6 +44,21 @@ class VisitPolicy
             && $visit->assignments()->where('organization_membership_id', $membership->id)->exists();
     }
 
+    public function archive(User $user, Visit $visit): bool
+    {
+        return $this->hasCapability($user, $visit->organization_id, 'visits.archive.manage');
+    }
+
+    public function restore(User $user, Visit $visit): bool
+    {
+        return $this->archive($user, $visit);
+    }
+
+    public function forceDelete(User $user, Visit $visit): bool
+    {
+        return $this->archive($user, $visit);
+    }
+
     private function membership(User $user, int $organizationId): ?OrganizationMembership
     {
         return OrganizationMembership::query()

@@ -57,4 +57,19 @@ class BrandFoundationTest extends TestCase
         $this->assertStringContainsString(':timezone="$visit->timezone"', $field);
         $this->assertStringContainsString(':timezone="$activeOrganization->timezone"', $office);
     }
+
+    public function test_field_closeout_form_has_clear_semantic_groups_and_customer_friendly_labels(): void
+    {
+        $field = file_get_contents(resource_path('views/field/visits/show.blade.php'));
+
+        foreach (['Visit outcome', 'Work summary', 'Return trip or hold details', 'Customer unavailable', 'Customer acknowledgment', 'No-photo fallback'] as $section) {
+            $this->assertStringContainsString($section, $field);
+        }
+
+        $this->assertStringContainsString('Customer or point-of-contact name', $field);
+        $this->assertStringContainsString('aria-invalid="true"', $field);
+        $this->assertStringContainsString('<x-field-error', $field);
+        $this->assertStringContainsString('Couldn’t obtain acknowledgment?', $field);
+        $this->assertStringNotContainsString('Representative name', $field);
+    }
 }

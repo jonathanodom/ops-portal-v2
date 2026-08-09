@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\AdminManualCloseoutWorkflow;
 use App\Domain\ServiceTicketWorkflow;
 use App\Domain\VisitScheduler;
 use App\Http\Controllers\Controller;
@@ -139,7 +140,7 @@ class ServiceTicketController extends Controller
         return redirect()->route('office.service-tickets.show', $ticket)->with('status', 'Service ticket created.');
     }
 
-    public function show(Request $request, string $serviceTicket): View
+    public function show(Request $request, string $serviceTicket, AdminManualCloseoutWorkflow $manualCloseout): View
     {
         $ticket = $this->ticket($request, $serviceTicket);
         Gate::authorize('view', $ticket);
@@ -165,8 +166,19 @@ class ServiceTicketController extends Controller
             return $membership->hasCapability('visits.execute_assigned')
                 && $visit->assignments->contains('organization_membership_id', $membership->id);
         })->pluck('id')->all();
+        $archivableVisitIds = $membership->hasCapability('visits.archive.manage')
+            ? $ticket->visits->filter(function (Visit $visit) use ($ticket): bool {
+                return in_array($visit->status, ['planned', 'scheduled', 'assigned', 'canceled'], true)
+                    && $visit->timeEntries->whereNull('ended_at')->isEmpty()
+                    && $visit->currentCloseout?->status !== 'submitted'
+                    && ! $ticket->visits->contains('return_of_visit_id', $visit->id);
+            })->pluck('id')->all()
+            : [];
+        $manualCloseoutVisitIds = $membership->hasCapability('closeouts.manual_complete')
+            ? $ticket->visits->filter(fn (Visit $visit): bool => $manualCloseout->canStart($visit))->pluck('id')->all()
+            : [];
 
-        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds'));
+        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds'));
     }
 
     public function edit(Request $request, string $serviceTicket): View

@@ -25,7 +25,7 @@ test.describe('desktop beta', () => {
 
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
         await login(page, 'super_admin');
-        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/operations/health']) {
+        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/operations/health', '/office/admin/archive']) {
             await page.goto(path);
             await expect(page.locator('body')).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
@@ -52,6 +52,21 @@ test.describe('desktop beta', () => {
         await page.keyboard.press('Escape');
         await expect(dialog).toBeHidden();
         await expect(launcher).toBeFocused();
+
+        await page.getByRole('button', { name: 'Start manual closeout' }).click();
+        const manualDialog = page.getByRole('dialog', { name: 'Administrative closeout' });
+        await expect(manualDialog).toBeVisible();
+        const manualDimensions = await manualDialog.evaluate((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
+        expect(manualDimensions.width).toBeGreaterThanOrEqual(0.9 * 1440);
+        expect(manualDimensions.height).toBeLessThanOrEqual(900);
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
+        const manualLauncher = page.getByRole('button', { name: 'Manual closeout' });
+        await manualLauncher.focus();
+        await manualLauncher.click();
+        await expect(manualDialog).toBeVisible();
+        await page.keyboard.press('Escape');
+        await expect(manualLauncher).toBeFocused();
     });
 });
 

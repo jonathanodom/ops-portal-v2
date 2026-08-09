@@ -34,6 +34,9 @@
                 @if ($activeMembership->hasCapability('operations.health.view'))
                     <a href="{{ route('office.operations.health') }}" @if(request()->routeIs('office.operations.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.operations.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Health</a>
                 @endif
+                @if ($activeMembership->hasCapability('visits.archive.manage'))
+                    <a href="{{ route('office.admin.archive.index') }}" @if(request()->routeIs('office.admin.archive.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Admin Archive</a>
+                @endif
             </nav>
             <div class="mt-auto border-t border-slate-200 pt-5">
                 <p class="text-sm font-bold text-slate-900">{{ auth()->user()->name }}</p>
@@ -69,6 +72,7 @@
                     @if($activeMembership->hasCapability('closeouts.inspect'))<a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.closeout-reviews.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Review</a>@endif
                     @if($activeMembership->hasCapability('billing_handoffs.view'))<a href="{{ route('office.billing-handoffs.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.billing-handoffs.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Billing</a>@endif
                     @if($activeMembership->hasCapability('operations.health.view'))<a href="{{ route('office.operations.health') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.operations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Health</a>@endif
+                    @if($activeMembership->hasCapability('visits.archive.manage'))<a href="{{ route('office.admin.archive.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Archive</a>@endif
                 </nav>
             @endif
             <main id="main-content" class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
