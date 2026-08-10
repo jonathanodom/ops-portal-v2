@@ -5,6 +5,9 @@ namespace App\Support;
 use App\Models\BillingHandoff;
 use App\Models\Invoice;
 use App\Models\Organization;
+use App\Models\PaymentAttempt;
+use App\Models\PaymentReceipt;
+use App\Models\PaymentTransaction;
 use App\Models\ServiceTicket;
 use App\Models\Visit;
 
@@ -14,7 +17,7 @@ class OperationalHealthScan
 
     public function scan(Organization $organization): array
     {
-        $created = ['missing_handoffs' => 0, 'aging_handoffs' => 0, 'stuck_visits' => 0, 'failed_invoice_pdfs' => 0];
+        $created = ['missing_handoffs' => 0, 'aging_handoffs' => 0, 'stuck_visits' => 0, 'failed_invoice_pdfs' => 0, 'stuck_payment_attempts' => 0, 'missing_receipts' => 0, 'failed_receipt_pdfs' => 0, 'payment_balance_warnings' => 0];
 
         ServiceTicket::query()->where('organization_id', $organization->id)->where('status', 'completed')
             ->whereDoesntHave('billingHandoff')->each(function (ServiceTicket $ticket) use ($organization, &$created): void {
@@ -53,6 +56,31 @@ class OperationalHealthScan
                 $this->incidents->record($organization, null, 'storage_failure', 'error', $invoice, ['reason_code' => 'invoice_pdf_generation', 'invoice_id' => $invoice->id, 'ticket_id' => $invoice->service_ticket_id]);
                 $created['failed_invoice_pdfs']++;
             });
+
+        PaymentAttempt::query()->where('organization_id', $organization->id)->whereIn('status', ['open', 'processing', 'unknown'])->where('updated_at', '<', now()->subHours(2))
+            ->each(function (PaymentAttempt $attempt) use ($organization, &$created): void {
+                $this->incidents->record($organization, null, 'payment_attempt_stuck', 'warning', $attempt, ['invoice_id' => $attempt->invoice_id, 'attempt_id' => $attempt->id, 'provider' => $attempt->provider, 'status' => $attempt->status, 'age_hours' => (int) $attempt->updated_at->diffInHours(now())]);
+                $created['stuck_payment_attempts']++;
+            });
+
+        PaymentTransaction::query()->where('organization_id', $organization->id)->where('status', 'succeeded')->whereDoesntHave('receipt')
+            ->each(function (PaymentTransaction $transaction) use ($organization, &$created): void {
+                $this->incidents->record($organization, null, 'payment_receipt_missing', 'error', $transaction, ['invoice_id' => $transaction->invoice_id, 'transaction_id' => $transaction->id]);
+                $created['missing_receipts']++;
+            });
+
+        PaymentReceipt::query()->where('organization_id', $organization->id)->where('pdf_status', 'failed')
+            ->each(function (PaymentReceipt $receipt) use ($organization, &$created): void {
+                $this->incidents->record($organization, null, 'payment_receipt_failure', 'error', $receipt, ['invoice_id' => $receipt->invoice_id, 'receipt_id' => $receipt->id, 'reason_code' => 'receipt_pdf_failed']);
+                $created['failed_receipt_pdfs']++;
+            });
+
+        Invoice::query()->where('organization_id', $organization->id)->where('status', 'issued')->each(function (Invoice $invoice) use ($organization, &$created): void {
+            if ($invoice->balanceCents() < 0 || ! in_array($invoice->paymentState(), ['unpaid', 'partially_paid', 'paid', 'partially_refunded', 'refunded'], true)) {
+                $this->incidents->record($organization, null, 'payment_balance_mismatch', 'error', $invoice, ['invoice_id' => $invoice->id, 'status' => $invoice->paymentState()]);
+                $created['payment_balance_warnings']++;
+            }
+        });
 
         return $created;
     }

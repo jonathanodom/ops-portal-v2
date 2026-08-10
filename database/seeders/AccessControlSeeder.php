@@ -28,6 +28,12 @@ class AccessControlSeeder extends Seeder
         'invoices.void' => 'Void and reissue invoices',
         'billing.settings.manage' => 'Manage organization billing settings and labor rates',
         'organization.settings.manage' => 'Manage organization identity, timezone, and branding',
+        'payments.view' => 'View payment status and safe transaction summaries',
+        'payments.collect' => 'Create and reconcile hosted payment checkouts',
+        'payments.record_manual' => 'Record cash and check payments',
+        'payments.manage_links' => 'Expire payment links and manage receipt links',
+        'payments.refund' => 'Refund or reverse successful payments',
+        'payments.settings.manage' => 'Manage encrypted payment provider credentials',
         'users.manage' => 'Manage staff access',
         'customers.view' => 'View customer and service-location records',
         'customers.manage' => 'Create and update customer and service-location records',
@@ -61,7 +67,7 @@ class AccessControlSeeder extends Seeder
         ],
         'billing' => [
             'name' => 'Billing',
-            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'customers.view', 'service_tickets.view'],
+            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'payments.view', 'payments.collect', 'payments.record_manual', 'payments.manage_links', 'customers.view', 'service_tickets.view'],
         ],
     ];
 

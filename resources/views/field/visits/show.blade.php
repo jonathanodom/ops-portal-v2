@@ -32,6 +32,10 @@
     <h1 class="text-2xl font-bold">{{ $visit->serviceTicket->title }}</h1>
     <p class="mt-2 text-sm font-semibold text-slate-600">{{ ucfirst(str_replace('_', ' ', $visit->status)) }} · {{ $visit->scheduledStartLocal()?->format('M j, g:i A T') ?? 'Unscheduled' }}</p>
 
+    @if($activeMembership->hasCapability('invoices.present') && $activeMembership->hasCapability('payments.collect') && ($collectInvoice=$visit->serviceTicket->invoices->first()))
+        <a class="button-primary mt-4 w-full" href="{{ route('invoices.present',$collectInvoice) }}">Open invoice / collect payment</a>
+    @endif
+
     @if($visit->status === 'canceled')
         <div class="mt-4 rounded-lg border border-slate-300 bg-slate-100 p-4" role="status"><p class="font-bold">This visit was canceled.</p><p class="mt-1 text-sm text-slate-700">Execution and closeout are read-only. You may correct your completed time with a reason.</p></div>
     @endif

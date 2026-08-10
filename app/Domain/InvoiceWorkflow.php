@@ -11,6 +11,7 @@ use App\Models\InvoiceAcknowledgment;
 use App\Models\InvoiceLine;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
+use App\Models\PaymentProviderConfiguration;
 use App\Models\User;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
@@ -154,6 +155,9 @@ class InvoiceWorkflow
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
             $this->assertEditable($invoice);
             $invoice->update(Arr::only($values, ['payment_terms', 'due_on', 'billing_name', 'billing_legal_name', 'billing_contact_name', 'billing_email', 'billing_phone', 'billing_address_line_1', 'billing_address_line_2', 'billing_city', 'billing_state', 'billing_postal_code', 'customer_note', 'internal_note', 'discount_type', 'discount_value', 'discount_reason', 'tax_rate_basis_points', 'tax_override_reason']) + ['updated_by_id' => $actor->id]);
+            if (array_key_exists('preferred_payment_provider', $values)) {
+                $invoice->forceFill(['preferred_payment_provider' => $values['preferred_payment_provider']])->save();
+            }
             $this->calculator->recalculate($invoice);
             $this->audit->record($invoice->organization, $actor, 'invoice.updated', $invoice, ['invoice_id' => $invoice->id, 'changed_fields' => array_keys($values)]);
 
@@ -296,13 +300,16 @@ class InvoiceWorkflow
 
         return DB::transaction(function () use ($invoice, $actor, $reason, $token): Invoice {
             $invoice = Invoice::query()->with(['lines', 'closeoutLinks'])->lockForUpdate()->findOrFail($invoice->id);
+            if ($invoice->successfulPaymentsCents() > 0) {
+                throw ValidationException::withMessages(['invoice' => 'An invoice with a successful payment cannot be voided or reissued. Use refund or reversal history.']);
+            }
             if ($invoice->status === 'void') {
                 return Invoice::query()->where('reissue_of_invoice_id', $invoice->id)->latest('generation')->firstOrFail();
             }
             $handoff = BillingHandoff::query()->lockForUpdate()->findOrFail($invoice->billing_handoff_id);
             abort_unless((int) $handoff->current_invoice_id === (int) $invoice->id, 409);
             $invoice->update(['status' => 'void', 'voided_at' => now(), 'voided_by_id' => $actor->id, 'void_reason' => $reason, 'void_token' => $token]);
-            $copy = Arr::except($invoice->getAttributes(), ['id', 'invoice_number', 'status', 'generation', 'reissue_of_invoice_id', 'creation_token', 'issue_token', 'issued_at', 'issued_by_id', 'voided_at', 'voided_by_id', 'void_reason', 'void_token', 'pdf_status', 'pdf_disk', 'pdf_key', 'pdf_sha256', 'pdf_failure_code', 'created_at', 'updated_at']);
+            $copy = Arr::except($invoice->getAttributes(), ['id', 'invoice_number', 'status', 'generation', 'reissue_of_invoice_id', 'creation_token', 'issue_token', 'issued_at', 'issued_by_id', 'voided_at', 'voided_by_id', 'void_reason', 'void_token', 'pdf_status', 'pdf_disk', 'pdf_key', 'pdf_sha256', 'pdf_failure_code', 'electronic_payment_provider', 'payment_provider_locked_at', 'created_at', 'updated_at']);
             $replacement = Invoice::query()->create($copy + [
                 'invoice_number' => $this->numbers->next($invoice->organization), 'status' => 'draft', 'generation' => $invoice->generation + 1,
                 'reissue_of_invoice_id' => $invoice->id, 'creation_token' => $token, 'pdf_status' => 'not_requested', 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id,
@@ -381,6 +388,15 @@ class InvoiceWorkflow
         }
         if ($invoice->discount_type && blank($invoice->discount_reason)) {
             throw ValidationException::withMessages(['discount_reason' => 'A reason is required for a discount.']);
+        }
+        if ($invoice->total_cents > 0) {
+            if (! in_array($invoice->preferred_payment_provider, ['square', 'stripe'], true)) {
+                throw ValidationException::withMessages(['preferred_payment_provider' => 'Choose Square or Stripe before issuing a positive-value invoice.']);
+            }
+            $provider = PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->where('provider', $invoice->preferred_payment_provider)->first();
+            if (! $provider?->isReady()) {
+                throw ValidationException::withMessages(['preferred_payment_provider' => 'The selected payment provider is not ready in Billing Settings.']);
+            }
         }
     }
 

@@ -15,7 +15,7 @@ class BillingHandoffController extends Controller
     {
         $organization = $request->attributes->get('organization');
         $handoffs = BillingHandoff::query()->forOrganization($organization->id)
-            ->with(['serviceTicket.customer', 'serviceTicket.serviceLocation', 'visit', 'closeout', 'handedOffBy', 'currentInvoice'])
+            ->with(['serviceTicket.customer', 'serviceTicket.serviceLocation', 'visit', 'closeout', 'handedOffBy', 'currentInvoice.paymentTransactions'])
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
             ->latest()->paginate(20)->withQueryString();
 

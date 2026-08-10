@@ -5,10 +5,12 @@ namespace App\Http\Controllers\Office;
 use App\Http\Controllers\Controller;
 use App\Models\BillingLaborRate;
 use App\Models\OrganizationBillingSetting;
+use App\Models\PaymentProviderConfiguration;
 use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
@@ -17,11 +19,21 @@ class BillingSettingsController extends Controller
 {
     public function edit(Request $request): View
     {
+        $membership = $request->attributes->get('membership');
+        abort_unless($membership->hasCapability('billing.settings.manage') || $membership->hasCapability('payments.view'), 403);
         $organization = $request->attributes->get('organization');
         $settings = OrganizationBillingSetting::query()->firstOrCreate(['organization_id' => $organization->id], ['default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt']);
         $rates = BillingLaborRate::query()->forOrganization($organization->id)->orderByDesc('is_default')->orderBy('name')->get();
+        $providers = collect(['square', 'stripe'])->mapWithKeys(function (string $provider) use ($organization): array {
+            $configuration = PaymentProviderConfiguration::query()->firstOrCreate(
+                ['organization_id' => $organization->id, 'provider' => $provider],
+                ['public_id' => (string) Str::uuid(), 'environment' => $provider === 'square' ? 'sandbox' : 'test'],
+            );
 
-        return view('office.settings.billing', compact('settings', 'rates', 'organization'));
+            return [$provider => $configuration];
+        });
+
+        return view('office.settings.billing', compact('settings', 'rates', 'organization', 'providers'));
     }
 
     public function update(Request $request, AuditRecorder $audit): RedirectResponse

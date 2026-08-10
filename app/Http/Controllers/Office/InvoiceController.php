@@ -8,6 +8,7 @@ use App\Jobs\RenderInvoicePdf;
 use App\Models\BillingLaborRate;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\PaymentProviderConfiguration;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
@@ -24,13 +25,14 @@ class InvoiceController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
-        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'lines.laborRate', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf']);
+        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
         if (! $request->attributes->get('membership')->hasCapability('invoices.manage')) {
             return view('office.invoices.summary', compact('invoice'));
         }
         $rates = BillingLaborRate::query()->forOrganization($invoice->organization_id)->where('active', true)->orderByDesc('is_default')->orderBy('name')->get();
+        $paymentProviders = PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->whereIn('provider', ['square', 'stripe'])->get()->keyBy('provider');
 
-        return view('office.invoices.show', compact('invoice', 'rates'));
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
@@ -39,6 +41,7 @@ class InvoiceController extends Controller
         Gate::authorize('manage', $invoice);
         $rules = [
             'payment_terms' => ['required', Rule::in(['due_on_receipt', 'custom'])], 'due_on' => ['nullable', 'date'],
+            'preferred_payment_provider' => ['nullable', Rule::in(['square', 'stripe'])],
             'billing_name' => ['required', 'string', 'max:255'], 'billing_legal_name' => ['nullable', 'string', 'max:255'],
             'billing_contact_name' => ['nullable', 'string', 'max:255'], 'billing_email' => ['nullable', 'email', 'max:255'], 'billing_phone' => ['nullable', 'string', 'max:50'],
             'billing_address_line_1' => ['nullable', 'string', 'max:255'], 'billing_address_line_2' => ['nullable', 'string', 'max:255'],
