@@ -224,6 +224,23 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
             ->assertDontSee('Sat, Aug 8');
     }
 
+    public function test_service_ticket_workspace_uses_responsive_operational_conventions(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [$customer, , $location] = $this->customerGraph($organization);
+        $ticket = $this->ticket($organization, $customer, $location);
+
+        $this->actingAs($dispatcher)->get('/office/service-tickets')
+            ->assertOk()
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('aria-label="Service Ticket filters"', false)
+            ->assertSee('data-office-table', false)
+            ->assertSee('data-office-mobile-list', false)
+            ->assertSee($ticket->ticket_number)
+            ->assertSee('Customer and location')
+            ->assertSee('All assignees');
+    }
+
     /** @return array{User, Organization, OrganizationMembership} */
     private function userWithRole(string $roleKey, ?Organization $organization = null): array
     {

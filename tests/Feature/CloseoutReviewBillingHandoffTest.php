@@ -305,6 +305,22 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->actingAs($technician)->get('/office/billing-handoffs')->assertForbidden();
     }
 
+    public function test_review_workspace_uses_responsive_queue_conventions(): void
+    {
+        [$organization, $visit, $closeout] = $this->submittedCloseout();
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+
+        $this->actingAs($reviewer)->get('/office/closeout-reviews')
+            ->assertOk()
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('aria-label="Closeout review filters"', false)
+            ->assertSee('data-office-table', false)
+            ->assertSee('data-office-mobile-list', false)
+            ->assertSee($visit->serviceTicket->ticket_number)
+            ->assertSee('Submitted by')
+            ->assertSee("Review<span class=\"sr-only\"> {$visit->serviceTicket->ticket_number}", false);
+    }
+
     /** @return array{Organization, Visit, Closeout, User} */
     private function submittedCloseout(string $outcome = 'resolved'): array
     {
