@@ -32,7 +32,13 @@ class BetaScenarioSeeder extends Seeder
             throw new \RuntimeException('Set BETA_DEMO_PASSWORD in the untracked .env.beta before seeding.');
         }
 
-        $organization = Organization::query()->create(['name' => 'NewDay Beta Validation', 'slug' => 'beta-validation', 'timezone' => 'America/Chicago', 'active' => true]);
+        $organization = Organization::query()->create([
+            'name' => 'NewDay Beta Validation', 'legal_name' => 'NewDay Beta Validation LLC',
+            'email' => 'billing@newdaytech.test', 'phone' => '555-0100',
+            'address_line_1' => '100 Beta Office Way', 'city' => 'Austin', 'state' => 'TX',
+            'postal_code' => '78701', 'country_code' => 'US', 'slug' => 'beta-validation',
+            'timezone' => 'America/Chicago', 'active' => true,
+        ]);
         $memberships = [];
         foreach (['super_admin' => 'Super Admin', 'dispatcher' => 'Dispatcher', 'technician' => 'Technician', 'reviewer' => 'Reviewer', 'billing' => 'Billing'] as $roleKey => $name) {
             $user = User::query()->create([

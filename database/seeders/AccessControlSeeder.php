@@ -27,6 +27,7 @@ class AccessControlSeeder extends Seeder
         'invoices.discount' => 'Apply invoice discounts',
         'invoices.void' => 'Void and reissue invoices',
         'billing.settings.manage' => 'Manage organization billing settings and labor rates',
+        'organization.settings.manage' => 'Manage organization identity, timezone, and branding',
         'users.manage' => 'Manage staff access',
         'customers.view' => 'View customer and service-location records',
         'customers.manage' => 'Create and update customer and service-location records',

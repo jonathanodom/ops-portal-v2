@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Domain\InvoiceCalculator;
 use App\Domain\InvoiceWorkflow;
+use App\Jobs\DeleteUnusedOrganizationBrandAsset;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\BillingHandoff;
 use App\Models\BillingLaborRate;
@@ -14,6 +15,7 @@ use App\Models\Customer;
 use App\Models\DocumentSequence;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
+use App\Models\OrganizationBrandAsset;
 use App\Models\OrganizationMembership;
 use App\Models\Role;
 use App\Models\ServiceLocation;
@@ -106,11 +108,22 @@ class Phase6InvoicingTest extends TestCase
 
     public function test_issue_is_immutable_and_generates_an_authorized_private_pdf(): void
     {
-        [, $admin, $handoff] = $this->billingScenario(false);
+        [$organization, $admin, $handoff] = $this->billingScenario(false);
         Queue::fake();
         Storage::fake('local');
+        $logoKey = 'organization-branding/test-logo.png';
+        Storage::disk('local')->put($logoKey, file_get_contents(public_path('images/newday-logo.png')));
+        $logo = OrganizationBrandAsset::query()->create([
+            'organization_id' => $organization->id, 'variant' => 'full', 'storage_disk' => 'local',
+            'storage_key' => $logoKey, 'mime_type' => 'image/png', 'byte_size' => Storage::disk('local')->size($logoKey),
+            'width' => 600, 'height' => 200, 'uploaded_by_id' => $admin->id,
+        ]);
+        $organization->update(['full_logo_asset_id' => $logo->id]);
         $workflow = app(InvoiceWorkflow::class);
         $invoice = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $this->assertSame('NewDay Tech', $invoice->seller_name);
+        $this->assertSame('billing@newdaytech.net', $invoice->seller_email);
+        $this->assertSame($logo->id, $invoice->seller_logo_asset_id);
         $workflow->markReady($invoice, $admin);
         $issued = $workflow->issue($invoice, $admin, (string) Str::uuid());
         $this->assertSame('issued', $issued->status);
@@ -119,6 +132,11 @@ class Phase6InvoicingTest extends TestCase
         $issued->refresh();
         $this->assertSame('ready', $issued->pdf_status);
         Storage::disk('local')->assertExists($issued->pdf_key);
+        $organization->update(['name' => 'Changed After Issue', 'full_logo_asset_id' => null]);
+        (new DeleteUnusedOrganizationBrandAsset($logo->id))->handle();
+        $this->assertSame('NewDay Tech', $issued->fresh()->seller_name);
+        $this->assertDatabaseHas('organization_brand_assets', ['id' => $logo->id]);
+        Storage::disk('local')->assertExists($logoKey);
 
         $this->actingAs($admin)->put("/office/invoices/{$issued->id}", [])->assertSessionHasErrors();
         $this->actingAs($admin)->get("/invoices/{$issued->id}/pdf")->assertOk();
@@ -167,7 +185,12 @@ class Phase6InvoicingTest extends TestCase
     /** @return array{Organization, User, BillingHandoff, Visit, Visit} */
     private function billingScenario(bool $withPart = true): array
     {
-        $organization = Organization::factory()->create(['timezone' => 'America/Chicago']);
+        $organization = Organization::factory()->create([
+            'name' => 'NewDay Tech', 'legal_name' => 'NewDay Tech LLC',
+            'email' => 'billing@newdaytech.net', 'phone' => '555-0100',
+            'address_line_1' => '100 Service Way', 'city' => 'Dallas',
+            'state' => 'TX', 'postal_code' => '75001', 'timezone' => 'America/Chicago',
+        ]);
         [$admin] = $this->userWithRole('super_admin', $organization);
         $customer = Customer::factory()->create(['organization_id' => $organization->id, 'display_name' => 'Invoice Customer', 'legal_name' => 'Invoice Customer LLC', 'email' => 'billing@example.test']);
         $location = ServiceLocation::factory()->create(['organization_id' => $organization->id, 'customer_id' => $customer->id, 'name' => 'Main Site', 'timezone' => 'America/Chicago']);

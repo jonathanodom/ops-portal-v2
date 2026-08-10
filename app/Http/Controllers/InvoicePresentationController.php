@@ -8,17 +8,35 @@ use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InvoicePresentationController extends Controller
 {
     public function show(Request $request, string $invoice): View
     {
-        $invoice = $this->invoice($request, $invoice)->load(['serviceTicket', 'serviceLocation', 'lines', 'acknowledgments']);
+        $invoice = $this->invoice($request, $invoice)->load(['serviceTicket', 'serviceLocation', 'lines', 'acknowledgments', 'sellerLogoAsset']);
         Gate::authorize('present', $invoice);
         abort_unless($invoice->status === 'issued', 404);
 
         return view('invoices.present', compact('invoice'));
+    }
+
+    public function brand(Request $request, string $invoice): StreamedResponse
+    {
+        $invoice = $this->invoice($request, $invoice)->load('sellerLogoAsset');
+        Gate::authorize('present', $invoice);
+        abort_unless($invoice->status === 'issued' && $invoice->sellerLogoAsset, 404);
+
+        $asset = $invoice->sellerLogoAsset;
+        abort_unless(Storage::disk($asset->storage_disk)->exists($asset->storage_key), 404);
+
+        return Storage::disk($asset->storage_disk)->response($asset->storage_key, null, [
+            'Content-Type' => $asset->mime_type,
+            'Cache-Control' => 'private, max-age=3600',
+            'X-Content-Type-Options' => 'nosniff',
+        ]);
     }
 
     public function acknowledge(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse

@@ -18,7 +18,7 @@ class ResolveActiveOrganization
     public function handle(Request $request, Closure $next): Response
     {
         $membership = OrganizationMembership::query()
-            ->with('organization')
+            ->with(['organization.currentFullLogo', 'organization.currentMarkLogo'])
             ->where('user_id', $request->user()->id)
             ->where('status', 'active')
             ->whereHas('organization', fn ($query) => $query->where('active', true))

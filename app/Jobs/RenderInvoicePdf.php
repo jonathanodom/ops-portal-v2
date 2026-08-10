@@ -20,7 +20,7 @@ class RenderInvoicePdf implements ShouldQueue
 
     public function handle(IncidentRecorder $incidents): void
     {
-        $invoice = Invoice::query()->with(['organization', 'serviceTicket', 'lines'])->findOrFail($this->invoiceId);
+        $invoice = Invoice::query()->with(['organization', 'serviceTicket', 'lines', 'sellerLogoAsset'])->findOrFail($this->invoiceId);
         if ($invoice->status !== 'issued' || ($invoice->pdf_status === 'ready' && $invoice->pdf_key)) {
             return;
         }
@@ -28,7 +28,8 @@ class RenderInvoicePdf implements ShouldQueue
             $options = new Options;
             $options->set('isRemoteEnabled', false);
             $dompdf = new Dompdf($options);
-            $dompdf->loadHtml(view('invoices.pdf', compact('invoice'))->render());
+            $logoDataUri = $this->logoDataUri($invoice);
+            $dompdf->loadHtml(view('invoices.pdf', compact('invoice', 'logoDataUri'))->render());
             $dompdf->setPaper('letter');
             $dompdf->render();
             $contents = $dompdf->output();
@@ -43,5 +44,21 @@ class RenderInvoicePdf implements ShouldQueue
             $incidents->record($invoice->organization, null, 'storage_failure', 'error', $invoice, ['reason_code' => 'invoice_pdf_generation', 'invoice_id' => $invoice->id]);
             throw $exception;
         }
+    }
+
+    private function logoDataUri(Invoice $invoice): string
+    {
+        if ($invoice->sellerLogoAsset) {
+            $contents = Storage::disk($invoice->sellerLogoAsset->storage_disk)->get($invoice->sellerLogoAsset->storage_key);
+
+            return 'data:'.$invoice->sellerLogoAsset->mime_type.';base64,'.base64_encode($contents);
+        }
+
+        $contents = file_get_contents(public_path('images/newday-logo.png'));
+        if ($contents === false) {
+            throw new \RuntimeException('Static invoice logo is unavailable.');
+        }
+
+        return 'data:image/png;base64,'.base64_encode($contents);
     }
 }

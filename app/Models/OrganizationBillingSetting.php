@@ -13,10 +13,4 @@ class OrganizationBillingSetting extends Model
     {
         return $this->belongsTo(Organization::class);
     }
-
-    public function isComplete(): bool
-    {
-        return collect(['seller_name', 'seller_email', 'seller_phone', 'seller_address_line_1', 'seller_city', 'seller_state', 'seller_postal_code'])
-            ->every(fn (string $field): bool => filled($this->{$field}));
-    }
 }

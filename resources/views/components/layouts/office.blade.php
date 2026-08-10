@@ -13,7 +13,7 @@
     </div>
     <div class="min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
         <aside class="hidden border-r border-slate-200 bg-white p-5 lg:flex lg:flex-col">
-            <img src="{{ asset('images/newday-logo.png') }}" alt="NewDay Tech LLC" class="w-48">
+            <x-organization-logo variant="full" class="max-h-20 w-48 object-contain object-left" />
             <div class="mt-9 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Office workspace</div>
             <nav class="mt-3" aria-label="Office">
                 <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home')) aria-current="page" @endif class="flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.home') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Overview</a>
@@ -37,6 +37,9 @@
                 @if ($activeMembership->hasCapability('visits.archive.manage'))
                     <a href="{{ route('office.admin.archive.index') }}" @if(request()->routeIs('office.admin.archive.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Admin Archive</a>
                 @endif
+                @if ($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage'))
+                    <a href="{{ route('office.settings.index') }}" @if(request()->routeIs('office.settings.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.settings.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Settings</a>
+                @endif
             </nav>
             <div class="mt-auto border-t border-slate-200 pt-5">
                 <p class="text-sm font-bold text-slate-900">{{ auth()->user()->name }}</p>
@@ -52,7 +55,7 @@
             <header class="border-b border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
                 <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
                     <div class="flex items-center gap-3">
-                        <img src="{{ asset('images/newday-logo.png') }}" alt="" class="w-32 lg:hidden">
+                        <x-organization-logo variant="mark" class="h-10 w-10 object-contain lg:hidden" />
                         <div>
                             <p class="text-xs font-bold uppercase tracking-[0.14em] text-brand-blue">Office</p>
                             <p class="text-sm font-semibold text-slate-600">{{ $activeOrganization->name }}</p>
@@ -63,18 +66,19 @@
                     @endif
                 </div>
             </header>
-            @if ($activeMembership->hasCapability('customers.view'))
-                <nav class="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">
+            <nav class="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">
                     <a href="{{ route('office.home') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.home') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Overview</a>
+                    @if ($activeMembership->hasCapability('customers.view'))
                     <a href="{{ route('office.customers.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.customers.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Customers</a>
                     <a href="{{ route('office.locations.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.locations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Locations</a>
+                    @endif
                     @if($activeMembership->hasCapability('service_tickets.view'))<a href="{{ route('office.service-tickets.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Tickets</a><a href="{{ route('office.dispatch.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.dispatch.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Dispatch</a>@endif
                     @if($activeMembership->hasCapability('closeouts.inspect'))<a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.closeout-reviews.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Review</a>@endif
                     @if($activeMembership->hasCapability('billing_handoffs.view'))<a href="{{ route('office.billing-handoffs.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.billing-handoffs.*') || request()->routeIs('office.invoices.*') || request()->routeIs('office.billing.settings.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Billing</a>@endif
                     @if($activeMembership->hasCapability('operations.health.view'))<a href="{{ route('office.operations.health') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.operations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Health</a>@endif
                     @if($activeMembership->hasCapability('visits.archive.manage'))<a href="{{ route('office.admin.archive.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Archive</a>@endif
-                </nav>
-            @endif
+                    @if($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage'))<a href="{{ route('office.settings.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.settings.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Settings</a>@endif
+            </nav>
             <main id="main-content" class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
                 {{ $slot }}
             </main>

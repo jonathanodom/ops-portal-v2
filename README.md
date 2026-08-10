@@ -134,6 +134,8 @@ See the [Phase 5 beta runbook](docs/PHASE_5_BETA_RUNBOOK.md), [validation record
 
 Phase 6 invoicing architecture, calculation rules, authorization, recovery, and acceptance gates are documented in [Phase 6 Invoicing](docs/PHASE_6_INVOICING.md).
 
+Organization identity, timezone, private branding, Billing defaults, and Invoice defaults are managed through the route-backed Office Settings area. See [Master Organization Settings](docs/ORGANIZATION_SETTINGS.md) for canonical-data rules, authorization, storage retention, preservation evidence, and rollback guidance.
+
 ## Quality commands
 
 ```powershell
