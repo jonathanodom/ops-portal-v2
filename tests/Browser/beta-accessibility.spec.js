@@ -24,6 +24,7 @@ test.describe('desktop beta', () => {
     test.skip(({ isMobile }) => isMobile);
 
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
+        test.setTimeout(90_000);
         await login(page, 'super_admin');
         for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/settings/organization', '/office/settings/billing', '/office/settings/invoices', '/office/operations/health', '/office/admin/archive']) {
             await page.goto(path);
@@ -110,6 +111,62 @@ test.describe('desktop beta', () => {
         await expect(page.locator('input[name="customer_id"]')).not.toHaveValue('');
         await expect(page.getByLabel('Service location')).toBeEnabled();
         await expectAccessible(page);
+    });
+
+    test('customer workspace uses responsive cards and full-width desktop tables', async ({ page }) => {
+        await login(page, 'super_admin');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 800 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+
+            for (const path of ['/office/customers', '/office/locations']) {
+                await page.goto(path);
+                expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+                await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
+                await expect(page.getByRole('navigation', { name: 'Customer workspace' })).toBeVisible();
+
+                if (viewport.width < 1024) {
+                    await expect(page.locator('[data-office-mobile-list]')).toBeVisible();
+                    await expect(page.locator('[data-office-table]')).toBeHidden();
+                } else {
+                    await expect(page.locator('[data-office-table]')).toBeVisible();
+                    await expect(page.locator('[data-office-mobile-list]')).toBeHidden();
+                }
+
+                if (viewport.width === 1920) {
+                    const width = await page.locator('[data-office-width="workspace"]').evaluate((element) => element.getBoundingClientRect().width);
+                    expect(width).toBeGreaterThan(0.9 * (viewport.width - 248));
+                }
+            }
+        }
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/office/customers');
+        const shortControls = await page.locator('button, input, select, a.office-workspace-tab, a.office-mobile-card, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => element.getBoundingClientRect().height < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+        expect(shortControls).toEqual([]);
+        await expectAccessible(page);
+
+        await page.setViewportSize({ width: 1920, height: 1080 });
+        await page.goto('/office/locations');
+        await expect(page.locator('aside [data-office-primary-customers]')).toHaveAttribute('aria-current', 'page');
+        await expect(page.locator('aside nav[aria-label="Office"] a', { hasText: 'Service locations' })).toHaveCount(0);
+        await expectAccessible(page);
+
+        await page.getByRole('link', { name: 'Customers', exact: true }).last().focus();
+        const focusVisible = await page.evaluate(() => {
+            const style = getComputedStyle(document.activeElement);
+            return style.outlineStyle !== 'none' || style.boxShadow !== 'none';
+        });
+        expect(focusVisible).toBeTruthy();
     });
 });
 

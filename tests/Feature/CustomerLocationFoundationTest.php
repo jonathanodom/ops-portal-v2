@@ -137,6 +137,43 @@ class CustomerLocationFoundationTest extends TestCase
         }
     }
 
+    public function test_customer_workspace_uses_wide_indexes_and_shared_navigation(): void
+    {
+        [$manager, $organization] = $this->userWithRole('dispatcher');
+        [$customer, , $location] = $this->customerGraph($organization);
+
+        $customers = $this->actingAs($manager)->get('/office/customers?search=Acme&status=active&type=business');
+        $customers->assertOk()
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('data-office-header-width="workspace"', false)
+            ->assertSee('aria-label="Customer workspace"', false)
+            ->assertSee('aria-current="page"', false)
+            ->assertSee('data-office-table', false)
+            ->assertSee('data-office-mobile-list', false)
+            ->assertSee($customer->display_name)
+            ->assertSee('Clear');
+
+        $locations = $this->actingAs($manager)->get('/office/locations?search=Jacksboro&status=active');
+        $locations->assertOk()
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('data-office-header-width="workspace"', false)
+            ->assertSee('data-office-primary-customers', false)
+            ->assertSee('aria-current="page"', false)
+            ->assertSee('aria-label="Customer workspace"', false)
+            ->assertSee($location->name)
+            ->assertSee('Clear')
+            ->assertDontSee('>Service Locations</a>', false);
+    }
+
+    public function test_read_only_customer_workspace_does_not_show_create_action(): void
+    {
+        [$reviewer] = $this->userWithRole('reviewer');
+
+        $this->actingAs($reviewer)->get('/office/customers')
+            ->assertOk()
+            ->assertDontSee('Add customer');
+    }
+
     public function test_field_directory_is_active_only_and_excludes_private_office_content(): void
     {
         [$user, $organization] = $this->userWithRole('technician');

@@ -85,6 +85,70 @@
     .button-action {
         @apply inline-flex min-h-14 items-center justify-center rounded-lg bg-brand-orange px-6 text-base font-bold text-slate-950 transition-colors hover:bg-orange-400;
     }
+
+    .office-page-header {
+        @apply flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between;
+    }
+
+    .office-workspace-tabs {
+        @apply mt-5 flex min-h-11 gap-1 overflow-x-auto border-b border-slate-300;
+    }
+
+    .office-workspace-tab {
+        @apply inline-flex min-h-11 shrink-0 items-center border-b-3 border-transparent px-4 text-sm font-bold text-slate-600 hover:border-slate-300 hover:text-slate-950;
+    }
+
+    .office-workspace-tab-active {
+        @apply border-brand-blue text-brand-blue-dark;
+    }
+
+    .office-filter-toolbar {
+        @apply mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:items-end;
+    }
+
+    .office-table-wrap {
+        @apply mt-5 hidden overflow-hidden rounded-lg border border-slate-200 bg-white lg:block;
+    }
+
+    .office-data-table {
+        @apply w-full border-collapse text-left;
+    }
+
+    .office-data-table thead {
+        @apply bg-slate-50;
+    }
+
+    .office-data-table th {
+        @apply border-b border-slate-200 px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-slate-600;
+    }
+
+    .office-data-table td {
+        @apply border-b border-slate-200 px-4 py-3 align-middle text-sm text-slate-700;
+    }
+
+    .office-data-table tbody tr:last-child td {
+        @apply border-b-0;
+    }
+
+    .office-data-table tbody tr {
+        @apply transition-colors hover:bg-blue-50/45 focus-within:bg-blue-50/60;
+    }
+
+    .office-mobile-list {
+        @apply mt-5 space-y-3 lg:hidden;
+    }
+
+    .office-mobile-card {
+        @apply block min-h-11 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50;
+    }
+
+    .office-mobile-primary-nav {
+        scrollbar-width: none;
+    }
+
+    .office-mobile-primary-nav::-webkit-scrollbar {
+        display: none;
+    }
 }
 
 /* Unlayered accessibility overrides intentionally outrank generated utilities.
