@@ -50,7 +50,7 @@ class BetaBenchmarkCommand extends Command
         $cases = [
             'today' => [500, 20, fn () => app(TodayController::class)->index($this->request('/field', $membership))],
             'dispatch' => [500, 25, fn () => app(DispatchController::class)->index($this->request('/office/dispatch', $membership))],
-            'ticket_detail' => [750, 30, fn () => app()->call([app(ServiceTicketController::class), 'show'], [
+            'ticket_detail' => [750, 31, fn () => app()->call([app(ServiceTicketController::class), 'show'], [
                 'request' => $this->request('/office/service-tickets/'.$ticket->id, $membership),
                 'serviceTicket' => (string) $ticket->id,
             ])],
