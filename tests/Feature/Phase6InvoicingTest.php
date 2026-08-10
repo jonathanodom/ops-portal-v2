@@ -185,6 +185,29 @@ class Phase6InvoicingTest extends TestCase
         $this->assertDatabaseHas('audit_events', ['organization_id' => $outsider->memberships()->firstOrFail()->organization_id, 'event_type' => 'security.cross_organization_record_denied']);
     }
 
+    public function test_billing_queue_and_invoice_use_approved_workspace_conventions(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+
+        $this->actingAs($admin)->get('/office/billing-handoffs')
+            ->assertOk()
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('aria-label="Billing queue filters"', false)
+            ->assertSee('data-office-table', false)
+            ->assertSee('data-office-mobile-list', false)
+            ->assertSee($invoice->invoice_number)
+            ->assertSee('Payment');
+
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertSee('data-office-width="detail"', false)
+            ->assertSee('aria-label="On this page"', false)
+            ->assertSee('href="#approved-work"', false)
+            ->assertSee('href="#invoice-lines"', false)
+            ->assertSee('data-office-detail-grid', false);
+    }
+
     /** @return array{Organization, User, BillingHandoff, Visit, Visit} */
     private function billingScenario(bool $withPart = true): array
     {

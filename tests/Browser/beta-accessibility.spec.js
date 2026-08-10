@@ -227,6 +227,62 @@ test.describe('desktop beta', () => {
         });
         expect(focusVisible).toBeTruthy();
     });
+
+    test('operational workspaces share responsive queues and structured invoice detail', async ({ page }) => {
+        test.setTimeout(120_000);
+        await login(page, 'super_admin');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 800 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+
+            for (const path of ['/office/service-tickets', '/office/closeout-reviews', '/office/billing-handoffs']) {
+                await page.goto(path);
+                await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
+                const overflow = await page.evaluate(() => ({ scrollWidth: document.body.scrollWidth, viewportWidth: innerWidth }));
+                expect(overflow.scrollWidth, `${path} overflows at ${viewport.width}px: ${overflow.scrollWidth}px`).toBeLessThanOrEqual(overflow.viewportWidth);
+
+                if (viewport.width < 1024) {
+                    await expect(page.locator('[data-office-mobile-list]')).toBeVisible();
+                    await expect(page.locator('[data-office-table]')).toBeHidden();
+                } else {
+                    await expect(page.locator('[data-office-table]')).toBeVisible();
+                    await expect(page.locator('[data-office-mobile-list]')).toBeHidden();
+                }
+
+                if (viewport.width === 1920) {
+                    const width = await page.locator('[data-office-width="workspace"]').evaluate((element) => element.getBoundingClientRect().width);
+                    expect(width).toBeGreaterThan(0.9 * (viewport.width - 248));
+                }
+            }
+
+            await page.goto('/office/invoices/1');
+            await expect(page.locator('[data-office-width="detail"]')).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            const columns = await page.locator('[data-office-detail-grid]').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
+            expect(columns).toBe(viewport.width >= 1280 ? 2 : 1);
+        }
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/office/service-tickets');
+        const shortControls = await page.locator('button, input, select, a.office-mobile-card, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => element.getBoundingClientRect().height < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+        expect(shortControls).toEqual([]);
+        await expectAccessible(page);
+
+        await page.goto('/office/invoices/1');
+        const invoiceNav = page.getByRole('navigation', { name: 'On this page' });
+        await expect(invoiceNav.getByRole('link', { name: 'Approved work' })).toHaveAttribute('href', '#approved-work');
+        await expect(invoiceNav.getByRole('link', { name: 'Invoice lines' })).toHaveAttribute('href', '#invoice-lines');
+        await expect(invoiceNav.getByRole('link', { name: 'Payments' })).toHaveAttribute('href', '#payments');
+    });
 });
 
 test.describe('mobile beta', () => {
