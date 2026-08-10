@@ -88,6 +88,28 @@ test.describe('desktop beta', () => {
         await expect(manualDialog).toBeVisible();
         await page.keyboard.press('Escape');
         await expect(manualLauncher).toBeFocused();
+
+        await page.goto('/office/service-tickets/create');
+        await page.getByLabel('Ticket title').fill('Preserved ticket draft');
+        const customerSearch = page.getByRole('combobox', { name: 'Customer' });
+        await customerSearch.fill(`Browser Quick Add ${Date.now()}`);
+        const quickAdd = page.getByRole('button', { name: 'Add customer and location' });
+        await expect(quickAdd).toBeVisible();
+        await quickAdd.click();
+        const quickDialog = page.getByRole('dialog', { name: 'Add customer and location' });
+        await expect(quickDialog).toBeVisible();
+        const quickDimensions = await quickDialog.evaluate((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
+        expect(quickDimensions.width).toBeGreaterThanOrEqual(0.9 * 1440);
+        expect(quickDimensions.height).toBeLessThanOrEqual(900);
+        await quickDialog.getByLabel('Address line 1').fill('100 Browser Way');
+        await quickDialog.getByLabel('City').fill('Jacksboro');
+        await quickDialog.getByLabel('ZIP code').fill('76458');
+        await quickDialog.getByRole('button', { name: 'Save and select customer' }).click();
+        await expect(quickDialog).toBeHidden();
+        await expect(page.getByLabel('Ticket title')).toHaveValue('Preserved ticket draft');
+        await expect(page.locator('input[name="customer_id"]')).not.toHaveValue('');
+        await expect(page.getByLabel('Service location')).toBeEnabled();
+        await expectAccessible(page);
     });
 });
 
@@ -141,5 +163,30 @@ test.describe('mobile beta', () => {
             .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
             .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
         expect(shortControls).toEqual([]);
+    });
+
+    test('quick customer dialog fills the phone viewport and protects unsaved work', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office/service-tickets/create');
+        await page.getByRole('combobox', { name: 'Customer' }).fill(`Missing Mobile Customer ${Date.now()}`);
+        const launcher = page.getByRole('button', { name: 'Add customer and location' });
+        await expect(launcher).toBeVisible();
+        await launcher.click();
+        const dialog = page.getByRole('dialog', { name: 'Add customer and location' });
+        await expect(dialog).toBeVisible();
+        const dimensions = await dialog.evaluate((element) => ({
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+            viewportWidth: innerWidth,
+            viewportHeight: innerHeight,
+        }));
+        expect(dimensions.width).toBe(dimensions.viewportWidth);
+        expect(dimensions.height).toBe(dimensions.viewportHeight);
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await expectAccessible(page);
+        page.once('dialog', (confirmation) => confirmation.accept());
+        await dialog.getByRole('button', { name: 'Cancel' }).click();
+        await expect(dialog).toBeHidden();
+        await expect(launcher).toBeFocused();
     });
 });

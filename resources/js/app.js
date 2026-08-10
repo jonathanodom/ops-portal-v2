@@ -203,3 +203,246 @@ document.querySelectorAll('[data-copy-target]').forEach((button) => button.addEv
     await navigator.clipboard.writeText(input.value);
     button.textContent = 'Copied';
 }));
+
+const customerPicker = document.querySelector('[data-ticket-customer-picker]');
+if (customerPicker) {
+    const searchInput = customerPicker.querySelector('#customer_search');
+    const customerId = customerPicker.querySelector('#customer_id');
+    const locationSelect = customerPicker.querySelector('#service_location_id');
+    const contactSelect = customerPicker.querySelector('#contact_id');
+    const results = customerPicker.querySelector('[data-customer-search-results]');
+    const status = customerPicker.querySelector('[data-customer-search-status]');
+    const empty = customerPicker.querySelector('[data-customer-empty]');
+    const retry = customerPicker.querySelector('[data-customer-search-retry]');
+    let resultCustomers = [];
+    let activeResult = -1;
+    let searchTimer;
+    let searchRequest;
+
+    const closeResults = () => {
+        results.hidden = true;
+        results.classList.add('hidden');
+        searchInput.setAttribute('aria-expanded', 'false');
+        searchInput.removeAttribute('aria-activedescendant');
+        activeResult = -1;
+    };
+
+    const setOptions = (select, items, label, selectedId = null) => {
+        select.replaceChildren(new Option(label, ''));
+        items.forEach((item) => {
+            const option = new Option(item.label, String(item.id), false, String(item.id) === String(selectedId ?? ''));
+            Object.entries(item.data ?? {}).forEach(([key, value]) => option.dataset[key] = value ?? '');
+            select.add(option);
+        });
+        select.disabled = false;
+    };
+
+    const selectCustomer = (customer) => {
+        customerId.value = customer.id;
+        searchInput.value = customer.display_name;
+        const primaryLocation = customer.locations.find((location) => location.is_primary) ?? customer.locations[0];
+        setOptions(locationSelect, customer.locations.map((location) => ({
+            id: location.id,
+            label: `${location.name} — ${location.address}`,
+            data: { primaryContact: location.primary_contact_id },
+        })), 'Select location', primaryLocation?.id);
+        const defaultContactId = primaryLocation?.primary_contact_id
+            ?? customer.contacts.find((contact) => contact.is_preferred)?.id;
+        setOptions(contactSelect, customer.contacts.map((contact) => ({
+            id: contact.id,
+            label: contact.name,
+            data: { preferred: contact.is_preferred ? '1' : '0' },
+        })), 'Use location/customer default', defaultContactId);
+        status.textContent = `${customer.display_name} selected.`;
+        empty?.classList.add('hidden');
+        retry?.classList.add('hidden');
+        closeResults();
+    };
+
+    const updateActiveResult = (index) => {
+        const options = [...results.querySelectorAll('[role="option"]')];
+        if (!options.length) return;
+        activeResult = (index + options.length) % options.length;
+        options.forEach((option, optionIndex) => option.setAttribute('aria-selected', optionIndex === activeResult ? 'true' : 'false'));
+        options[activeResult].scrollIntoView({ block: 'nearest' });
+        searchInput.setAttribute('aria-activedescendant', options[activeResult].id);
+    };
+
+    const renderResults = (customers) => {
+        results.replaceChildren();
+        resultCustomers = customers;
+        customers.forEach((customer, index) => {
+            const option = document.createElement('button');
+            option.type = 'button';
+            option.id = `customer-search-option-${customer.id}`;
+            option.className = 'block min-h-11 w-full rounded-md px-3 py-2 text-left hover:bg-blue-50 focus:bg-blue-50 focus:outline-none focus:ring-2 focus:ring-brand-blue';
+            option.setAttribute('role', 'option');
+            option.setAttribute('aria-selected', 'false');
+            const name = document.createElement('span');
+            name.className = 'block font-bold text-slate-950';
+            name.textContent = customer.display_name;
+            const detail = document.createElement('span');
+            detail.className = 'block text-sm text-slate-600';
+            detail.textContent = [customer.secondary, `${customer.locations.length} active location${customer.locations.length === 1 ? '' : 's'}`].filter(Boolean).join(' · ');
+            option.append(name, detail);
+            option.addEventListener('click', () => selectCustomer(resultCustomers[index]));
+            results.append(option);
+        });
+        results.hidden = customers.length === 0;
+        results.classList.toggle('hidden', customers.length === 0);
+        searchInput.setAttribute('aria-expanded', customers.length ? 'true' : 'false');
+        empty?.classList.toggle('hidden', customers.length !== 0);
+    };
+
+    const search = async () => {
+        const term = searchInput.value.trim();
+        retry?.classList.add('hidden');
+        if (term.length < 2) {
+            status.textContent = term ? 'Enter at least two characters.' : '';
+            empty?.classList.add('hidden');
+            closeResults();
+            return;
+        }
+        if (!navigator.onLine) {
+            status.textContent = 'Offline. Reconnect, then retry the customer search.';
+            retry?.classList.remove('hidden');
+            closeResults();
+            return;
+        }
+        searchRequest?.abort();
+        searchRequest = new AbortController();
+        status.textContent = 'Searching customers…';
+        try {
+            const url = new URL(customerPicker.dataset.searchUrl, window.location.origin);
+            url.searchParams.set('q', term);
+            const response = await fetch(url, { headers: { Accept: 'application/json' }, signal: searchRequest.signal });
+            if (!response.ok) throw new Error('search-failed');
+            const body = await response.json();
+            renderResults(body.customers ?? []);
+            status.textContent = body.customers?.length
+                ? `${body.customers.length} matching customer${body.customers.length === 1 ? '' : 's'} found.`
+                : 'No matching active customer was found.';
+        } catch (error) {
+            if (error.name === 'AbortError') return;
+            status.textContent = 'Customer search failed. Explicitly retry when ready.';
+            retry?.classList.remove('hidden');
+            closeResults();
+        }
+    };
+
+    searchInput.addEventListener('input', () => {
+        customerId.value = '';
+        locationSelect.replaceChildren(new Option('Select location', ''));
+        locationSelect.disabled = true;
+        contactSelect.replaceChildren(new Option('Use location/customer default', ''));
+        contactSelect.disabled = true;
+        clearTimeout(searchTimer);
+        searchTimer = setTimeout(search, 250);
+    });
+    searchInput.addEventListener('keydown', (event) => {
+        if (event.key === 'ArrowDown') {
+            event.preventDefault();
+            updateActiveResult(activeResult + 1);
+        } else if (event.key === 'ArrowUp') {
+            event.preventDefault();
+            updateActiveResult(activeResult - 1);
+        } else if (event.key === 'Enter' && activeResult >= 0) {
+            event.preventDefault();
+            selectCustomer(resultCustomers[activeResult]);
+        } else if (event.key === 'Escape') {
+            closeResults();
+        }
+    });
+    retry?.addEventListener('click', search);
+    document.addEventListener('click', (event) => {
+        if (!customerPicker.contains(event.target)) closeResults();
+    });
+    locationSelect.addEventListener('change', () => {
+        const primaryContact = locationSelect.selectedOptions[0]?.dataset.primaryContact;
+        if (primaryContact) contactSelect.value = primaryContact;
+    });
+
+    const dialog = document.querySelector('[data-quick-customer-dialog]');
+    const form = dialog?.querySelector('[data-quick-customer-form]');
+    const modalStatus = dialog?.querySelector('[data-quick-customer-status]');
+    const launcher = customerPicker.querySelector('[data-quick-customer-open]');
+    let modalDirty = false;
+
+    const clearModalErrors = () => {
+        dialog.querySelectorAll('[data-quick-error-for]').forEach((element) => {
+            element.textContent = '';
+            element.classList.add('hidden');
+        });
+        form.querySelectorAll('[aria-invalid="true"]').forEach((field) => field.removeAttribute('aria-invalid'));
+    };
+    const requestClose = () => {
+        if (modalDirty && !window.confirm('Discard the unsaved customer and location?')) return;
+        dialog.close();
+        launcher?.focus();
+    };
+
+    launcher?.addEventListener('click', () => {
+        form.querySelector('[name="display_name"]').value = searchInput.value.trim();
+        modalDirty = Boolean(form.querySelector('[name="display_name"]').value);
+        clearModalErrors();
+        modalStatus.classList.add('hidden');
+        dialog.showModal();
+        form.querySelector('[name="display_name"]').focus();
+    });
+    dialog?.querySelectorAll('[data-quick-customer-close]').forEach((button) => button.addEventListener('click', requestClose));
+    dialog?.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        requestClose();
+    });
+    form?.addEventListener('input', () => modalDirty = true);
+    form?.addEventListener('submit', async (event) => {
+        event.preventDefault();
+        clearModalErrors();
+        if (!navigator.onLine) {
+            modalStatus.textContent = 'Offline. Your entries remain here. Reconnect, then explicitly retry.';
+            modalStatus.className = 'mb-5 rounded-lg border border-red-300 bg-red-50 p-4 font-semibold text-red-900';
+            modalStatus.focus();
+            return;
+        }
+        const submit = form.querySelector('[data-quick-customer-submit]');
+        submit.disabled = true;
+        submit.textContent = 'Saving…';
+        try {
+            const response = await fetch(form.action, { method: 'POST', headers: { Accept: 'application/json' }, body: new FormData(form) });
+            const body = await response.json();
+            if (response.status === 422) {
+                let firstInvalid;
+                Object.entries(body.errors ?? {}).forEach(([key, messages]) => {
+                    const error = dialog.querySelector(`[data-quick-error-for="${CSS.escape(key)}"]`);
+                    const fieldName = key.replace(/\.([^.]*)/g, '[$1]');
+                    const field = form.querySelector(`[name="${CSS.escape(fieldName)}"]`);
+                    if (error) {
+                        error.textContent = messages[0];
+                        error.classList.remove('hidden');
+                    }
+                    field?.setAttribute('aria-invalid', 'true');
+                    firstInvalid ??= field;
+                });
+                modalStatus.textContent = 'Check the highlighted fields and try again.';
+                modalStatus.className = 'mb-5 rounded-lg border border-red-300 bg-red-50 p-4 font-semibold text-red-900';
+                modalStatus.focus();
+                firstInvalid?.focus();
+                return;
+            }
+            if (!response.ok) throw new Error('create-failed');
+            selectCustomer(body.customer);
+            modalDirty = false;
+            form.reset();
+            dialog.close();
+            searchInput.focus();
+            status.textContent = body.message;
+        } catch {
+            modalStatus.textContent = 'The customer was not reported as saved. Your entries remain here; explicitly retry.';
+            modalStatus.className = 'mb-5 rounded-lg border border-red-300 bg-red-50 p-4 font-semibold text-red-900';
+            modalStatus.focus();
+        } finally {
+            submit.disabled = false;
+            submit.textContent = 'Save and select customer';
+        }
+    });
+}

@@ -23,4 +23,7 @@
         </fieldset>
         <div class="mt-6 flex flex-wrap gap-3"><button class="button-primary">Create service ticket</button><a href="{{ route('office.service-tickets.index') }}" class="button-secondary">Cancel</a></div>
     </form>
+    @if($canQuickAddCustomer)
+        @include('office.service-tickets._quick-customer-dialog')
+    @endif
 </x-layouts.office>

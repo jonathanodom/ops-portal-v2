@@ -66,12 +66,24 @@ class ServiceTicketController extends Controller
     {
         $organization = $this->organization($request);
         Gate::authorize('create', [ServiceTicket::class, $organization]);
+        $selectedCustomer = null;
+        if ($request->old('customer_id')) {
+            $selectedCustomer = Customer::query()->forOrganization($organization->id)
+                ->where('status', 'active')
+                ->with([
+                    'serviceLocations' => fn ($query) => $query->where('active', true)->orderByDesc('is_primary')->orderBy('name'),
+                    'contacts' => fn ($query) => $query->where('active', true)->orderByDesc('is_preferred')->orderBy('name'),
+                ])
+                ->find($request->old('customer_id'));
+        }
 
         return view('office.service-tickets.create', [
-            'customers' => Customer::query()->forOrganization($organization->id)
-                ->where('status', 'active')
-                ->with(['serviceLocations' => fn ($query) => $query->where('active', true), 'contacts' => fn ($query) => $query->where('active', true)])
-                ->orderBy('display_name')->get(),
+            'customerPicker' => true,
+            'selectedCustomer' => $selectedCustomer,
+            'canQuickAddCustomer' => Gate::allows('create', [Customer::class, $organization]),
+            'customerTypes' => config('customers.types'),
+            'states' => config('customers.states'),
+            'defaultTimezone' => $organization->timezone,
             'memberships' => $this->fieldMemberships($organization),
             ...$this->options(),
         ]);

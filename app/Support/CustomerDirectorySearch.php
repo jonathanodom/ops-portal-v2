@@ -6,9 +6,55 @@ use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\ServiceLocation;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
+use Illuminate\Support\Collection;
 
 class CustomerDirectorySearch
 {
+    public function ticketOptions(Organization $organization, string $search, int $limit = 10): Collection
+    {
+        $term = trim($search);
+        if ($term === '') {
+            return collect();
+        }
+
+        $digits = Phone::normalize($term);
+        $like = '%'.addcslashes($term, '%_\\').'%';
+
+        return Customer::query()
+            ->forOrganization($organization->id)
+            ->where('status', 'active')
+            ->with([
+                'contacts' => fn ($query) => $query->where('active', true)->orderByDesc('is_preferred')->orderBy('name'),
+                'serviceLocations' => fn ($query) => $query->where('active', true)->orderByDesc('is_primary')->orderBy('name'),
+            ])
+            ->where(function ($query) use ($like, $digits): void {
+                $query->where('display_name', 'like', $like)
+                    ->orWhere('legal_name', 'like', $like)
+                    ->orWhere('email', 'like', $like)
+                    ->orWhereHas('contacts', fn ($contact) => $contact
+                        ->where('active', true)
+                        ->where(fn ($inner) => $inner->where('name', 'like', $like)->orWhere('email', 'like', $like)))
+                    ->orWhereHas('serviceLocations', fn ($location) => $location
+                        ->where('active', true)
+                        ->where(fn ($inner) => $inner->where('name', 'like', $like)
+                            ->orWhere('address_line_1', 'like', $like)
+                            ->orWhere('address_line_2', 'like', $like)
+                            ->orWhere('city', 'like', $like)
+                            ->orWhere('state', 'like', $like)
+                            ->orWhere('postal_code', 'like', $like)));
+
+                if ($digits !== null) {
+                    $query->orWhere('phone_normalized', 'like', '%'.$digits.'%')
+                        ->orWhereHas('contacts', fn ($contact) => $contact
+                            ->where('active', true)
+                            ->where('phone_normalized', 'like', '%'.$digits.'%'));
+                }
+            })
+            ->orderBy('display_name')
+            ->limit(max(1, min($limit, 20)))
+            ->get();
+    }
+
     public function customers(
         Organization $organization,
         string $search = '',

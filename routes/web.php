@@ -21,6 +21,7 @@ use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
+use App\Http\Controllers\Office\TicketCustomerController;
 use App\Http\Controllers\Office\VisitArchiveController;
 use App\Http\Controllers\Office\VisitController;
 use App\Http\Controllers\Office\VisitExecutionController;
@@ -75,6 +76,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             });
             Route::middleware('capability:dispatch.manage')->group(function (): void {
                 Route::get('/service-tickets/create', [ServiceTicketController::class, 'create'])->name('service-tickets.create');
+                Route::get('/service-tickets/customer-options', [TicketCustomerController::class, 'index'])->name('service-tickets.customer-options');
+                Route::post('/service-tickets/quick-customers', [TicketCustomerController::class, 'store'])->name('service-tickets.quick-customers.store');
                 Route::post('/service-tickets', [ServiceTicketController::class, 'store'])->name('service-tickets.store');
                 Route::get('/service-tickets/{serviceTicket}/edit', [ServiceTicketController::class, 'edit'])->whereNumber('serviceTicket')->name('service-tickets.edit');
                 Route::put('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'update'])->whereNumber('serviceTicket')->name('service-tickets.update');
