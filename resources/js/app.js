@@ -196,3 +196,10 @@ if (firstInvalidField) {
         firstInvalidField.scrollIntoView({ behavior: 'smooth', block: 'center' });
     });
 }
+
+document.querySelectorAll('[data-copy-target]').forEach((button) => button.addEventListener('click', async () => {
+    const input = document.getElementById(button.dataset.copyTarget);
+    if (!input) return;
+    await navigator.clipboard.writeText(input.value);
+    button.textContent = 'Copied';
+}));

@@ -136,6 +136,8 @@ Phase 6 invoicing architecture, calculation rules, authorization, recovery, and 
 
 Organization identity, timezone, private branding, Billing defaults, and Invoice defaults are managed through the route-backed Office Settings area. See [Master Organization Settings](docs/ORGANIZATION_SETTINGS.md) for canonical-data rules, authorization, storage retention, preservation evidence, and rollback guidance.
 
+Phase 7 payment architecture, encrypted Square/Stripe configuration, provider locking, hosted checkout, immutable ledger rules, reconciliation, and customer-safe receipts are documented in [Phase 7 Payments](docs/PHASE_7_PAYMENTS.md).
+
 ## Quality commands
 
 ```powershell

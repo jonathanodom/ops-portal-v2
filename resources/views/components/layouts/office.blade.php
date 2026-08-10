@@ -37,7 +37,7 @@
                 @if ($activeMembership->hasCapability('visits.archive.manage'))
                     <a href="{{ route('office.admin.archive.index') }}" @if(request()->routeIs('office.admin.archive.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Admin Archive</a>
                 @endif
-                @if ($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage'))
+                @if ($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage') || $activeMembership->hasCapability('payments.view'))
                     <a href="{{ route('office.settings.index') }}" @if(request()->routeIs('office.settings.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.settings.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Settings</a>
                 @endif
             </nav>
@@ -77,7 +77,7 @@
                     @if($activeMembership->hasCapability('billing_handoffs.view'))<a href="{{ route('office.billing-handoffs.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.billing-handoffs.*') || request()->routeIs('office.invoices.*') || request()->routeIs('office.billing.settings.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Billing</a>@endif
                     @if($activeMembership->hasCapability('operations.health.view'))<a href="{{ route('office.operations.health') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.operations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Health</a>@endif
                     @if($activeMembership->hasCapability('visits.archive.manage'))<a href="{{ route('office.admin.archive.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Archive</a>@endif
-                    @if($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage'))<a href="{{ route('office.settings.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.settings.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Settings</a>@endif
+                    @if($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage') || $activeMembership->hasCapability('payments.view'))<a href="{{ route('office.settings.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.settings.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Settings</a>@endif
             </nav>
             <main id="main-content" class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
                 {{ $slot }}

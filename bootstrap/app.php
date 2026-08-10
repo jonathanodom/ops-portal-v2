@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
     )
     ->withMiddleware(function (Middleware $middleware): void {
         $middleware->append(CorrelateRequest::class);
+        $middleware->validateCsrfTokens(except: ['webhooks/payments/*']);
         $middleware->alias([
             'active.organization' => ResolveActiveOrganization::class,
             'capability' => RequireCapability::class,

@@ -13,7 +13,7 @@ class Invoice extends Model
 {
     protected function casts(): array
     {
-        return ['due_on' => 'date', 'issued_at' => 'datetime', 'voided_at' => 'datetime'];
+        return ['due_on' => 'date', 'issued_at' => 'datetime', 'voided_at' => 'datetime', 'payment_provider_locked_at' => 'datetime'];
     }
 
     public function organization(): BelongsTo
@@ -64,6 +64,61 @@ class Invoice extends Model
     public function sellerLogoAsset(): BelongsTo
     {
         return $this->belongsTo(OrganizationBrandAsset::class, 'seller_logo_asset_id');
+    }
+
+    public function paymentAttempts(): HasMany
+    {
+        return $this->hasMany(PaymentAttempt::class);
+    }
+
+    public function paymentTransactions(): HasMany
+    {
+        return $this->hasMany(PaymentTransaction::class);
+    }
+
+    public function successfulPaymentsCents(): int
+    {
+        if ($this->relationLoaded('paymentTransactions')) {
+            return (int) $this->paymentTransactions->where('type', 'payment')->where('status', 'succeeded')->sum('amount_cents');
+        }
+
+        return (int) $this->paymentTransactions()->where('type', 'payment')->where('status', 'succeeded')->sum('amount_cents');
+    }
+
+    public function successfulRefundsCents(): int
+    {
+        if ($this->relationLoaded('paymentTransactions')) {
+            return (int) $this->paymentTransactions->whereIn('type', ['refund', 'reversal'])->where('status', 'succeeded')->sum('amount_cents');
+        }
+
+        return (int) $this->paymentTransactions()->whereIn('type', ['refund', 'reversal'])->where('status', 'succeeded')->sum('amount_cents');
+    }
+
+    public function balanceCents(): int
+    {
+        return (int) $this->total_cents - $this->successfulPaymentsCents() + $this->successfulRefundsCents();
+    }
+
+    public function paymentState(): string
+    {
+        $paid = $this->successfulPaymentsCents();
+        $refunded = $this->successfulRefundsCents();
+        $net = $paid - $refunded;
+
+        if ($net < 0 || $net > (int) $this->total_cents) {
+            return 'overpaid';
+        }
+        if ($paid === 0) {
+            return 'unpaid';
+        }
+        if ($refunded >= $paid) {
+            return 'refunded';
+        }
+        if ($refunded > 0) {
+            return 'partially_refunded';
+        }
+
+        return $net === (int) $this->total_cents ? 'paid' : 'partially_paid';
     }
 
     public function scopeForOrganization(Builder $query, int $organizationId): Builder

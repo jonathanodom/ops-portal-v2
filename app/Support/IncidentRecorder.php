@@ -15,7 +15,7 @@ class IncidentRecorder
 {
     private const SAFE_CONTEXT_KEYS = [
         'route', 'reason_code', 'invalid_fields', 'connection', 'job_class', 'ticket_id', 'visit_id',
-        'closeout_id', 'handoff_id', 'media_id', 'age_hours', 'status', 'state', 'driver', 'active_timer_count',
+        'closeout_id', 'handoff_id', 'invoice_id', 'attempt_id', 'transaction_id', 'receipt_id', 'provider', 'media_id', 'age_hours', 'status', 'state', 'driver', 'active_timer_count',
     ];
 
     public function record(

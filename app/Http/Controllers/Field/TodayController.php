@@ -40,6 +40,7 @@ class TodayController extends Controller
         $visit->load([
             'serviceTicket.customer',
             'serviceTicket.contact',
+            'serviceTicket.invoices' => fn ($query) => $query->where('status', 'issued')->latest('issued_at'),
             'serviceTicket.visits' => fn ($query) => $query->select(['id', 'service_ticket_id', 'status', 'scheduled_start_at', 'timezone'])->orderBy('id'),
             'serviceLocation.primaryContact',
             'assignments.membership.user',

@@ -12,6 +12,7 @@ use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
 use App\Models\OrganizationMembership;
+use App\Models\PaymentProviderConfiguration;
 use App\Models\Role;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
@@ -115,6 +116,8 @@ class BetaScenarioSeeder extends Seeder
         $handoff = BillingHandoff::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $ticket->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'status' => 'ready', 'created_by_id' => $memberships['super_admin']->user_id]);
         $workflow = app(InvoiceWorkflow::class);
         $invoice = $workflow->createFromHandoff($handoff, $memberships['super_admin']->user, (string) Str::uuid());
+        PaymentProviderConfiguration::query()->create(['organization_id' => $organization->id, 'public_id' => (string) Str::uuid(), 'provider' => 'stripe', 'environment' => 'test', 'api_secret' => 'beta-fake-secret', 'webhook_secret' => 'beta-fake-webhook', 'credential_fingerprint' => 'BETA00000000', 'enabled' => true, 'connection_status' => 'connected', 'external_account_id' => 'beta-account', 'updated_by_id' => $memberships['super_admin']->user_id]);
+        $invoice->forceFill(['preferred_payment_provider' => 'stripe'])->save();
         $workflow->addLine($invoice, $memberships['super_admin']->user, ['line_type' => 'service_charge', 'description' => 'Beta invoice presentation fixture', 'quantity_millis' => 1000, 'unit' => 'service', 'unit_price_cents' => 10000, 'included' => true, 'taxable' => true, 'override_reason' => 'Synthetic beta fixture']);
         $workflow->markReady($invoice->fresh(), $memberships['super_admin']->user);
         $workflow->issue($invoice->fresh(), $memberships['super_admin']->user, (string) Str::uuid());

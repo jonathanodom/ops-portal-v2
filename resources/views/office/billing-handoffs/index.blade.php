@@ -21,6 +21,7 @@
                         @if($handoff->currentInvoice)
                             <p class="font-bold text-brand-blue">{{ $handoff->currentInvoice->invoice_number }}</p>
                             <p class="mt-1 text-sm font-semibold">{{ ucfirst(str_replace('_',' ',$handoff->currentInvoice->status)) }} · ${{ number_format($handoff->currentInvoice->total_cents / 100, 2) }}</p>
+                            <p class="mt-1 text-sm font-bold text-slate-600">{{ ucfirst(str_replace('_',' ',$handoff->currentInvoice->paymentState())) }} · Balance ${{ number_format(max(0,$handoff->currentInvoice->balanceCents())/100,2) }}</p>
                             <a class="button-primary mt-3" href="{{ route('office.invoices.show',$handoff->currentInvoice) }}">Open invoice</a>
                         @elseif($handoff->status==='ready' && $activeMembership->hasCapability('invoices.manage'))
                             <p class="font-bold text-orange-700">Ready to invoice</p>

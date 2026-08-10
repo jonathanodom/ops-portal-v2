@@ -17,6 +17,7 @@ use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
 use App\Models\OrganizationBrandAsset;
 use App\Models\OrganizationMembership;
+use App\Models\PaymentProviderConfiguration;
 use App\Models\Role;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
@@ -121,6 +122,8 @@ class Phase6InvoicingTest extends TestCase
         $organization->update(['full_logo_asset_id' => $logo->id]);
         $workflow = app(InvoiceWorkflow::class);
         $invoice = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        PaymentProviderConfiguration::query()->create(['organization_id' => $organization->id, 'public_id' => (string) Str::uuid(), 'provider' => 'stripe', 'environment' => 'test', 'api_secret' => 'sk_test_phase6', 'webhook_secret' => 'whsec_phase6', 'credential_fingerprint' => 'PHASE6000000', 'enabled' => true, 'connection_status' => 'connected']);
+        $invoice->forceFill(['preferred_payment_provider' => 'stripe'])->save();
         $this->assertSame('NewDay Tech', $invoice->seller_name);
         $this->assertSame('billing@newdaytech.net', $invoice->seller_email);
         $this->assertSame($logo->id, $invoice->seller_logo_asset_id);
