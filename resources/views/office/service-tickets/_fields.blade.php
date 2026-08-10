@@ -1,3 +1,6 @@
+@if($customerPicker ?? false)
+    @include('office.service-tickets._customer-picker')
+@else
 <div class="grid gap-5 md:grid-cols-2">
     <div>
         <label class="form-label" for="customer_id">Customer</label>
@@ -47,6 +50,7 @@
         </select>
     </div>
 </div>
+@endif
 <div class="mt-5">
     <label class="form-label" for="description">Work scope</label>
     <textarea class="form-textarea" id="description" name="description" maxlength="10000">{{ old('description', $ticket->description ?? '') }}</textarea>

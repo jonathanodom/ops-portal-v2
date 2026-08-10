@@ -2,17 +2,15 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\CustomerCreationWorkflow;
 use App\Http\Controllers\Controller;
-use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\Organization;
-use App\Models\ServiceLocation;
 use App\Support\AuditRecorder;
 use App\Support\CustomerDirectorySearch;
 use App\Support\Phone;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -45,73 +43,13 @@ class CustomerController extends Controller
         return view('office.customers.create', $this->formOptions($organization));
     }
 
-    public function store(Request $request, AuditRecorder $audit): RedirectResponse
+    public function store(Request $request, AuditRecorder $audit, CustomerCreationWorkflow $workflow): RedirectResponse
     {
         $organization = $this->organization($request);
         Gate::authorize('create', [Customer::class, $organization]);
         $data = $this->validateCreate($request);
 
-        $customer = DB::transaction(function () use ($request, $organization, $data, $audit): Customer {
-            $customer = Customer::query()->create([
-                'organization_id' => $organization->id,
-                'type' => $data['type'],
-                'display_name' => $data['display_name'],
-                'legal_name' => $data['legal_name'] ?? null,
-                'phone' => $data['phone'] ?? null,
-                'phone_normalized' => Phone::normalize($data['phone'] ?? null),
-                'email' => $data['email'] ?? null,
-                'status' => $data['status'],
-                'notes' => $data['notes'] ?? null,
-                'created_by_id' => $request->user()->id,
-                'updated_by_id' => $request->user()->id,
-            ]);
-
-            $contact = null;
-            if (filled($data['contact']['name'] ?? null)) {
-                $contact = Contact::query()->create([
-                    'organization_id' => $organization->id,
-                    'customer_id' => $customer->id,
-                    'name' => $data['contact']['name'],
-                    'role' => $data['contact']['role'] ?? null,
-                    'phone' => $data['contact']['phone'] ?? null,
-                    'phone_normalized' => Phone::normalize($data['contact']['phone'] ?? null),
-                    'email' => $data['contact']['email'] ?? null,
-                    'is_preferred' => true,
-                    'active' => true,
-                    'created_by_id' => $request->user()->id,
-                    'updated_by_id' => $request->user()->id,
-                ]);
-                $audit->record($organization, $request->user(), 'contact.created', $contact, ['customer_id' => $customer->id]);
-            }
-
-            $location = ServiceLocation::query()->create([
-                'organization_id' => $organization->id,
-                'customer_id' => $customer->id,
-                'primary_contact_id' => $contact?->id,
-                'name' => $data['location']['name'],
-                'address_line_1' => $data['location']['address_line_1'],
-                'address_line_2' => $data['location']['address_line_2'] ?? null,
-                'city' => $data['location']['city'],
-                'state' => strtoupper($data['location']['state']),
-                'postal_code' => $data['location']['postal_code'],
-                'timezone' => $data['location']['timezone'],
-                'access_instructions' => $data['location']['access_instructions'] ?? null,
-                'site_notes' => $data['location']['site_notes'] ?? null,
-                'is_primary' => true,
-                'active' => true,
-                'created_by_id' => $request->user()->id,
-                'updated_by_id' => $request->user()->id,
-            ]);
-
-            $audit->record($organization, $request->user(), 'customer.created', $customer, ['type' => $customer->type]);
-            $audit->record($organization, $request->user(), 'service_location.created', $location, [
-                'customer_id' => $customer->id,
-                'primary_contact_id' => $contact?->id,
-                'is_primary' => true,
-            ]);
-
-            return $customer;
-        });
+        $customer = $workflow->create($organization, $request->user(), $data, $audit)['customer'];
 
         return redirect()->route('office.customers.show', $customer)->with('status', 'Customer and first service location created.');
     }
