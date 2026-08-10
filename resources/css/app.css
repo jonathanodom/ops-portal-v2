@@ -149,6 +149,75 @@
     .office-mobile-primary-nav::-webkit-scrollbar {
         display: none;
     }
+
+    .office-record-header {
+        @apply scroll-mt-6;
+    }
+
+    .office-record-back {
+        @apply inline-flex min-h-11 items-center text-sm font-bold text-brand-blue-dark hover:text-brand-blue-deep;
+    }
+
+    .office-detail-nav {
+        @apply mt-5 flex min-h-11 gap-1 overflow-x-auto border-b border-slate-300;
+        scrollbar-width: none;
+    }
+
+    .office-detail-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .office-detail-nav-link {
+        @apply inline-flex min-h-11 shrink-0 items-center border-b-3 border-transparent px-4 text-sm font-bold text-slate-600 hover:border-slate-300 hover:text-slate-950;
+    }
+
+    .office-detail-grid {
+        @apply mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)];
+    }
+
+    .office-detail-main {
+        @apply min-w-0 space-y-6;
+    }
+
+    .office-detail-rail {
+        @apply min-w-0 space-y-4 xl:sticky xl:top-6 xl:self-start;
+    }
+
+    .office-detail-section {
+        @apply scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white;
+    }
+
+    .office-detail-section-header {
+        @apply flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between;
+    }
+
+    .office-detail-section-title {
+        @apply text-lg font-bold text-slate-950;
+    }
+
+    .office-detail-list {
+        @apply divide-y divide-slate-200;
+    }
+
+    .office-detail-row {
+        @apply min-h-16 px-5 py-4 transition-colors hover:bg-blue-50/45 focus-within:bg-blue-50/60;
+    }
+
+    .office-detail-empty {
+        @apply px-5 py-8 text-sm text-slate-500;
+    }
+
+    .office-detail-definition {
+        @apply space-y-4 text-sm;
+    }
+
+    .office-detail-definition dt {
+        @apply font-semibold text-slate-500;
+    }
+
+    .office-detail-definition dd {
+        @apply mt-1 text-slate-900;
+    }
 }
 
 /* Unlayered accessibility overrides intentionally outrank generated utilities.

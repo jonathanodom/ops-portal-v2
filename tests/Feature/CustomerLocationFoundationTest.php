@@ -174,6 +174,59 @@ class CustomerLocationFoundationTest extends TestCase
             ->assertDontSee('Add customer');
     }
 
+    public function test_customer_and_location_details_use_shared_detail_conventions(): void
+    {
+        [$manager, $organization] = $this->userWithRole('dispatcher');
+        [$customer, $contact, $location] = $this->customerGraph($organization);
+
+        $customerResponse = $this->actingAs($manager)->get("/office/customers/{$customer->id}");
+        $customerResponse->assertOk()
+            ->assertSee('data-office-width="detail"', false)
+            ->assertSee('data-office-header-width="detail"', false)
+            ->assertSee('aria-label="On this page"', false)
+            ->assertSee('href="#overview"', false)
+            ->assertSee('href="#locations"', false)
+            ->assertSee('href="#contacts"', false)
+            ->assertSee('id="overview"', false)
+            ->assertSee('id="locations"', false)
+            ->assertSee('id="contacts"', false)
+            ->assertSee('Edit customer')
+            ->assertSee('Add location')
+            ->assertSee('Add contact')
+            ->assertSee($location->name)
+            ->assertSee($contact->name);
+        $this->assertSame(1, substr_count($customerResponse->getContent(), 'id="overview"'));
+        $this->assertSame(1, substr_count($customerResponse->getContent(), 'id="locations"'));
+        $this->assertSame(1, substr_count($customerResponse->getContent(), 'id="contacts"'));
+
+        $this->actingAs($manager)->get("/office/locations/{$location->id}")
+            ->assertOk()
+            ->assertSee('data-office-width="detail"', false)
+            ->assertSee('data-office-header-width="detail"', false)
+            ->assertSee('data-office-detail-grid', false)
+            ->assertSee($customer->display_name)
+            ->assertSee($contact->name)
+            ->assertSee('Field information')
+            ->assertSee('Office only')
+            ->assertSee('Edit location');
+    }
+
+    public function test_read_only_detail_pages_hide_customer_management_actions(): void
+    {
+        [$reviewer, $organization] = $this->userWithRole('reviewer');
+        [$customer, , $location] = $this->customerGraph($organization);
+
+        $this->actingAs($reviewer)->get("/office/customers/{$customer->id}")
+            ->assertOk()
+            ->assertDontSee('Edit customer')
+            ->assertDontSee('Add location')
+            ->assertDontSee('Add contact');
+
+        $this->actingAs($reviewer)->get("/office/locations/{$location->id}")
+            ->assertOk()
+            ->assertDontSee('Edit location');
+    }
+
     public function test_field_directory_is_active_only_and_excludes_private_office_content(): void
     {
         [$user, $organization] = $this->userWithRole('technician');
