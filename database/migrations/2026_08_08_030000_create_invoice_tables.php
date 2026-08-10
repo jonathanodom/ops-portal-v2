@@ -164,7 +164,7 @@ return new class extends Migration
             $table->timestamp('acknowledged_at');
             $table->uuid('acknowledgment_token')->unique();
             $table->timestamps();
-            $table->index(['organization_id', 'invoice_id', 'acknowledged_at']);
+            $table->index(['organization_id', 'invoice_id', 'acknowledged_at'], 'invoice_ack_org_invoice_at_index');
         });
     }
 
