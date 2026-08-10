@@ -6,10 +6,11 @@ use Database\Factories\OrganizationFactory;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
+use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['name', 'slug', 'timezone', 'active'])]
+#[Fillable(['name', 'slug', 'timezone', 'active', 'legal_name', 'email', 'phone', 'website', 'address_line_1', 'address_line_2', 'city', 'state', 'postal_code', 'country_code', 'full_logo_asset_id', 'mark_logo_asset_id'])]
 class Organization extends Model
 {
     /** @use HasFactory<OrganizationFactory> */
@@ -53,5 +54,26 @@ class Organization extends Model
     public function laborRates(): HasMany
     {
         return $this->hasMany(BillingLaborRate::class);
+    }
+
+    public function brandAssets(): HasMany
+    {
+        return $this->hasMany(OrganizationBrandAsset::class);
+    }
+
+    public function currentFullLogo(): BelongsTo
+    {
+        return $this->belongsTo(OrganizationBrandAsset::class, 'full_logo_asset_id');
+    }
+
+    public function currentMarkLogo(): BelongsTo
+    {
+        return $this->belongsTo(OrganizationBrandAsset::class, 'mark_logo_asset_id');
+    }
+
+    public function isBillingProfileComplete(): bool
+    {
+        return collect(['name', 'email', 'phone', 'address_line_1', 'city', 'state', 'postal_code'])
+            ->every(fn (string $field): bool => filled($this->{$field}));
     }
 }

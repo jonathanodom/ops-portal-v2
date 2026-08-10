@@ -21,29 +21,41 @@ class BillingSettingsController extends Controller
         $settings = OrganizationBillingSetting::query()->firstOrCreate(['organization_id' => $organization->id], ['default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt']);
         $rates = BillingLaborRate::query()->forOrganization($organization->id)->orderByDesc('is_default')->orderBy('name')->get();
 
-        return view('office.billing-settings.edit', compact('settings', 'rates'));
+        return view('office.settings.billing', compact('settings', 'rates', 'organization'));
     }
 
     public function update(Request $request, AuditRecorder $audit): RedirectResponse
     {
         $organization = $request->attributes->get('organization');
-        $data = $request->validate([
-            'seller_name' => ['required', 'string', 'max:255'], 'seller_legal_name' => ['nullable', 'string', 'max:255'],
-            'seller_email' => ['required', 'email', 'max:255'], 'seller_phone' => ['required', 'string', 'max:50'],
-            'seller_address_line_1' => ['required', 'string', 'max:255'], 'seller_address_line_2' => ['nullable', 'string', 'max:255'],
-            'seller_city' => ['required', 'string', 'max:100'], 'seller_state' => ['required', 'string', 'size:2'], 'seller_postal_code' => ['required', 'string', 'max:20'],
-            'default_payment_terms' => ['required', Rule::in(['due_on_receipt', 'custom'])],
-            'default_tax_rate_percent' => ['required', 'numeric', 'min:0', 'max:100'],
-        ]);
+        $data = $request->validate(['default_tax_rate_percent' => ['required', 'numeric', 'min:0', 'max:100']]);
         $settings = OrganizationBillingSetting::query()->firstOrNew(['organization_id' => $organization->id]);
         $taxRate = $this->percentToBasisPoints((string) $data['default_tax_rate_percent']);
         unset($data['default_tax_rate_percent']);
-        $settings->fill($data + ['default_currency' => 'USD', 'updated_by_id' => $request->user()->id]);
+        $settings->fill(['default_currency' => 'USD', 'updated_by_id' => $request->user()->id]);
         $settings->default_tax_rate_basis_points = $taxRate;
         $settings->save();
-        $audit->record($organization, $request->user(), 'billing.settings_updated', $settings, ['changed_fields' => [...array_keys($data), 'default_tax_rate_basis_points']]);
+        $audit->record($organization, $request->user(), 'billing.settings_updated', $settings, ['changed_fields' => ['default_tax_rate_basis_points']]);
 
         return back()->with('status', 'Billing settings saved.');
+    }
+
+    public function invoiceEdit(Request $request): View
+    {
+        $organization = $request->attributes->get('organization')->loadMissing('currentFullLogo');
+        $settings = OrganizationBillingSetting::query()->firstOrCreate(['organization_id' => $organization->id], ['default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt']);
+
+        return view('office.settings.invoices', compact('settings', 'organization'));
+    }
+
+    public function invoiceUpdate(Request $request, AuditRecorder $audit): RedirectResponse
+    {
+        $organization = $request->attributes->get('organization');
+        $data = $request->validate(['default_payment_terms' => ['required', Rule::in(['due_on_receipt', 'custom'])]]);
+        $settings = OrganizationBillingSetting::query()->firstOrNew(['organization_id' => $organization->id]);
+        $settings->fill($data + ['default_currency' => 'USD', 'updated_by_id' => $request->user()->id])->save();
+        $audit->record($organization, $request->user(), 'invoice.settings_updated', $settings, ['changed_fields' => ['default_payment_terms', 'default_currency']]);
+
+        return back()->with('status', 'Invoice defaults saved.');
     }
 
     public function storeRate(Request $request, AuditRecorder $audit): RedirectResponse

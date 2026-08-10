@@ -9,6 +9,7 @@ use App\Models\Closeout;
 use App\Models\Invoice;
 use App\Models\InvoiceAcknowledgment;
 use App\Models\InvoiceLine;
+use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
 use App\Models\User;
 use App\Models\VisitPartProposal;
@@ -83,7 +84,7 @@ class InvoiceWorkflow
                 'billing_city' => $ticket->serviceLocation->city,
                 'billing_state' => $ticket->serviceLocation->state,
                 'billing_postal_code' => $ticket->serviceLocation->postal_code,
-                ...$this->sellerSnapshot($settings),
+                ...$this->sellerSnapshot($ticket->organization),
                 'tax_rate_basis_points' => $settings->default_tax_rate_basis_points ?? 0,
                 'creation_token' => $token,
                 'created_by_id' => $actor->id,
@@ -249,9 +250,9 @@ class InvoiceWorkflow
             if ($invoice->status !== 'ready_for_review') {
                 throw ValidationException::withMessages(['status' => 'Move the invoice to ready for review before issuing it.']);
             }
-            $settings = OrganizationBillingSetting::query()->where('organization_id', $invoice->organization_id)->first();
-            if ($settings?->isComplete()) {
-                $invoice->update($this->sellerSnapshot($settings));
+            $organization = Organization::query()->with('currentFullLogo')->findOrFail($invoice->organization_id);
+            if ($organization->isBillingProfileComplete()) {
+                $invoice->update($this->sellerSnapshot($organization));
             }
             $this->calculator->recalculate($invoice);
             $this->validateForIssue($invoice);
@@ -336,9 +337,20 @@ class InvoiceWorkflow
     }
 
     /** @return array<string, mixed> */
-    private function sellerSnapshot(OrganizationBillingSetting $settings): array
+    private function sellerSnapshot(Organization $organization): array
     {
-        return collect(['seller_name', 'seller_legal_name', 'seller_email', 'seller_phone', 'seller_address_line_1', 'seller_address_line_2', 'seller_city', 'seller_state', 'seller_postal_code'])->mapWithKeys(fn ($field) => [$field => $settings->{$field}])->all();
+        return [
+            'seller_name' => $organization->name,
+            'seller_legal_name' => $organization->legal_name,
+            'seller_email' => $organization->email,
+            'seller_phone' => $organization->phone,
+            'seller_address_line_1' => $organization->address_line_1,
+            'seller_address_line_2' => $organization->address_line_2,
+            'seller_city' => $organization->city,
+            'seller_state' => $organization->state,
+            'seller_postal_code' => $organization->postal_code,
+            'seller_logo_asset_id' => $organization->full_logo_asset_id,
+        ];
     }
 
     private function assertEditable(Invoice $invoice): void
@@ -351,8 +363,9 @@ class InvoiceWorkflow
     private function validateForIssue(Invoice $invoice): void
     {
         $settings = OrganizationBillingSetting::query()->where('organization_id', $invoice->organization_id)->first();
-        if (! $settings?->isComplete()) {
-            throw ValidationException::withMessages(['billing_profile' => 'Complete the organization billing profile before issuing.']);
+        $organization = Organization::query()->findOrFail($invoice->organization_id);
+        if (! $organization->isBillingProfileComplete()) {
+            throw ValidationException::withMessages(['billing_profile' => 'Complete the organization profile in Settings before issuing.']);
         }
         if (collect(['billing_name', 'billing_address_line_1', 'billing_city', 'billing_state', 'billing_postal_code'])->contains(fn (string $field): bool => blank($invoice->{$field}))) {
             throw ValidationException::withMessages(['billing_snapshot' => 'Complete the customer name and service billing address before issuing.']);
@@ -363,7 +376,7 @@ class InvoiceWorkflow
         if ($invoice->payment_terms !== 'due_on_receipt' && ! $invoice->due_on) {
             throw ValidationException::withMessages(['due_on' => 'Choose a due date for custom payment terms.']);
         }
-        if ($invoice->tax_rate_basis_points !== $settings->default_tax_rate_basis_points && blank($invoice->tax_override_reason)) {
+        if ($invoice->tax_rate_basis_points !== ($settings?->default_tax_rate_basis_points ?? 0) && blank($invoice->tax_override_reason)) {
             throw ValidationException::withMessages(['tax_override_reason' => 'A reason is required when overriding the default tax rate.']);
         }
         if ($invoice->discount_type && blank($invoice->discount_reason)) {

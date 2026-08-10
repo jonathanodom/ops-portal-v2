@@ -19,6 +19,14 @@ class OrganizationFactory extends Factory
     {
         return [
             'name' => fake()->company(),
+            'legal_name' => fake()->company().' LLC',
+            'email' => fake()->unique()->companyEmail(),
+            'phone' => fake()->phoneNumber(),
+            'address_line_1' => fake()->streetAddress(),
+            'city' => fake()->city(),
+            'state' => 'TX',
+            'postal_code' => fake()->postcode(),
+            'country_code' => 'US',
             'slug' => fake()->unique()->slug(2),
             'timezone' => 'America/Chicago',
             'active' => true,

@@ -25,7 +25,7 @@ test.describe('desktop beta', () => {
 
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
         await login(page, 'super_admin');
-        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/billing/settings', '/office/operations/health', '/office/admin/archive']) {
+        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/settings/organization', '/office/settings/billing', '/office/settings/invoices', '/office/operations/health', '/office/admin/archive']) {
             await page.goto(path);
             await expect(page.locator('body')).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
@@ -37,6 +37,13 @@ test.describe('desktop beta', () => {
             return style.outlineStyle !== 'none' || style.boxShadow !== 'none';
         });
         expect(focusVisible).toBeTruthy();
+
+        await page.goto('/office/settings/organization');
+        await expect(page.getByRole('tab')).toHaveCount(0);
+        await expect(page.getByRole('navigation', { name: 'Settings' }).getByRole('link', { name: 'Organization' })).toHaveAttribute('aria-current', 'page');
+        await expect(page.getByLabel('Organization timezone')).toBeVisible();
+        await expect(page.getByLabel('Upload full logo')).toBeVisible();
+        await expectAccessible(page);
 
         await page.goto('/office/billing-handoffs');
         await page.getByRole('link', { name: 'Open invoice' }).first().click();
@@ -112,6 +119,15 @@ test.describe('mobile beta', () => {
 
     test('issued invoice presentation is customer-safe at phone width', async ({ page }) => {
         await login(page, 'super_admin');
+        await page.goto('/office/settings/organization');
+        await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await expectAccessible(page);
+        const settingsShortControls = await page.locator('button, input, select, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+        expect(settingsShortControls).toEqual([]);
         await page.goto('/office/billing-handoffs');
         await page.getByRole('link', { name: 'Open invoice' }).first().click();
         await page.getByRole('link', { name: 'Customer presentation' }).click();

@@ -16,6 +16,7 @@ use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\OperationalHealthController;
+use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\VisitArchiveController;
@@ -35,6 +36,7 @@ Route::middleware('guest')->group(function (): void {
 
 Route::middleware(['auth', 'active.organization', 'record.operational.failures'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+    Route::get('/organization-brand/{variant}', [OrganizationSettingsController::class, 'asset'])->whereIn('variant', ['full', 'mark'])->name('organization.brand.asset');
 
     Route::get('/', function (Request $request) {
         $membership = $request->attributes->get('membership');
@@ -110,8 +112,21 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.issue');
             Route::post('/invoices/{invoice}/void', [InvoiceController::class, 'void'])->whereNumber('invoice')->middleware('capability:invoices.void')->name('invoices.void');
             Route::post('/invoices/{invoice}/pdf/retry', [InvoiceController::class, 'retryPdf'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.pdf.retry');
+            Route::get('/settings', [OrganizationSettingsController::class, 'index'])->name('settings.index');
+            Route::middleware('capability:organization.settings.manage')->group(function (): void {
+                Route::get('/settings/organization', [OrganizationSettingsController::class, 'edit'])->name('settings.organization.edit');
+                Route::put('/settings/organization', [OrganizationSettingsController::class, 'update'])->name('settings.organization.update');
+                Route::post('/settings/organization/brand/{variant}', [OrganizationSettingsController::class, 'upload'])->whereIn('variant', ['full', 'mark'])->name('settings.organization.brand.upload');
+                Route::delete('/settings/organization/brand/{variant}', [OrganizationSettingsController::class, 'remove'])->whereIn('variant', ['full', 'mark'])->name('settings.organization.brand.remove');
+            });
             Route::middleware('capability:billing.settings.manage')->group(function (): void {
-                Route::get('/billing/settings', [BillingSettingsController::class, 'edit'])->name('billing.settings.edit');
+                Route::get('/settings/billing', [BillingSettingsController::class, 'edit'])->name('settings.billing.edit');
+                Route::put('/settings/billing', [BillingSettingsController::class, 'update'])->name('settings.billing.update');
+                Route::post('/settings/billing/labor-rates', [BillingSettingsController::class, 'storeRate'])->name('settings.billing.rates.store');
+                Route::put('/settings/billing/labor-rates/{rate}', [BillingSettingsController::class, 'updateRate'])->whereNumber('rate')->name('settings.billing.rates.update');
+                Route::get('/settings/invoices', [BillingSettingsController::class, 'invoiceEdit'])->name('settings.invoices.edit');
+                Route::put('/settings/invoices', [BillingSettingsController::class, 'invoiceUpdate'])->name('settings.invoices.update');
+                Route::redirect('/billing/settings', '/office/settings/billing')->name('billing.settings.edit');
                 Route::put('/billing/settings', [BillingSettingsController::class, 'update'])->name('billing.settings.update');
                 Route::post('/billing/settings/labor-rates', [BillingSettingsController::class, 'storeRate'])->name('billing.settings.rates.store');
                 Route::put('/billing/settings/labor-rates/{rate}', [BillingSettingsController::class, 'updateRate'])->whereNumber('rate')->name('billing.settings.rates.update');
@@ -177,6 +192,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         });
     Route::get('/field-media/{media}', [ExecutionController::class, 'media'])->whereNumber('media')->name('field.media.show');
     Route::get('/invoices/{invoice}/present', [InvoicePresentationController::class, 'show'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.present');
+    Route::get('/invoices/{invoice}/brand', [InvoicePresentationController::class, 'brand'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.brand');
     Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'download'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.pdf');
     Route::post('/invoices/{invoice}/acknowledge', [InvoicePresentationController::class, 'acknowledge'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.acknowledge');
 });

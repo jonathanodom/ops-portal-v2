@@ -2,7 +2,7 @@
     @if(session('status'))<div class="mb-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900" role="status">{{ session('status') }}</div>@endif
     <div class="flex flex-wrap items-end justify-between gap-4">
         <div><p class="text-sm font-bold text-brand-blue">Billing</p><h1 class="mt-1 text-3xl font-bold">Invoice queue</h1><p class="mt-2 text-slate-600">Create and finish one auditable invoice for each completed Service Ticket.</p></div>
-        @if($activeMembership->hasCapability('billing.settings.manage'))<a class="button-secondary" href="{{ route('office.billing.settings.edit') }}">Billing settings</a>@endif
+        @if($activeMembership->hasCapability('billing.settings.manage'))<a class="button-secondary" href="{{ route('office.settings.billing.edit') }}">Settings</a>@endif
     </div>
     <form method="GET" class="surface mt-6 flex flex-wrap items-end gap-4 p-4">
         <div><label class="form-label" for="status">Handoff status</label><select class="form-input" id="status" name="status"><option value="">All</option><option value="ready" @selected(request('status')==='ready')>Ready</option><option value="handed_off" @selected(request('status')==='handed_off')>Invoice started</option></select></div>

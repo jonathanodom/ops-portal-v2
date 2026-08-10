@@ -17,7 +17,7 @@
                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-brand-blue">Field workspace</p>
                 <p class="mt-0.5 text-sm font-bold text-slate-950">{{ auth()->user()->name }}</p>
             </div>
-            <img src="{{ asset('images/newday-logo.png') }}" alt="NewDay Tech LLC" class="w-32">
+            <x-organization-logo variant="mark" class="h-11 w-11 object-contain" />
         </div>
     </header>
     <main id="main-content" class="mx-auto max-w-2xl p-4 sm:p-6">{{ $slot }}</main>
