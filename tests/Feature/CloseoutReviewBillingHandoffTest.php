@@ -263,7 +263,7 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->assertDatabaseHas('audit_events', ['event_type' => 'closeout.approved']);
     }
 
-    public function test_billing_can_acknowledge_without_access_to_private_evidence(): void
+    public function test_billing_can_create_invoice_without_access_to_private_evidence(): void
     {
         [$organization, $visit, $closeout] = $this->submittedCloseout();
         [$reviewer] = $this->userWithRole('reviewer', $organization);
@@ -275,8 +275,9 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->actingAs($billing)->get('/office/billing-handoffs')->assertOk()->assertSee($visit->serviceTicket->ticket_number)->assertDontSee('Sensitive diagnosis');
         $this->actingAs($billing)->get('/office/closeout-reviews')->assertForbidden();
         $this->actingAs($billing)->get('/field-media/'.VisitMedia::query()->value('id'))->assertForbidden();
-        $this->actingAs($billing)->post("/office/billing-handoffs/{$handoff->id}/acknowledge", ['acknowledgment_token' => (string) Str::uuid()])->assertRedirect();
+        $this->actingAs($billing)->post("/office/billing-handoffs/{$handoff->id}/invoice", ['creation_token' => (string) Str::uuid()])->assertRedirect();
         $this->assertDatabaseHas('billing_handoffs', ['id' => $handoff->id, 'status' => 'handed_off', 'handed_off_by_id' => $billing->id]);
+        $this->assertDatabaseHas('invoices', ['billing_handoff_id' => $handoff->id, 'status' => 'draft']);
     }
 
     public function test_cross_organization_review_urls_return_not_found(): void

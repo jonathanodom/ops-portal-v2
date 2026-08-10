@@ -1,0 +1,4 @@
+<x-layouts.office :title="$invoice->invoice_number">
+    <a class="text-sm font-bold text-brand-blue" href="{{ route('office.service-tickets.show',$invoice->serviceTicket) }}">← Service Ticket</a><h1 class="mt-2 text-3xl font-bold">Invoice summary</h1>
+    <div class="surface mt-6 p-5"><div class="flex flex-wrap justify-between gap-4"><div><p class="font-bold text-brand-blue">{{ $invoice->invoice_number }}</p><p class="mt-2">{{ $invoice->serviceTicket->ticket_number }} · {{ $invoice->billing_name }}</p></div><div class="text-right"><p class="font-bold">{{ ucfirst(str_replace('_',' ',$invoice->status)) }}</p><p class="mt-2 text-2xl font-bold">${{ number_format($invoice->total_cents/100,2) }}</p></div></div><p class="mt-5 text-sm text-slate-600">Read-only billing context. Pricing controls, internal notes, presentation acknowledgments, and private documents are restricted.</p></div>
+</x-layouts.office>

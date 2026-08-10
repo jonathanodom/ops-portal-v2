@@ -25,7 +25,7 @@ test.describe('desktop beta', () => {
 
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
         await login(page, 'super_admin');
-        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/operations/health', '/office/admin/archive']) {
+        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/billing/settings', '/office/operations/health', '/office/admin/archive']) {
             await page.goto(path);
             await expect(page.locator('body')).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
@@ -37,6 +37,15 @@ test.describe('desktop beta', () => {
             return style.outlineStyle !== 'none' || style.boxShadow !== 'none';
         });
         expect(focusVisible).toBeTruthy();
+
+        await page.goto('/office/billing-handoffs');
+        await page.getByRole('link', { name: 'Open invoice' }).first().click();
+        await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
+        await expectAccessible(page);
+        await page.getByRole('link', { name: 'Customer presentation' }).click();
+        await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await expectAccessible(page);
 
         await page.goto('/office/service-tickets?search=NDT-ST-2026-9001');
         await page.getByRole('link', { name: /BETA A:/ }).click();
@@ -53,7 +62,12 @@ test.describe('desktop beta', () => {
         await expect(dialog).toBeHidden();
         await expect(launcher).toBeFocused();
 
-        await page.getByRole('button', { name: 'Start manual closeout' }).click();
+        const manualStart = page.getByRole('button', { name: 'Start manual closeout' });
+        if (await manualStart.count()) {
+            await manualStart.click();
+        } else {
+            await page.getByRole('button', { name: 'Manual closeout' }).click();
+        }
         const manualDialog = page.getByRole('dialog', { name: 'Administrative closeout' });
         await expect(manualDialog).toBeVisible();
         const manualDimensions = await manualDialog.evaluate((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
@@ -94,5 +108,22 @@ test.describe('mobile beta', () => {
         const enabledWriteButtons = await page.locator('form[method="POST"] button:not([disabled])').count();
         expect(enabledWriteButtons).toBe(0);
         await context.setOffline(false);
+    });
+
+    test('issued invoice presentation is customer-safe at phone width', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office/billing-handoffs');
+        await page.getByRole('link', { name: 'Open invoice' }).first().click();
+        await page.getByRole('link', { name: 'Customer presentation' }).click();
+        await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
+        await expect(page.getByText('Invoice acknowledgment')).toBeVisible();
+        await expect(page.getByText('Internal billing note')).toHaveCount(0);
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await expectAccessible(page);
+        const shortControls = await page.locator('button, input, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+        expect(shortControls).toEqual([]);
     });
 });

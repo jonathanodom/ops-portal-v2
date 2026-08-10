@@ -2,9 +2,15 @@
 
 namespace Database\Seeders;
 
+use App\Domain\InvoiceWorkflow;
+use App\Models\BillingHandoff;
+use App\Models\BillingLaborRate;
+use App\Models\Closeout;
+use App\Models\CloseoutReview;
 use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\Organization;
+use App\Models\OrganizationBillingSetting;
 use App\Models\OrganizationMembership;
 use App\Models\Role;
 use App\Models\ServiceLocation;
@@ -14,6 +20,7 @@ use App\Models\Visit;
 use App\Models\VisitAssignment;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Illuminate\Support\Str;
 
 class BetaScenarioSeeder extends Seeder
 {
@@ -85,5 +92,25 @@ class BetaScenarioSeeder extends Seeder
         }
 
         $this->call(BetaVolumeSeeder::class);
+
+        OrganizationBillingSetting::query()->create([
+            'organization_id' => $organization->id, 'seller_name' => 'NewDay Tech', 'seller_legal_name' => 'NewDay Tech LLC',
+            'seller_email' => 'billing@newdaytech.test', 'seller_phone' => '555-0100', 'seller_address_line_1' => '100 Beta Office Way',
+            'seller_city' => 'Austin', 'seller_state' => 'TX', 'seller_postal_code' => '78701', 'default_currency' => 'USD',
+            'default_payment_terms' => 'due_on_receipt', 'default_tax_rate_basis_points' => 825, 'updated_by_id' => $memberships['super_admin']->user_id,
+        ]);
+        BillingLaborRate::query()->create(['organization_id' => $organization->id, 'name' => 'Standard', 'hourly_rate_cents' => 12500, 'is_default' => true, 'active' => true, 'created_by_id' => $memberships['super_admin']->user_id]);
+        $closeout = Closeout::query()->where('organization_id', $organization->id)->firstOrFail();
+        $visit = $closeout->visit;
+        $ticket = $visit->serviceTicket;
+        $visit->update(['status' => 'approved']);
+        $ticket->update(['status' => 'completed']);
+        CloseoutReview::query()->create(['organization_id' => $organization->id, 'closeout_id' => $closeout->id, 'reviewer_id' => $memberships['super_admin']->user_id, 'decision' => 'approved', 'self_review_override' => true, 'decision_token' => (string) Str::uuid(), 'decided_at' => now()]);
+        $handoff = BillingHandoff::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $ticket->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'status' => 'ready', 'created_by_id' => $memberships['super_admin']->user_id]);
+        $workflow = app(InvoiceWorkflow::class);
+        $invoice = $workflow->createFromHandoff($handoff, $memberships['super_admin']->user, (string) Str::uuid());
+        $workflow->addLine($invoice, $memberships['super_admin']->user, ['line_type' => 'service_charge', 'description' => 'Beta invoice presentation fixture', 'quantity_millis' => 1000, 'unit' => 'service', 'unit_price_cents' => 10000, 'included' => true, 'taxable' => true, 'override_reason' => 'Synthetic beta fixture']);
+        $workflow->markReady($invoice->fresh(), $memberships['super_admin']->user);
+        $workflow->issue($invoice->fresh(), $memberships['super_admin']->user, (string) Str::uuid());
     }
 }

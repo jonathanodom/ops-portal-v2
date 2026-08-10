@@ -128,6 +128,9 @@ class OpsRestoreVerifyCommand extends Command
             'visit_ticket' => ['visits', 'service_tickets', 'SELECT COUNT(*) FROM visits child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
             'closeout_visit' => ['closeouts', 'visits', 'SELECT COUNT(*) FROM closeouts child LEFT JOIN visits parent ON parent.id = child.visit_id WHERE parent.id IS NULL'],
             'handoff_ticket' => ['billing_handoffs', 'service_tickets', 'SELECT COUNT(*) FROM billing_handoffs child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
+            'invoice_ticket' => ['invoices', 'service_tickets', 'SELECT COUNT(*) FROM invoices child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
+            'invoice_handoff' => ['invoices', 'billing_handoffs', 'SELECT COUNT(*) FROM invoices child LEFT JOIN billing_handoffs parent ON parent.id = child.billing_handoff_id WHERE parent.id IS NULL'],
+            'invoice_line' => ['invoice_lines', 'invoices', 'SELECT COUNT(*) FROM invoice_lines child LEFT JOIN invoices parent ON parent.id = child.invoice_id WHERE parent.id IS NULL'],
         ];
         foreach ($checks as $name => [$child, $parent, $sql]) {
             if (in_array($child, $tables, true) && in_array($parent, $tables, true)) {
@@ -143,6 +146,7 @@ class OpsRestoreVerifyCommand extends Command
                 'ticket_context' => ($counts['service_tickets'] ?? 0) === 0 || (($relationships['ticket_customer'] ?? 0) === 0 && ($relationships['ticket_location'] ?? 0) === 0),
                 'closeout_visit' => ($counts['closeouts'] ?? 0) === 0 || ($relationships['closeout_visit'] ?? 0) === 0,
                 'handoff_ticket' => ($counts['billing_handoffs'] ?? 0) === 0 || ($relationships['handoff_ticket'] ?? 0) === 0,
+                'invoice_chain' => ($counts['invoices'] ?? 0) === 0 || (($relationships['invoice_ticket'] ?? 0) === 0 && ($relationships['invoice_handoff'] ?? 0) === 0 && ($relationships['invoice_line'] ?? 0) === 0),
             ],
         ];
     }

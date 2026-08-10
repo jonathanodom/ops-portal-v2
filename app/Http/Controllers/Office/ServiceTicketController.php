@@ -148,6 +148,7 @@ class ServiceTicketController extends Controller
             'customer.contacts' => fn ($query) => $query->where('active', true)->orderByDesc('is_preferred'),
             'serviceLocation.primaryContact',
             'contact',
+            'invoices' => fn ($query) => $query->latest('generation')->withExists('acknowledgments'),
             'notes.author',
             'visits' => fn ($query) => $query->with(['assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('id'),
         ]);

@@ -4,7 +4,7 @@
 | --- | --- | --- |
 | Production deployment and DNS cutover | Phase 5 is a local/CI validation gate, not a production-readiness claim. | Manual beta sign-off, approved production architecture, security review, recovery drill, and explicit owner approval. |
 | Accounting integration | Handoffs are intentionally provider-neutral and auditable. | Billing workflow is accepted and an accounting system/contract is selected. |
-| Invoices and payments | These require financial controls beyond FSM closeout. | Approved accounting model, tax/payment requirements, and reconciliation ownership. |
+| Payments and receipts | Phase 6 implements invoices while payment credentials and settlement remain outside the portal. | Phase 6 owner gate passes and a provider, PCI boundary, methods, refund authority, and reconciliation ownership are approved for Phase 7. |
 | Inventory mutation | Proposals are evidence, not stock movements. | Parts catalog, warehouse ownership, valuation, and adjustment controls are defined. |
 | Notifications | Delivery, consent, escalation, and retry policy are not yet defined. | Operational owners approve channels, templates, quiet hours, and failure handling. |
 | Offline synchronization | Phase 5 only protects in-page unsaved content and explicit retry. | Field connectivity evidence shows the need and conflict/security semantics are designed. |
