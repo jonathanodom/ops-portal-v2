@@ -283,6 +283,59 @@ test.describe('desktop beta', () => {
         await expect(invoiceNav.getByRole('link', { name: 'Invoice lines' })).toHaveAttribute('href', '#invoice-lines');
         await expect(invoiceNav.getByRole('link', { name: 'Payments' })).toHaveAttribute('href', '#payments');
     });
+
+    test('catalog services, variants, categories, and units follow the responsive workspace system', async ({ page }) => {
+        test.setTimeout(90_000);
+        await login(page, 'super_admin');
+        const suffix = Date.now();
+
+        await page.goto('/office/catalog/services/create');
+        await page.getByLabel('Service code').fill(`TV-MOUNT-${suffix}`);
+        await page.getByLabel('Service name').fill('TV Mounting Browser Test');
+        await page.getByLabel('Sales unit').selectOption({ label: 'Each (ea)' });
+        await page.getByLabel('Pricing model').selectOption('variant');
+        await page.getByLabel('Default price').fill('299.00');
+        await page.getByRole('button', { name: 'Create service' }).click();
+        await expect(page.getByRole('heading', { name: 'TV Mounting Browser Test' })).toBeVisible();
+
+        await page.getByLabel('New variant code').fill('TV-56-75');
+        await page.getByLabel('New variant label').fill('56–75 inch');
+        await page.getByLabel('New variant customer label').fill('TV mounting for 56–75 inch displays');
+        await page.getByLabel('New variant price override').fill('399.00');
+        await page.getByRole('button', { name: 'Add variant' }).click();
+        await expect(page.getByRole('heading', { name: '56–75 inch' })).toBeVisible();
+        await expectAccessible(page);
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            for (const path of ['/office/catalog/services', '/office/catalog/categories', '/office/catalog/units']) {
+                await page.goto(path);
+                await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
+                expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+                if (viewport.width < 1024) {
+                    await expect(page.locator('.office-mobile-list')).toBeVisible();
+                    await expect(page.locator('.office-table-wrap')).toBeHidden();
+                } else {
+                    await expect(page.locator('.office-table-wrap')).toBeVisible();
+                    await expect(page.locator('.office-mobile-list')).toBeHidden();
+                }
+            }
+        }
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/office/catalog/services');
+        const shortControls = await page.locator('button, input, select, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => element.getBoundingClientRect().height < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+        expect(shortControls).toEqual([]);
+        await expectAccessible(page);
+    });
 });
 
 test.describe('mobile beta', () => {

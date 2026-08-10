@@ -2,6 +2,7 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\CatalogDefaults;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Role;
@@ -28,7 +29,7 @@ class CreatePortalUser extends Command
     /**
      * Execute the console command.
      */
-    public function handle()
+    public function handle(CatalogDefaults $catalogDefaults)
     {
         $data = [
             'email' => Str::lower((string) $this->argument('email')),
@@ -54,7 +55,7 @@ class CreatePortalUser extends Command
             return self::FAILURE;
         }
 
-        DB::transaction(function () use ($data): void {
+        DB::transaction(function () use ($data, $catalogDefaults): void {
             $organization = Organization::query()->firstOrCreate(
                 ['slug' => $data['slug']],
                 ['name' => $this->option('organization'), 'timezone' => 'America/Chicago', 'active' => true],
@@ -70,6 +71,7 @@ class CreatePortalUser extends Command
             $membership->roles()->syncWithoutDetaching(
                 Role::query()->where('key', $data['role'])->pluck('id'),
             );
+            $catalogDefaults->ensureFor($organization);
         });
 
         $this->info('Portal user is ready.');

@@ -70,11 +70,19 @@
         @apply inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800;
     }
 
+    .status-success {
+        @apply inline-flex rounded-full bg-emerald-100 px-2.5 py-1 text-xs font-bold text-emerald-800;
+    }
+
     .status-hold {
         @apply inline-flex rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-900;
     }
 
     .status-inactive {
+        @apply inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700;
+    }
+
+    .status-muted {
         @apply inline-flex rounded-full bg-slate-200 px-2.5 py-1 text-xs font-bold text-slate-700;
     }
 

@@ -2,6 +2,7 @@
 
 namespace Database\Seeders;
 
+use App\Domain\CatalogDefaults;
 use App\Domain\InvoiceWorkflow;
 use App\Models\BillingHandoff;
 use App\Models\BillingLaborRate;
@@ -25,7 +26,7 @@ use Illuminate\Support\Str;
 
 class BetaScenarioSeeder extends Seeder
 {
-    public function run(): void
+    public function run(CatalogDefaults $catalogDefaults): void
     {
         $this->call(AccessControlSeeder::class);
         $password = (string) env('BETA_DEMO_PASSWORD');
@@ -40,6 +41,7 @@ class BetaScenarioSeeder extends Seeder
             'postal_code' => '78701', 'country_code' => 'US', 'slug' => 'beta-validation',
             'timezone' => 'America/Chicago', 'active' => true,
         ]);
+        $catalogDefaults->ensureFor($organization);
         $memberships = [];
         foreach (['super_admin' => 'Super Admin', 'dispatcher' => 'Dispatcher', 'technician' => 'Technician', 'reviewer' => 'Reviewer', 'billing' => 'Billing'] as $roleKey => $name) {
             $user = User::query()->create([

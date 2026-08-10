@@ -138,6 +138,12 @@ Organization identity, timezone, private branding, Billing defaults, and Invoice
 
 Phase 7 payment architecture, encrypted Square/Stripe configuration, provider locking, hosted checkout, immutable ledger rules, reconciliation, and customer-safe receipts are documented in [Phase 7 Payments](docs/PHASE_7_PAYMENTS.md).
 
+## Phase 8 Products & Services Catalog
+
+Checkpoint 1 adds organization-scoped Categories, reusable Units of Measure, Services, explicit Service Variants, optional related-Service add-ons, and protected pricing management. Products, Packages, inventory quantities, invoice selection, and customer subscriptions remain later gated checkpoints.
+
+See [Catalog Architecture](docs/CATALOG_ARCHITECTURE.md) for pricing models, UOM boundaries, permissions, audit behavior, historical snapshot plans, and the future Inventory/Purchasing extension boundary.
+
 ## Quality commands
 
 ```powershell

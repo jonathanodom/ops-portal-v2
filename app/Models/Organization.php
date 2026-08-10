@@ -56,6 +56,21 @@ class Organization extends Model
         return $this->hasMany(BillingLaborRate::class);
     }
 
+    public function catalogCategories(): HasMany
+    {
+        return $this->hasMany(CatalogCategory::class);
+    }
+
+    public function unitsOfMeasure(): HasMany
+    {
+        return $this->hasMany(UnitOfMeasure::class);
+    }
+
+    public function catalogServices(): HasMany
+    {
+        return $this->hasMany(CatalogService::class);
+    }
+
     public function brandAssets(): HasMany
     {
         return $this->hasMany(OrganizationBrandAsset::class);

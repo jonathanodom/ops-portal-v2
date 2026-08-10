@@ -41,6 +41,10 @@ class AccessControlSeeder extends Seeder
         'closeouts.inspect' => 'Inspect submitted field closeout evidence',
         'operations.health.view' => 'View operational health incidents',
         'operations.health.manage' => 'Resolve operational health incidents',
+        'catalog.view' => 'View products and services catalog records',
+        'catalog.use' => 'Select catalog records in authorized workflows',
+        'catalog.manage' => 'Create and maintain catalog records',
+        'catalog.pricing.manage' => 'Manage protected catalog pricing and tax defaults',
     ];
 
     private const ROLES = [
@@ -55,19 +59,20 @@ class AccessControlSeeder extends Seeder
                 'customers.view', 'customers.manage',
                 'service_tickets.view',
                 'closeouts.inspect',
+                'catalog.view', 'catalog.use',
             ],
         ],
         'technician' => [
             'name' => 'Technician',
-            'capabilities' => ['experience.field.access', 'visits.execute_assigned', 'customers.view'],
+            'capabilities' => ['experience.field.access', 'visits.execute_assigned', 'customers.view', 'catalog.view', 'catalog.use'],
         ],
         'reviewer' => [
             'name' => 'Reviewer',
-            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view', 'service_tickets.view', 'closeouts.inspect', 'invoices.view'],
+            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view', 'service_tickets.view', 'closeouts.inspect', 'invoices.view', 'catalog.view'],
         ],
         'billing' => [
             'name' => 'Billing',
-            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'payments.view', 'payments.collect', 'payments.record_manual', 'payments.manage_links', 'customers.view', 'service_tickets.view'],
+            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'payments.view', 'payments.collect', 'payments.record_manual', 'payments.manage_links', 'customers.view', 'service_tickets.view', 'catalog.view', 'catalog.use'],
         ],
     ];
 
