@@ -1,3 +1,13 @@
+@props(['title' => 'Office', 'width' => 'default'])
+@php
+    $contentWidthClass = match ($width) {
+        'workspace' => 'w-full max-w-none',
+        'detail' => 'mx-auto w-full max-w-[1600px]',
+        'form' => 'mx-auto w-full max-w-4xl',
+        default => 'mx-auto w-full max-w-7xl',
+    };
+    $customerWorkspaceActive = request()->routeIs('office.customers.*') || request()->routeIs('office.locations.*');
+@endphp
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -18,8 +28,7 @@
             <nav class="mt-3" aria-label="Office">
                 <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home')) aria-current="page" @endif class="flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.home') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Overview</a>
                 @if ($activeMembership->hasCapability('customers.view'))
-                    <a href="{{ route('office.customers.index') }}" @if(request()->routeIs('office.customers.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.customers.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Customers</a>
-                    <a href="{{ route('office.locations.index') }}" @if(request()->routeIs('office.locations.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.locations.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Service locations</a>
+                    <a href="{{ route('office.customers.index') }}" data-office-primary-customers @if($customerWorkspaceActive) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ $customerWorkspaceActive ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Customers</a>
                 @endif
                 @if ($activeMembership->hasCapability('service_tickets.view'))
                     <a href="{{ route('office.service-tickets.index') }}" @if(request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*')) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Service Tickets</a>
@@ -53,7 +62,7 @@
 
         <div>
             <header class="border-b border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
-                <div class="mx-auto flex max-w-7xl items-center justify-between gap-4">
+                <div class="{{ $contentWidthClass }} flex items-center justify-between gap-4" data-office-header-width="{{ $width }}">
                     <div class="flex items-center gap-3">
                         <x-organization-logo variant="mark" class="h-10 w-10 object-contain lg:hidden" />
                         <div>
@@ -66,11 +75,10 @@
                     @endif
                 </div>
             </header>
-            <nav class="flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">
+            <nav class="office-mobile-primary-nav flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">
                     <a href="{{ route('office.home') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.home') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Overview</a>
                     @if ($activeMembership->hasCapability('customers.view'))
-                    <a href="{{ route('office.customers.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.customers.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Customers</a>
-                    <a href="{{ route('office.locations.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.locations.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Locations</a>
+                    <a href="{{ route('office.customers.index') }}" data-office-primary-customers @if($customerWorkspaceActive) aria-current="page" @endif class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ $customerWorkspaceActive ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Customers</a>
                     @endif
                     @if($activeMembership->hasCapability('service_tickets.view'))<a href="{{ route('office.service-tickets.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Tickets</a><a href="{{ route('office.dispatch.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.dispatch.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Dispatch</a>@endif
                     @if($activeMembership->hasCapability('closeouts.inspect'))<a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.closeout-reviews.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Review</a>@endif
@@ -79,7 +87,7 @@
                     @if($activeMembership->hasCapability('visits.archive.manage'))<a href="{{ route('office.admin.archive.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Archive</a>@endif
                     @if($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage') || $activeMembership->hasCapability('payments.view'))<a href="{{ route('office.settings.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.settings.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Settings</a>@endif
             </nav>
-            <main id="main-content" class="mx-auto max-w-7xl p-4 sm:p-6 lg:p-8">
+            <main id="main-content" class="{{ $contentWidthClass }} p-4 sm:p-6 lg:p-8" data-office-width="{{ $width }}">
                 {{ $slot }}
             </main>
         </div>
