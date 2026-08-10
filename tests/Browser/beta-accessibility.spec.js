@@ -168,6 +168,65 @@ test.describe('desktop beta', () => {
         });
         expect(focusVisible).toBeTruthy();
     });
+
+    test('customer and location details use the responsive detail system', async ({ page }) => {
+        await login(page, 'super_admin');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 800 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+
+            for (const path of ['/office/customers/1', '/office/locations/1']) {
+                await page.goto(path);
+                await expect(page.locator('[data-office-width="detail"]')).toBeVisible();
+                expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+                await expect(page.locator('h1')).toHaveCount(1);
+
+                const columns = await page.locator('[data-office-detail-grid]').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
+                expect(columns).toBe(viewport.width >= 1280 ? 2 : 1);
+
+                if (viewport.width === 1920) {
+                    const width = await page.locator('[data-office-width="detail"]').evaluate((element) => element.getBoundingClientRect().width);
+                    expect(width).toBeGreaterThan(1500);
+                    expect(width).toBeLessThanOrEqual(1600);
+                }
+            }
+        }
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/office/customers/1');
+        const detailNav = page.getByRole('navigation', { name: 'On this page' });
+        await expect(detailNav.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '#overview');
+        await expect(detailNav.getByRole('link', { name: 'Locations' })).toHaveAttribute('href', '#locations');
+        await expect(detailNav.getByRole('link', { name: 'Contacts' })).toHaveAttribute('href', '#contacts');
+        await expect(page.locator('#overview')).toHaveCount(1);
+        await expect(page.locator('#locations')).toHaveCount(1);
+        await expect(page.locator('#contacts')).toHaveCount(1);
+        const shortControls = await page.locator('button, input, select, a.office-detail-nav-link, a.button-primary, a.button-secondary, a.office-record-back').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => element.getBoundingClientRect().height < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+        expect(shortControls).toEqual([]);
+        await expectAccessible(page);
+
+        await page.setViewportSize({ width: 1920, height: 1080 });
+        await page.goto('/office/locations/1');
+        await expect(page.locator('aside [data-office-primary-customers]')).toHaveAttribute('aria-current', 'page');
+        await expect(page.getByRole('link', { name: 'BETA Scenario A Customer' }).first()).toBeVisible();
+        await expectAccessible(page);
+
+        await page.getByRole('link', { name: 'BETA Scenario A Customer' }).first().focus();
+        const focusVisible = await page.evaluate(() => {
+            const style = getComputedStyle(document.activeElement);
+            return style.outlineStyle !== 'none' || style.boxShadow !== 'none';
+        });
+        expect(focusVisible).toBeTruthy();
+    });
 });
 
 test.describe('mobile beta', () => {
