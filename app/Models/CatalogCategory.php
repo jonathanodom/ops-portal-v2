@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['organization_id', 'parent_id', 'code', 'name', 'sort_order', 'active', 'created_by_id', 'updated_by_id'])]
+#[Fillable(['organization_id', 'parent_id', 'code', 'name', 'description', 'sort_order', 'active', 'created_by_id', 'updated_by_id'])]
 class CatalogCategory extends Model
 {
     protected function casts(): array

@@ -114,6 +114,25 @@ class CatalogFoundationTest extends TestCase
         $this->assertDatabaseHas('audit_events', ['organization_id' => $organization->id, 'event_type' => 'security.cross_organization_record_denied', 'subject_id' => $organization->id]);
     }
 
+    public function test_category_description_is_optional_searchable_editable_and_audited_without_its_value(): void
+    {
+        [$admin, , $organization] = $this->userWithRole('super_admin');
+        $description = 'Structured cabling, wire, and termination materials.';
+
+        $this->actingAs($admin)->get('/office/catalog/categories/create')->assertOk()->assertSee('Description')->assertSee('Briefly explain what belongs in this category.');
+        $this->actingAs($admin)->post('/office/catalog/categories', ['name' => 'Cabling', 'description' => $description, 'sort_order' => 10, 'active' => '1'])->assertRedirect()->assertSessionHasNoErrors();
+        $category = CatalogCategory::query()->where('organization_id', $organization->id)->where('code', 'cabling')->firstOrFail();
+        $this->assertSame($description, $category->description);
+        $this->actingAs($admin)->get('/office/catalog/categories?q=termination')->assertOk()->assertSee('Cabling');
+
+        $updated = 'Low-voltage cable and connectivity products.';
+        $this->actingAs($admin)->put("/office/catalog/categories/{$category->id}", ['name' => 'Cabling', 'code' => 'cabling', 'description' => $updated, 'sort_order' => 10, 'active' => '1'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame($updated, $category->fresh()->description);
+        $metadata = AuditEvent::query()->where('event_type', 'catalog.category_updated')->latest('id')->firstOrFail()->metadata;
+        $this->assertContains('description', $metadata['changed_fields']);
+        $this->assertStringNotContainsString($updated, json_encode($metadata, JSON_THROW_ON_ERROR));
+    }
+
     public function test_role_defaults_and_explicit_pricing_denial_are_enforced_server_side(): void
     {
         [$admin, $membership, $organization] = $this->userWithRole('super_admin');

@@ -19,6 +19,8 @@ Migration `2026_08_11_010000_create_catalog_product_tables` adds:
 - `catalog_products`
 - `catalog_product_purchase_units`
 
+Follow-up migration `2026_08_11_020000_add_description_to_catalog_categories` adds one nullable description column to the existing Category table so administrators can document and search the intended contents of each Category.
+
 No existing migration or operational table is changed. Both tables carry `organization_id`; mutable records use active/inactive state and have no hard-delete routes.
 
 Product quantities use fixed-point thousandths. Money remains unsigned integer cents. A Product can classify future tracking as standard, serialized, or lot/roll, but this creates no inventory quantity or transaction behavior.
@@ -77,14 +79,14 @@ The current workstation development connection is SQLite. The additive migration
 ## Automated validation
 
 - Checkpoint Product feature tests: 7 passed, 56 assertions.
-- Complete PHPUnit suite: 134 passed, 1,050 assertions.
+- Complete PHPUnit suite: 135 passed, 1,063 assertions.
 - Beta fixture validation: passed with 250 Customers, 400 Locations, 500 Service Tickets, 1,000 Visits, 200 Closeouts, and 500 media metadata records.
 - Beta hardening: 8 passed, 50 assertions.
 - Local five-run benchmark: Today p95 10.8 ms / 18 queries; Dispatch p95 21.1 ms / 16 queries; Ticket Detail p95 31.0 ms / 21 queries; Review Detail p95 31.7 ms / 26 queries; media first-byte p95 0.2 ms.
 - Playwright Chromium/axe: 8 passed, 8 expected opposite-project skips. Product coverage creates foot-based Cat6, adds a 250-foot Box conversion, and checks Product Catalog workspace behavior at 390, 768, 1,440, and 1,920 pixels with no serious/critical axe findings.
 - Composer validation: passed, strict. Composer audit: no advisories.
 - Pint: passed.
-- Compiled Blade syntax: 144 files passed.
+- Compiled Blade syntax: 153 files passed.
 - Vite production build: passed.
 - Git diff check: passed.
 

@@ -15,7 +15,7 @@ Phase 8 Checkpoints 1 and 2 implement the organization-scoped Catalog foundation
 
 ## Categories
 
-`catalog_categories` belongs to one Organization. A Category may have one top-level parent, but a child cannot itself become a parent. Categories are made inactive rather than deleted. Category codes are unique within an Organization.
+`catalog_categories` belongs to one Organization and includes an optional operational description. A Category may have one top-level parent, but a child cannot itself become a parent. Categories are made inactive rather than deleted. Category codes are unique within an Organization.
 
 Suggested categories are intentionally not demo-seeded. Each Organization owns its operational taxonomy.
 

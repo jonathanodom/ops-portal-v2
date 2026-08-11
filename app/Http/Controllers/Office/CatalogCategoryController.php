@@ -24,7 +24,7 @@ class CatalogCategoryController extends Controller
         Gate::authorize('viewAny', [CatalogCategory::class, $organization]);
         $categories = CatalogCategory::query()->forOrganization($organization->id)
             ->with('parent')->withCount(['children', 'services', 'products'])
-            ->when($request->filled('q'), fn ($query) => $query->where(fn ($query) => $query->where('name', 'like', '%'.$request->string('q').'%')->orWhere('code', 'like', '%'.$request->string('q').'%')))
+            ->when($request->filled('q'), fn ($query) => $query->where(fn ($query) => $query->where('name', 'like', '%'.$request->string('q').'%')->orWhere('code', 'like', '%'.$request->string('q').'%')->orWhere('description', 'like', '%'.$request->string('q').'%')))
             ->when($request->filled('status'), fn ($query) => $query->where('active', $request->string('status')->value() === 'active'))
             ->orderBy('sort_order')->orderBy('name')->paginate(25)->withQueryString();
 
@@ -81,6 +81,7 @@ class CatalogCategoryController extends Controller
         $request->merge(['code' => Str::slug((string) ($request->input('code') ?: $request->input('name')))]);
         $data = $request->validate([
             'name' => ['required', 'string', 'max:120'],
+            'description' => ['nullable', 'string', 'max:2000'],
             'code' => ['required', 'string', 'max:80', Rule::unique('catalog_categories')->where('organization_id', $organizationId)->ignore($category?->id)],
             'parent_id' => ['nullable', 'integer', Rule::exists('catalog_categories', 'id')->where('organization_id', $organizationId)->whereNull('parent_id')->where('active', true)],
             'sort_order' => ['required', 'integer', 'min:0', 'max:100000'],
