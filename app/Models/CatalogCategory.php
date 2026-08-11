@@ -41,6 +41,11 @@ class CatalogCategory extends Model
         return $this->hasMany(CatalogProduct::class, 'category_id');
     }
 
+    public function packages(): HasMany
+    {
+        return $this->hasMany(CatalogPackage::class, 'category_id');
+    }
+
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
     {
         return $query->where('organization_id', $organizationId);

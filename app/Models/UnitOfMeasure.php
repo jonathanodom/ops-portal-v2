@@ -38,6 +38,16 @@ class UnitOfMeasure extends Model
         return $this->hasMany(CatalogProductPurchaseUnit::class, 'purchase_uom_id');
     }
 
+    public function packages(): HasMany
+    {
+        return $this->hasMany(CatalogPackage::class, 'sales_uom_id');
+    }
+
+    public function packageComponents(): HasMany
+    {
+        return $this->hasMany(CatalogPackageComponent::class, 'component_uom_id');
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

@@ -284,7 +284,7 @@ test.describe('desktop beta', () => {
         await expect(invoiceNav.getByRole('link', { name: 'Payments' })).toHaveAttribute('href', '#payments');
     });
 
-    test('catalog services, products, purchase units, categories, and units follow the responsive workspace system', async ({ page }) => {
+    test('catalog services, products, packages, recipes, categories, and units follow the responsive workspace system', async ({ page }) => {
         test.setTimeout(90_000);
         await login(page, 'super_admin');
         const suffix = Date.now();
@@ -326,6 +326,24 @@ test.describe('desktop beta', () => {
         await expect(page.getByText('1 Box = 250 Feet')).toBeVisible();
         await expectAccessible(page);
 
+        await page.goto('/office/catalog/packages/create');
+        await page.getByLabel('Package code').fill(`ISH-TV-${suffix}`);
+        await page.getByLabel('Package name').fill('Integrated Smart Home TV Rough-In Browser Test');
+        await page.getByLabel('Sales unit').selectOption({ label: 'Location' });
+        await page.getByLabel('Default package price').fill('2499.00');
+        await page.getByRole('button', { name: 'Create package' }).click();
+        await expect(page.getByRole('heading', { name: 'Integrated Smart Home TV Rough-In Browser Test' })).toBeVisible();
+        const addProduct = page.getByRole('heading', { name: 'Add Product' }).locator('..');
+        await addProduct.getByLabel('Product', { exact: true }).selectOption({ label: `Blue Cat6 Browser Test (CAT6-BLUE-${suffix}) · Foot` });
+        await addProduct.getByLabel('Direct standard quantity', { exact: true }).fill('350');
+        await addProduct.getByRole('button', { name: 'Add Product' }).click();
+        await expect(page.getByRole('heading', { name: 'Blue Cat6 Browser Test' })).toBeVisible();
+        await page.getByLabel('Package quantity').fill('5');
+        await page.getByRole('button', { name: 'Calculate' }).click();
+        await expect(page.getByText('5 × Integrated Smart Home TV Rough-In Browser Test')).toBeVisible();
+        await expect(page.getByText('1750 Feet').first()).toBeVisible();
+        await expectAccessible(page);
+
         for (const viewport of [
             { width: 390, height: 844 },
             { width: 768, height: 1024 },
@@ -333,7 +351,7 @@ test.describe('desktop beta', () => {
             { width: 1920, height: 1080 },
         ]) {
             await page.setViewportSize(viewport);
-            for (const path of ['/office/catalog/services', '/office/catalog/products', '/office/catalog/categories', '/office/catalog/units']) {
+            for (const path of ['/office/catalog/services', '/office/catalog/products', '/office/catalog/packages', '/office/catalog/categories', '/office/catalog/units']) {
                 await page.goto(path);
                 await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
                 expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();

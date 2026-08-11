@@ -2,13 +2,13 @@
 
 ## Checkpoint status
 
-Phase 8 Checkpoints 1 and 2 implement the organization-scoped Catalog foundation, Services, Products, and Product-specific purchase-unit conversions. Packages, field/invoice selection, transactional snapshots, and customer subscriptions are not implemented yet.
+Phase 8 Checkpoints 1 through 3 implement the organization-scoped Catalog foundation, Services, Products, Product-specific purchase-unit conversions, and Packages with standard Product/Service recipes. Field/invoice selection, transactional snapshots, and customer subscriptions are not implemented yet.
 
 ## Catalog boundaries
 
 - A Service describes labor or a standardized customer outcome.
 - A Product describes a physical item with a base consumption unit, a contextual sales unit, and Product-specific purchase conversions.
-- A Package will describe one customer-facing sale with an internal Product/Service recipe in Checkpoint 3.
+- A Package describes one customer-facing sale with an internal Product/Service recipe.
 - A catalog definition is a current default. Checkpoint 4 will create immutable transaction snapshots when a definition is selected.
 - Manual invoice lines remain supported.
 - No quantity on hand, warehouse/truck stock, receiving, purchasing, proposal builder, project BOM allocation, or accounting integration exists in Phase 8.
@@ -47,6 +47,18 @@ Quantities use thousandths (`1000` = one whole unit). For wire sold and consumed
 
 The Product `tracking_type` (`standard`, `serialized`, or `lot_or_roll`) is classification metadata for later inventory design. It does not enable quantity on hand, stock movements, serial records, receiving, or warehouse/truck locations.
 
+## Packages and standard recipes
+
+`catalog_packages` stores organization/category ownership, Package code and name, separate customer/internal descriptions, sales UOM, flat or quote-required pricing, integer-cent default price, tax default, and active state. A Package is a sellable definition; it is not a stock item and cannot contain another Package in Checkpoint 3.
+
+`catalog_package_components` stores exactly one Product or Service source, its explicit recipe UOM, standard fixed-point quantity per one Package sales unit, optional Product waste in basis points, customer-visibility flag, ordering, internal notes, and active state. Product quantities may be entered directly or defined as a fixed-point pull count multiplied by a fixed-point standard allowance per pull. The resolved `quantity_millis` is persisted with the optional basis fields so forecasting has a direct quantity while the recipe still explains how that quantity was derived. Service components always use direct quantity. Product components use the Product base UOM; Service components use the Service sales UOM. Source and UOM IDs remain explicit so a later source edit cannot silently rewrite the current recipe.
+
+Recipe quantity is the expected estimating standard. Actual usage is a separate future execution record and must never overwrite `quantity_millis`. Deactivating a component removes it from current demand without deleting the recipe history.
+
+`PackageDemandCalculator` scales active components using checked integer arithmetic and deterministic half-up rounding. It returns Product standard demand, Product planning demand after component-specific waste, and Service demand. It does not create invoice lines, inventory transactions, job-cost records, or actual-consumption records.
+
+Integrated Smart Home TV Rough-In is represented as one Package sold per Location. Its recipe retains a 175-foot standard allowance per pull: two Blue Cat6 pulls, two Yellow Cat6 pulls, one 16/2 speaker-wire pull, and one 16/4 speaker-wire pull. The resolved per-location Product quantities are 350 ft, 350 ft, 175 ft, and 175 ft. Quantity five therefore produces standard demand of 1,750 ft, 1,750 ft, 875 ft, and 875 ft respectively while the future customer transaction remains five Package units.
+
 ## Services
 
 `catalog_services` stores organization/category ownership, a sales UOM, customer and internal descriptions, internal scope/exclusions, estimated duration, customer visibility, office-approval state, tax default, and active state.
@@ -68,7 +80,7 @@ Service add-ons are simple related-Service suggestions. They never add themselve
 
 ## Money and tax
 
-Catalog prices use unsigned integer cents. Input strings are converted without floating-point arithmetic. Catalog Services carry a taxable boolean; later invoice selection will snapshot this boolean while the existing Invoice continues supplying the organization tax rate in basis points.
+Catalog prices use unsigned integer cents. Input strings are converted without floating-point arithmetic. Catalog Services, Products, and Packages carry a taxable boolean; later invoice selection will snapshot this boolean while the existing Invoice continues supplying the organization tax rate in basis points.
 
 `CatalogPricingResolver` returns integer cents, requires a valid active Variant for variant pricing, and returns `null` for quote-required work. It does not calculate invoice discounts or tax; `InvoiceCalculator` remains canonical for financial totals.
 
@@ -89,7 +101,7 @@ Super Admin receives all capabilities. Dispatcher and Billing receive view/use, 
 
 Create, update, deactivation, Variant, add-on, and rejected cross-organization actions use the existing `audit_events` infrastructure. Metadata contains record IDs, state/model names, and changed field names—not descriptions or price-input strings.
 
-Catalog records have no hard-delete routes. Product and purchase-option deactivation preserves relationships and conversion history. Checkpoint 4 will snapshot catalog identity, description, unit price, tax behavior, selected Variant, and Package recipe so later catalog edits cannot change historical billing.
+Catalog records have no hard-delete routes. Product, purchase-option, Package, and recipe-component deactivation preserves relationships and standard history. Checkpoint 4 will snapshot catalog identity, description, unit price, tax behavior, selected Variant, and Package recipe so later catalog edits cannot change historical billing.
 
 ## Later checkpoints
 

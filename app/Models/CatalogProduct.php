@@ -43,6 +43,11 @@ class CatalogProduct extends Model
         return $this->hasMany(CatalogProductPurchaseUnit::class)->orderByDesc('is_default')->orderBy('label')->orderBy('id');
     }
 
+    public function packageComponents(): HasMany
+    {
+        return $this->hasMany(CatalogPackageComponent::class, 'catalog_product_id');
+    }
+
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
     {
         return $query->where('organization_id', $organizationId);

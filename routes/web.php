@@ -11,6 +11,8 @@ use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
 use App\Http\Controllers\Office\BillingSettingsController;
 use App\Http\Controllers\Office\CatalogCategoryController;
+use App\Http\Controllers\Office\CatalogPackageComponentController;
+use App\Http\Controllers\Office\CatalogPackageController;
 use App\Http\Controllers\Office\CatalogProductController;
 use App\Http\Controllers\Office\CatalogProductPurchaseUnitController;
 use App\Http\Controllers\Office\CatalogServiceAddonController;
@@ -193,6 +195,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/services/{service}', [CatalogServiceController::class, 'show'])->whereNumber('service')->name('services.show');
                 Route::get('/products', [CatalogProductController::class, 'index'])->name('products.index');
                 Route::get('/products/{product}', [CatalogProductController::class, 'show'])->whereNumber('product')->name('products.show');
+                Route::get('/packages', [CatalogPackageController::class, 'index'])->name('packages.index');
+                Route::get('/packages/{package}', [CatalogPackageController::class, 'show'])->whereNumber('package')->name('packages.show');
                 Route::get('/categories', [CatalogCategoryController::class, 'index'])->name('categories.index');
                 Route::get('/units', [UnitOfMeasureController::class, 'index'])->name('units.index');
                 Route::middleware('capability:catalog.manage')->group(function (): void {
@@ -209,6 +213,12 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                     Route::put('/products/{product}', [CatalogProductController::class, 'update'])->whereNumber('product')->name('products.update');
                     Route::post('/products/{product}/purchase-units', [CatalogProductPurchaseUnitController::class, 'store'])->whereNumber('product')->name('products.purchase-units.store');
                     Route::put('/products/{product}/purchase-units/{purchaseUnit}', [CatalogProductPurchaseUnitController::class, 'update'])->whereNumber(['product', 'purchaseUnit'])->name('products.purchase-units.update');
+                    Route::get('/packages/create', [CatalogPackageController::class, 'create'])->name('packages.create');
+                    Route::post('/packages', [CatalogPackageController::class, 'store'])->name('packages.store');
+                    Route::get('/packages/{package}/edit', [CatalogPackageController::class, 'edit'])->whereNumber('package')->name('packages.edit');
+                    Route::put('/packages/{package}', [CatalogPackageController::class, 'update'])->whereNumber('package')->name('packages.update');
+                    Route::post('/packages/{package}/components', [CatalogPackageComponentController::class, 'store'])->whereNumber('package')->name('packages.components.store');
+                    Route::put('/packages/{package}/components/{component}', [CatalogPackageComponentController::class, 'update'])->whereNumber(['package', 'component'])->name('packages.components.update');
                     Route::get('/categories/create', [CatalogCategoryController::class, 'create'])->name('categories.create');
                     Route::post('/categories', [CatalogCategoryController::class, 'store'])->name('categories.store');
                     Route::get('/categories/{category}/edit', [CatalogCategoryController::class, 'edit'])->whereNumber('category')->name('categories.edit');
