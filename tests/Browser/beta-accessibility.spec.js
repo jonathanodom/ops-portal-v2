@@ -284,7 +284,7 @@ test.describe('desktop beta', () => {
         await expect(invoiceNav.getByRole('link', { name: 'Payments' })).toHaveAttribute('href', '#payments');
     });
 
-    test('catalog services, variants, categories, and units follow the responsive workspace system', async ({ page }) => {
+    test('catalog services, products, purchase units, categories, and units follow the responsive workspace system', async ({ page }) => {
         test.setTimeout(90_000);
         await login(page, 'super_admin');
         const suffix = Date.now();
@@ -306,6 +306,26 @@ test.describe('desktop beta', () => {
         await expect(page.getByRole('heading', { name: '56–75 inch' })).toBeVisible();
         await expectAccessible(page);
 
+        await page.goto('/office/catalog/products/create');
+        await page.getByLabel('Product code').fill(`CAT6-BLUE-${suffix}`);
+        await page.getByLabel('Product name').fill('Blue Cat6 Browser Test');
+        await page.getByLabel('Base consumption unit').selectOption({ label: 'Foot (ft)' });
+        await page.getByLabel('Default sales unit').selectOption({ label: 'Foot (ft)' });
+        await page.getByLabel('Base units per sales unit').fill('1');
+        await page.getByLabel('Future inventory classification').selectOption('lot_or_roll');
+        await page.getByLabel('Default cost').fill('187.49');
+        await page.getByLabel('Cost covers base-unit quantity').fill('500');
+        await page.getByLabel('Default sell price').fill('0.95');
+        await page.getByRole('button', { name: 'Create product' }).click();
+        await expect(page.getByRole('heading', { name: 'Blue Cat6 Browser Test' })).toBeVisible();
+        await page.getByLabel('Purchase unit', { exact: true }).selectOption({ label: 'Box' });
+        await page.getByLabel('Label', { exact: true }).fill('250 ft box');
+        await page.getByLabel('Base-unit quantity', { exact: true }).fill('250');
+        await page.getByRole('button', { name: 'Add purchase unit' }).click();
+        await expect(page.getByRole('heading', { name: '250 ft box' })).toBeVisible();
+        await expect(page.getByText('1 Box = 250 Feet')).toBeVisible();
+        await expectAccessible(page);
+
         for (const viewport of [
             { width: 390, height: 844 },
             { width: 768, height: 1024 },
@@ -313,7 +333,7 @@ test.describe('desktop beta', () => {
             { width: 1920, height: 1080 },
         ]) {
             await page.setViewportSize(viewport);
-            for (const path of ['/office/catalog/services', '/office/catalog/categories', '/office/catalog/units']) {
+            for (const path of ['/office/catalog/services', '/office/catalog/products', '/office/catalog/categories', '/office/catalog/units']) {
                 await page.goto(path);
                 await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
                 expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();

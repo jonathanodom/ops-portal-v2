@@ -23,6 +23,21 @@ class UnitOfMeasure extends Model
         return $this->hasMany(CatalogService::class, 'sales_uom_id');
     }
 
+    public function baseProducts(): HasMany
+    {
+        return $this->hasMany(CatalogProduct::class, 'base_uom_id');
+    }
+
+    public function salesProducts(): HasMany
+    {
+        return $this->hasMany(CatalogProduct::class, 'default_sales_uom_id');
+    }
+
+    public function productPurchaseUnits(): HasMany
+    {
+        return $this->hasMany(CatalogProductPurchaseUnit::class, 'purchase_uom_id');
+    }
+
     public function organization(): BelongsTo
     {
         return $this->belongsTo(Organization::class);

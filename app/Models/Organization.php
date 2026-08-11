@@ -71,6 +71,11 @@ class Organization extends Model
         return $this->hasMany(CatalogService::class);
     }
 
+    public function catalogProducts(): HasMany
+    {
+        return $this->hasMany(CatalogProduct::class);
+    }
+
     public function brandAssets(): HasMany
     {
         return $this->hasMany(OrganizationBrandAsset::class);

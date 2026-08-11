@@ -2,12 +2,12 @@
 
 ## Checkpoint status
 
-Phase 8 Checkpoint 1 implements the organization-scoped Catalog foundation and Services domain. Products, purchase-unit conversions, Packages, field/invoice selection, transactional snapshots, and customer subscriptions are not implemented yet.
+Phase 8 Checkpoints 1 and 2 implement the organization-scoped Catalog foundation, Services, Products, and Product-specific purchase-unit conversions. Packages, field/invoice selection, transactional snapshots, and customer subscriptions are not implemented yet.
 
 ## Catalog boundaries
 
 - A Service describes labor or a standardized customer outcome.
-- A Product will describe a physical item with a base consumption unit and Product-specific purchase conversions in Checkpoint 2.
+- A Product describes a physical item with a base consumption unit, a contextual sales unit, and Product-specific purchase conversions.
 - A Package will describe one customer-facing sale with an internal Product/Service recipe in Checkpoint 3.
 - A catalog definition is a current default. Checkpoint 4 will create immutable transaction snapshots when a definition is selected.
 - Manual invoice lines remain supported.
@@ -29,7 +29,23 @@ Unit roles are contextual:
 - Purchase unit: how a Product is acquired, such as a 500-foot box.
 - Sales unit: how an item is sold, such as visit, hour, or location.
 
-A box or roll has no universal conversion. Checkpoint 2 will store Product-specific purchase-to-base quantities. No inventory balance is stored.
+A box or roll has no universal conversion. Product purchase options store Product-specific purchase-to-base quantities. No inventory balance is stored.
+
+## Products and purchase units
+
+`catalog_products` stores organization/category ownership, product code and optional SKU, manufacturer/model identity, separate customer/internal descriptions, base and default sales UOMs, fixed-point sales quantity, integer-cent cost/sell defaults, tax default, future tracking classification, and active state.
+
+Quantities use thousandths (`1000` = one whole unit). For wire sold and consumed by the foot, the base UOM and sales UOM are both Foot and the sales quantity is `1000`. A cost may cover a larger fixed-point base quantity, avoiding a floating-point or prematurely rounded per-foot cost.
+
+`catalog_product_purchase_units` records the Product, purchase UOM, label, exact base quantity in thousandths, optional vendor SKU, optional integer-cent pack cost, default flag, and active state. Exactly zero or one active option may be default. The default switch is applied transactionally with row locks. Examples:
+
+- 250-foot Cat6 box: `base_quantity_millis = 250000`
+- 500-foot Cat6 box: `base_quantity_millis = 500000`
+- 1,000-foot Cat6 box: `base_quantity_millis = 1000000`
+
+`CatalogProductConversion` uses checked integer arithmetic and deterministic half-up rounding for fractional purchase quantities. It never reads or writes inventory balances.
+
+The Product `tracking_type` (`standard`, `serialized`, or `lot_or_roll`) is classification metadata for later inventory design. It does not enable quantity on hand, stock movements, serial records, receiving, or warehouse/truck locations.
 
 ## Services
 
@@ -73,11 +89,11 @@ Super Admin receives all capabilities. Dispatcher and Billing receive view/use, 
 
 Create, update, deactivation, Variant, add-on, and rejected cross-organization actions use the existing `audit_events` infrastructure. Metadata contains record IDs, state/model names, and changed field names—not descriptions or price-input strings.
 
-Catalog records have no hard-delete routes. Deactivation preserves relationships. Checkpoint 4 will snapshot catalog identity, description, unit price, tax behavior, selected Variant, and Package recipe so later catalog edits cannot change historical billing.
+Catalog records have no hard-delete routes. Product and purchase-option deactivation preserves relationships and conversion history. Checkpoint 4 will snapshot catalog identity, description, unit price, tax behavior, selected Variant, and Package recipe so later catalog edits cannot change historical billing.
 
 ## Later checkpoints
 
-- Checkpoint 2 extends this foundation with Products, base/sales units, and Product-specific purchase conversions.
+- Checkpoint 2 extends this foundation with Products, base/sales units, protected cost/sell defaults, and Product-specific purchase conversions.
 - Checkpoint 3 adds Packages, standard recipes, optional waste, and the reusable Package demand calculator.
 - Checkpoint 4 adds permission-aware field/Office selection and immutable invoice snapshots while retaining manual lines.
 - Checkpoint 5 adds customer Service enrollment only after explicit approval. It will not add automatic recurring card charges without a separate approved payments design.

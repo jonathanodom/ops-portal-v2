@@ -140,9 +140,11 @@ Phase 7 payment architecture, encrypted Square/Stripe configuration, provider lo
 
 ## Phase 8 Products & Services Catalog
 
-Checkpoint 1 adds organization-scoped Categories, reusable Units of Measure, Services, explicit Service Variants, optional related-Service add-ons, and protected pricing management. Products, Packages, inventory quantities, invoice selection, and customer subscriptions remain later gated checkpoints.
+Checkpoints 1 and 2 add organization-scoped Categories, reusable Units of Measure, Services, explicit Service Variants, optional related-Service add-ons, Products, base/sales units, Product-specific purchase conversions, and protected cost/pricing management. Packages, inventory quantities, invoice selection, and customer subscriptions remain later gated checkpoints.
 
 See [Catalog Architecture](docs/CATALOG_ARCHITECTURE.md) for pricing models, UOM boundaries, permissions, audit behavior, historical snapshot plans, and the future Inventory/Purchasing extension boundary.
+
+See [Phase 8 Checkpoint 2](docs/PHASE_8_CHECKPOINT_2.md) for Product schema, wire conversion examples, preservation evidence, exact validation results, and rollback notes.
 
 ## Quality commands
 

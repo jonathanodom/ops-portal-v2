@@ -23,7 +23,7 @@ class CatalogCategoryController extends Controller
         $organization = $request->attributes->get('organization');
         Gate::authorize('viewAny', [CatalogCategory::class, $organization]);
         $categories = CatalogCategory::query()->forOrganization($organization->id)
-            ->with('parent')->withCount(['children', 'services'])
+            ->with('parent')->withCount(['children', 'services', 'products'])
             ->when($request->filled('q'), fn ($query) => $query->where(fn ($query) => $query->where('name', 'like', '%'.$request->string('q').'%')->orWhere('code', 'like', '%'.$request->string('q').'%')))
             ->when($request->filled('status'), fn ($query) => $query->where('active', $request->string('status')->value() === 'active'))
             ->orderBy('sort_order')->orderBy('name')->paginate(25)->withQueryString();
