@@ -50,9 +50,9 @@ class VisitArchiveTest extends TestCase
 
         $this->assertSoftDeleted('visits', ['id' => $visit->id, 'archived_by_id' => $admin->id]);
         $this->assertSame(0, $ticket->visits()->count());
-        $this->actingAs($admin)->get("/office/service-tickets/{$ticket->id}")->assertOk()->assertDontSee("Visit #{$visit->id}");
+        $this->actingAs($admin)->get("/office/service-tickets/{$ticket->id}")->assertOk()->assertDontSee($visit->displayNumber());
         $this->actingAs($admin)->get('/office/dispatch')->assertOk()->assertSee('0 visits');
-        $this->actingAs($admin)->get('/office/admin/archive')->assertOk()->assertSee("Visit #{$visit->id}")->assertSee('Duplicate return trip');
+        $this->actingAs($admin)->get('/office/admin/archive')->assertOk()->assertSee($visit->displayNumber())->assertSee('Duplicate return trip');
 
         $metadata = AuditEvent::query()->where('event_type', 'visit.archived')->firstOrFail()->metadata;
         $this->assertSame($visit->id, $metadata['visit_id']);

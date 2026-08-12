@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Domain\InvoiceWorkflow;
 use App\Models\Invoice;
+use App\Models\PaymentProviderConfiguration;
 use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -20,7 +21,13 @@ class InvoicePresentationController extends Controller
         Gate::authorize('present', $invoice);
         abort_unless($invoice->status === 'issued', 404);
 
-        return view('invoices.present', compact('invoice'));
+        $paymentProviders = PaymentProviderConfiguration::query()
+            ->forOrganization($invoice->organization_id)
+            ->whereIn('provider', ['square', 'stripe'])
+            ->get()
+            ->keyBy('provider');
+
+        return view('invoices.present', compact('invoice', 'paymentProviders'));
     }
 
     public function brand(Request $request, string $invoice): StreamedResponse

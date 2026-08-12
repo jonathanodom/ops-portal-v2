@@ -2,13 +2,13 @@
 
 namespace Database\Seeders;
 
+use App\Domain\VisitCreator;
 use App\Models\Closeout;
 use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
-use App\Models\Visit;
 use App\Models\VisitAssignment;
 use App\Models\VisitMedia;
 use Illuminate\Database\Seeder;
@@ -17,7 +17,7 @@ use Illuminate\Support\Str;
 
 class BetaVolumeSeeder extends Seeder
 {
-    public function run(): void
+    public function run(VisitCreator $visitCreator): void
     {
         $organization = Organization::query()->where('slug', 'beta-validation')->firstOrFail();
         $admin = OrganizationMembership::query()->where('organization_id', $organization->id)->whereHas('roles', fn ($query) => $query->where('key', 'super_admin'))->firstOrFail();
@@ -62,8 +62,8 @@ class BetaVolumeSeeder extends Seeder
                 $scheduledDay = $i <= 12
                     ? (($i + $j) % 7) + 1
                     : 30 + (($i + $j) % 335);
-                $visit = Visit::query()->create([
-                    'organization_id' => $organization->id, 'service_ticket_id' => $ticket->id, 'service_location_id' => $location->id,
+                $visit = $visitCreator->create($ticket, [
+                    'service_location_id' => $location->id,
                     'status' => 'assigned', 'timezone' => 'America/Chicago',
                     'scheduled_start_at' => now()->startOfDay()->addDays($scheduledDay)->addHours(13 + ($i % 5)),
                     'scheduled_end_at' => now()->startOfDay()->addDays($scheduledDay)->addHours(14 + ($i % 5)),

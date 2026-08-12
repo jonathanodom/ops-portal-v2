@@ -4,6 +4,7 @@ namespace Database\Seeders;
 
 use App\Domain\CatalogDefaults;
 use App\Domain\InvoiceWorkflow;
+use App\Domain\VisitCreator;
 use App\Models\BillingHandoff;
 use App\Models\BillingLaborRate;
 use App\Models\Closeout;
@@ -18,7 +19,6 @@ use App\Models\Role;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\User;
-use App\Models\Visit;
 use App\Models\VisitAssignment;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
@@ -26,7 +26,7 @@ use Illuminate\Support\Str;
 
 class BetaScenarioSeeder extends Seeder
 {
-    public function run(CatalogDefaults $catalogDefaults): void
+    public function run(CatalogDefaults $catalogDefaults, VisitCreator $visitCreator): void
     {
         $this->call(AccessControlSeeder::class);
         $password = (string) env('BETA_DEMO_PASSWORD');
@@ -85,8 +85,8 @@ class BetaScenarioSeeder extends Seeder
                 'priority' => $offset === 1 ? 'high' : 'normal', 'source' => 'internal', 'status' => 'open',
                 'created_by_id' => $memberships['dispatcher']->user_id, 'updated_by_id' => $memberships['dispatcher']->user_id,
             ]);
-            $visit = Visit::query()->create([
-                'organization_id' => $organization->id, 'service_ticket_id' => $ticket->id, 'service_location_id' => $location->id,
+            $visit = $visitCreator->create($ticket, [
+                'service_location_id' => $location->id,
                 'status' => 'assigned', 'timezone' => 'America/Chicago',
                 'scheduled_start_at' => now()->startOfDay()->addHours(14 + $offset),
                 'scheduled_end_at' => now()->startOfDay()->addHours(15 + $offset),

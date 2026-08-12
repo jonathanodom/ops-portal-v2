@@ -15,7 +15,7 @@
     <form method="GET" class="surface mt-6 grid gap-4 p-5 md:grid-cols-4">
         <div class="md:col-span-2">
             <label class="form-label" for="search">Visit, ticket, or customer</label>
-            <input class="form-input" id="search" name="search" value="{{ request('search') }}" placeholder="Visit ID, ticket number, title, or customer">
+            <input class="form-input" id="search" name="search" value="{{ request('search') }}" placeholder="Visit number, ticket number, title, or customer">
         </div>
         <div>
             <label class="form-label" for="status">Original status</label>
@@ -43,7 +43,7 @@
             <article class="surface p-5">
                 <div class="flex flex-wrap items-start justify-between gap-4">
                     <div>
-                        <p class="font-bold text-brand-blue">{{ $visit->serviceTicket->ticket_number }} · Visit #{{ $visit->id }}</p>
+                        <p class="font-bold text-brand-blue">{{ $visit->serviceTicket->ticket_number }} · {{ $visit->displayLabel() }}</p>
                         <h2 class="mt-1 text-lg font-bold">{{ $visit->serviceTicket->title }}</h2>
                         <p class="mt-1 text-sm text-slate-600">{{ $visit->serviceTicket->customer->display_name }} · {{ $visit->serviceLocation->name }}</p>
                         <p class="mt-2 text-sm"><span class="font-semibold">Original status:</span> {{ ucfirst(str_replace('_', ' ', $visit->status)) }}</p>

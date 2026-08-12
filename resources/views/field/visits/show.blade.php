@@ -315,7 +315,7 @@
     <section class="surface mt-4 p-5">
         <h2 class="font-bold">Ticket visit history</h2>
         @foreach ($visit->serviceTicket->visits as $history)
-            <p class="mt-2 text-sm">Visit #{{ $history->id }} · {{ ucfirst(str_replace('_', ' ', $history->status)) }}</p>
+            <p class="mt-2 text-sm">{{ $history->displayLabel() }} · {{ ucfirst(str_replace('_', ' ', $history->status)) }}</p>
         @endforeach
     </section>
     @if(($versions ?? collect())->count() > 1)

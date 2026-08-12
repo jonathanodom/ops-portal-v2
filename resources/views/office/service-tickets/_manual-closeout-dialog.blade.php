@@ -7,7 +7,7 @@
 <dialog id="manual-closeout-visit-{{ $visit->id }}" data-manual-closeout-dialog data-visit-id="{{ $visit->id }}" aria-labelledby="manual-closeout-title-{{ $visit->id }}" class="m-0 h-dvh w-dvw max-h-none max-w-none bg-canvas p-0 text-ink sm:m-auto sm:h-[92dvh] sm:w-[96vw] sm:rounded-xl sm:border sm:border-slate-300">
     <div class="flex h-full min-h-0 flex-col">
         <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-4 sm:p-5">
-            <div><p class="text-sm font-bold text-brand-blue">{{ $ticket->ticket_number }} · Visit #{{ $visit->id }}</p><h2 id="manual-closeout-title-{{ $visit->id }}" class="mt-1 text-xl font-bold text-slate-950">Administrative closeout</h2><p class="mt-1 text-sm text-slate-600">Resolved outcome · {{ ucfirst(str_replace('_', ' ', $visit->status)) }}</p></div>
+            <div><p class="text-sm font-bold text-brand-blue">{{ $ticket->ticket_number }} · {{ $visit->displayLabel() }}</p><h2 id="manual-closeout-title-{{ $visit->id }}" class="mt-1 text-xl font-bold text-slate-950">Administrative closeout</h2><p class="mt-1 text-sm text-slate-600">Resolved outcome · {{ ucfirst(str_replace('_', ' ', $visit->status)) }}</p></div>
             <button type="button" class="button-secondary min-w-11 px-3" data-manual-closeout-close aria-label="Close administrative closeout">Close</button>
         </header>
         <div class="min-h-0 flex-1 overflow-y-auto p-4 pb-[calc(2rem+env(safe-area-inset-bottom))] sm:p-6">

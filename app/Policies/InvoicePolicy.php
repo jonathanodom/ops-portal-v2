@@ -45,4 +45,9 @@ class InvoicePolicy
     {
         return $this->hasCapability($user, $invoice->organization_id, 'invoices.void');
     }
+
+    public function deleteDraft(User $user, Invoice $invoice): bool
+    {
+        return $this->hasCapability($user, $invoice->organization_id, 'invoices.delete_draft');
+    }
 }

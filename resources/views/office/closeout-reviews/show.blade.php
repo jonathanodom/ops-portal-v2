@@ -6,7 +6,7 @@
     @if(session('status'))<div class="mb-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900" role="status">{{ session('status') }}</div>@endif
     <x-form-errors />
     <a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">← Review queue</a>
-    <div class="mt-2 flex flex-wrap justify-between gap-4"><div><p class="font-bold text-brand-blue">{{ $visit->serviceTicket->ticket_number }} · Visit #{{ $visit->id }}</p><h1 class="mt-1 text-3xl font-bold">{{ $visit->serviceTicket->title }}</h1><p class="mt-2 text-slate-600">{{ $visit->serviceTicket->customer->display_name }} · {{ $visit->serviceLocation->name }}</p></div><div class="rounded-lg border border-orange-300 bg-orange-50 px-4 py-3"><p class="text-xs font-bold uppercase tracking-wide text-orange-800">Submitted outcome</p><p class="mt-1 font-bold text-orange-950">{{ ucfirst(str_replace('_',' ',$closeout->outcome)) }} · v{{ $closeout->version }}</p></div></div>
+    <div class="mt-2 flex flex-wrap justify-between gap-4"><div><p class="font-bold text-brand-blue">{{ $visit->serviceTicket->ticket_number }} · {{ $visit->displayLabel() }}</p><h1 class="mt-1 text-3xl font-bold">{{ $visit->serviceTicket->title }}</h1><p class="mt-2 text-slate-600">{{ $visit->serviceTicket->customer->display_name }} · {{ $visit->serviceLocation->name }}</p></div><div class="rounded-lg border border-orange-300 bg-orange-50 px-4 py-3"><p class="text-xs font-bold uppercase tracking-wide text-orange-800">Submitted outcome</p><p class="mt-1 font-bold text-orange-950">{{ ucfirst(str_replace('_',' ',$closeout->outcome)) }} · v{{ $closeout->version }}</p></div></div>
 
     <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <div class="space-y-6">
@@ -34,7 +34,7 @@
                             <ul class="mt-3 space-y-2 text-sm">
                                 @foreach($completionBlockingVisits as $blockingVisit)
                                     <li class="flex min-h-11 items-center justify-between gap-3 rounded-lg border border-amber-200 bg-white px-3">
-                                        <span class="font-semibold">Visit #{{ $blockingVisit->id }}@if($blockingVisit->return_of_visit_id) · Return of #{{ $blockingVisit->return_of_visit_id }}@endif</span>
+                                        <span class="font-semibold">{{ $blockingVisit->displayLabel() }}</span>
                                         <span>{{ ucfirst(str_replace('_', ' ', $blockingVisit->status)) }}</span>
                                     </li>
                                 @endforeach
@@ -44,7 +44,7 @@
                     @elseif($closeout->outcome === 'needs_return_trip')
                         <div class="mt-3 rounded-lg border border-blue-200 bg-blue-50 p-4 text-blue-950">
                             <p class="font-bold">This Service Ticket will remain open.</p>
-                            <p class="mt-1 text-sm">Approving this visit retains the planned return visit{{ $closeout->return_visit_id ? ' #'.$closeout->return_visit_id : '' }}.</p>
+                            <p class="mt-1 text-sm">Approving this visit retains {{ $closeout->returnVisit?->displayLabel() ?? 'the planned return visit' }}.</p>
                         </div>
                     @else
                         <p class="mt-3 text-sm text-slate-600">Approving this outcome applies its disposition but does not complete the Service Ticket.</p>

@@ -6,6 +6,7 @@ use App\Domain\InvoiceCalculator;
 use App\Domain\InvoiceWorkflow;
 use App\Jobs\DeleteUnusedOrganizationBrandAsset;
 use App\Jobs\RenderInvoicePdf;
+use App\Models\AuditEvent;
 use App\Models\BillingHandoff;
 use App\Models\BillingLaborRate;
 use App\Models\Capability;
@@ -17,6 +18,7 @@ use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
 use App\Models\OrganizationBrandAsset;
 use App\Models\OrganizationMembership;
+use App\Models\PaymentAttempt;
 use App\Models\PaymentProviderConfiguration;
 use App\Models\Role;
 use App\Models\ServiceLocation;
@@ -34,6 +36,7 @@ use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
+use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
 class Phase6InvoicingTest extends TestCase
@@ -65,6 +68,28 @@ class Phase6InvoicingTest extends TestCase
         $this->assertDatabaseHas('invoice_lines', ['invoice_id' => $invoice->id, 'source_part_proposal_id' => VisitPartProposal::query()->value('id'), 'unit_price_cents' => null]);
         $this->assertSame(21000, $invoice->fresh()->subtotal_cents);
         $this->assertSame($organization->id, $invoice->organization_id);
+        foreach ($invoice->lines->where('line_type', 'labor') as $line) {
+            $this->assertSame('Service Labor — Multi-visit repair', $line->description);
+            $this->assertStringNotContainsString('Visit #', $line->description);
+        }
+    }
+
+    public function test_ready_refreshes_exact_legacy_labor_description_and_blocks_manual_database_ids(): void
+    {
+        [, $admin, $handoff, $first] = $this->billingScenario(false);
+        $workflow = app(InvoiceWorkflow::class);
+        $invoice = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $line = $invoice->lines()->where('source_visit_id', $first->id)->firstOrFail();
+        $line->update(['description' => "Visit #{$first->id} — {$invoice->serviceTicket->ticket_number}: {$invoice->serviceTicket->title}"]);
+
+        $workflow->markReady($invoice, $admin);
+
+        $this->assertSame('Service Labor — Multi-visit repair', $line->fresh()->description);
+
+        $invoice->update(['status' => 'draft']);
+        $line->update(['description' => "Technician notes from Visit #{$first->id}"]);
+        $this->expectException(ValidationException::class);
+        $workflow->markReady($invoice, $admin);
     }
 
     public function test_invoice_numbers_are_organization_year_scoped_expand_and_roll_back_safely(): void
@@ -148,6 +173,23 @@ class Phase6InvoicingTest extends TestCase
         $this->assertDatabaseHas('invoice_acknowledgments', ['invoice_id' => $issued->id, 'contact_name' => 'Customer Contact', 'confirmed' => true]);
     }
 
+    public function test_positive_invoice_can_be_reviewed_and_issued_without_hosted_payment_provider(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        Queue::fake();
+        $workflow = app(InvoiceWorkflow::class);
+        $invoice = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+
+        $this->assertGreaterThan(0, $invoice->total_cents);
+        $this->assertNull($invoice->preferred_payment_provider);
+        $workflow->markReady($invoice, $admin);
+        $issued = $workflow->issue($invoice->fresh(), $admin, (string) Str::uuid());
+
+        $this->assertSame('issued', $issued->status);
+        $this->assertNull($issued->preferred_payment_provider);
+        Queue::assertPushed(RenderInvoicePdf::class);
+    }
+
     public function test_super_admin_can_void_and_reissue_without_changing_the_completed_ticket(): void
     {
         [, $admin, $handoff] = $this->billingScenario(false);
@@ -162,6 +204,85 @@ class Phase6InvoicingTest extends TestCase
         $this->assertSame('completed', $invoice->serviceTicket->fresh()->status);
         $this->assertSame($replacement->id, $handoff->fresh()->current_invoice_id);
         $this->assertSame($invoice->lines()->count(), $replacement->lines()->count());
+    }
+
+    public function test_super_admin_deletes_unissued_invoice_restores_handoff_and_can_recreate(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $workflow = app(InvoiceWorkflow::class);
+        $invoice = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}", [
+            'deletion_reason' => 'Accidental duplicate draft',
+            'confirm_invoice_number' => $invoice->invoice_number,
+            'confirm_delete' => 1,
+        ])->assertRedirect('/office/billing-handoffs');
+
+        $this->assertDatabaseMissing('invoices', ['id' => $invoice->id]);
+        $this->assertDatabaseMissing('invoice_lines', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseMissing('invoice_closeouts', ['invoice_id' => $invoice->id]);
+        $this->assertDatabaseHas('billing_handoffs', [
+            'id' => $handoff->id,
+            'status' => 'ready',
+            'current_invoice_id' => null,
+            'handed_off_by_id' => null,
+            'handed_off_at' => null,
+            'acknowledgment_token' => null,
+        ]);
+        $event = AuditEvent::query()->where('event_type', 'invoice.unissued_deleted')->firstOrFail();
+        $this->assertSame($handoff->id, $event->subject_id);
+        $this->assertSame($invoice->invoice_number, $event->metadata['invoice_number']);
+        $this->assertSame('Accidental duplicate draft', $event->metadata['deletion_reason']);
+
+        $replacement = $workflow->createFromHandoff($handoff->fresh(), $admin, (string) Str::uuid());
+        $this->assertNotSame($invoice->id, $replacement->id);
+        $this->assertSame($replacement->id, $handoff->fresh()->current_invoice_id);
+    }
+
+    public function test_ready_invoice_can_be_deleted_but_issued_void_and_reissue_drafts_cannot(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $workflow = app(InvoiceWorkflow::class);
+        $ready = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $ready->update(['status' => 'ready_for_review']);
+        $this->actingAs($admin)->delete("/office/invoices/{$ready->id}", [
+            'deletion_reason' => 'Wrong draft', 'confirm_invoice_number' => $ready->invoice_number, 'confirm_delete' => 1,
+        ])->assertSessionHasNoErrors();
+
+        $issued = $workflow->createFromHandoff($handoff->fresh(), $admin, (string) Str::uuid());
+        $issued->update(['status' => 'issued', 'issued_at' => now(), 'issue_token' => (string) Str::uuid()]);
+        $this->actingAs($admin)->delete("/office/invoices/{$issued->id}", [
+            'deletion_reason' => 'Not allowed', 'confirm_invoice_number' => $issued->invoice_number, 'confirm_delete' => 1,
+        ])->assertSessionHasErrors('invoice');
+        $replacement = $workflow->voidAndReissue($issued, $admin, 'Correction', (string) Str::uuid());
+        $this->actingAs($admin)->delete("/office/invoices/{$replacement->id}", [
+            'deletion_reason' => 'Not allowed', 'confirm_invoice_number' => $replacement->invoice_number, 'confirm_delete' => 1,
+        ])->assertSessionHasErrors('invoice');
+        $this->actingAs($admin)->delete("/office/invoices/{$issued->id}", [
+            'deletion_reason' => 'Not allowed', 'confirm_invoice_number' => $issued->invoice_number, 'confirm_delete' => 1,
+        ])->assertSessionHasErrors('invoice');
+    }
+
+    public function test_payment_attempt_authorization_and_organization_scope_guard_draft_deletion(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $configuration = PaymentProviderConfiguration::query()->create([
+            'organization_id' => $invoice->organization_id, 'public_id' => (string) Str::uuid(), 'provider' => 'stripe',
+            'environment' => 'test', 'enabled' => true, 'connection_status' => 'connected',
+        ]);
+        PaymentAttempt::query()->create([
+            'organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id,
+            'payment_provider_configuration_id' => $configuration->id, 'provider' => 'stripe', 'amount_cents' => 100,
+            'status' => 'open', 'idempotency_key' => (string) Str::uuid(), 'return_token_hash' => hash('sha256', Str::random(64)),
+        ]);
+        $payload = ['deletion_reason' => 'Not allowed', 'confirm_invoice_number' => $invoice->invoice_number, 'confirm_delete' => 1];
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}", $payload)->assertSessionHasErrors('invoice');
+
+        [$billing] = $this->userWithRole('billing', $invoice->organization);
+        $this->actingAs($billing)->delete("/office/invoices/{$invoice->id}", $payload)->assertForbidden();
+        [$outsider] = $this->userWithRole('super_admin');
+        $this->actingAs($outsider)->delete("/office/invoices/{$invoice->id}", $payload)->assertNotFound();
     }
 
     public function test_seeded_invoice_capability_matrix_and_cross_organization_scope(): void

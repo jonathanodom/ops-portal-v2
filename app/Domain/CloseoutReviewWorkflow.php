@@ -27,6 +27,7 @@ class CloseoutReviewWorkflow
     public function __construct(
         private readonly AuditRecorder $audit,
         private readonly ServiceTicketCompletion $ticketCompletion,
+        private readonly VisitCreator $visitCreator,
     ) {}
 
     public function returnForCorrection(Closeout $closeout, User $actor, string $reason, string $token): CloseoutReview
@@ -205,7 +206,7 @@ class CloseoutReviewWorkflow
         $visit = $closeout->visit;
         $ticket = $visit->serviceTicket;
         if ($disposition === 'follow_up' && ! $closeout->return_visit_id) {
-            $return = Visit::query()->create(['organization_id' => $visit->organization_id, 'service_ticket_id' => $visit->service_ticket_id, 'service_location_id' => $visit->service_location_id, 'return_of_visit_id' => $visit->id, 'status' => 'planned', 'timezone' => $visit->timezone, 'return_reason' => $reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
+            $return = $this->visitCreator->create($visit->serviceTicket, ['service_location_id' => $visit->service_location_id, 'return_of_visit_id' => $visit->id, 'status' => 'planned', 'timezone' => $visit->timezone, 'return_reason' => $reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
             $closeout->update(['return_visit_id' => $return->id]);
         } elseif ($disposition === 'hold') {
             $ticket->update(['status' => 'on_hold', 'status_reason' => $reason, 'status_changed_at' => now(), 'status_changed_by_id' => $actor->id, 'updated_by_id' => $actor->id]);

@@ -16,7 +16,10 @@ use Illuminate\Validation\ValidationException;
 
 class FieldExecution
 {
-    public function __construct(private readonly AuditRecorder $audit) {}
+    public function __construct(
+        private readonly AuditRecorder $audit,
+        private readonly VisitCreator $visitCreator,
+    ) {}
 
     public function draft(Visit $visit, User $actor): Closeout
     {
@@ -215,7 +218,7 @@ class FieldExecution
             $return = null;
             if ($c->outcome === 'needs_return_trip') {
                 $return = $c->return_visit_id ? Visit::query()->find($c->return_visit_id) : null;
-                $return ??= Visit::create(['organization_id' => $v->organization_id, 'service_ticket_id' => $v->service_ticket_id, 'service_location_id' => $v->service_location_id, 'return_of_visit_id' => $v->id, 'status' => 'planned', 'timezone' => $v->timezone, 'return_reason' => $c->return_reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
+                $return ??= $this->visitCreator->create($v->serviceTicket, ['service_location_id' => $v->service_location_id, 'return_of_visit_id' => $v->id, 'status' => 'planned', 'timezone' => $v->timezone, 'return_reason' => $c->return_reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
             } if ($c->outcome === 'on_hold') {
                 ServiceTicket::whereKey($v->service_ticket_id)->update(['status' => 'on_hold', 'status_reason' => $c->hold_reason, 'status_changed_at' => now(), 'status_changed_by_id' => $actor->id]);
             } $c->update(['status' => 'submitted', 'submitted_token' => $token, 'submitted_by_id' => $actor->id, 'submitted_at' => now(), 'acknowledged_at' => filled($c->representative_name) ? ($c->acknowledged_at ?? now()) : null, 'return_visit_id' => $return?->id]);

@@ -11,8 +11,8 @@ use App\Models\InvoiceAcknowledgment;
 use App\Models\InvoiceLine;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
-use App\Models\PaymentProviderConfiguration;
 use App\Models\User;
+use App\Models\Visit;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
 use App\Support\InvoiceNumber;
@@ -92,6 +92,7 @@ class InvoiceWorkflow
                 'updated_by_id' => $actor->id,
             ]);
             $sort = 10;
+            $multipleVisits = $closeouts->pluck('visit_id')->unique()->count() > 1;
             foreach ($closeouts as $closeout) {
                 $review = $closeout->reviews->firstWhere('decision', 'approved');
                 $invoice->closeoutLinks()->create(['organization_id' => $ticket->organization_id, 'visit_id' => $closeout->visit_id, 'closeout_id' => $closeout->id, 'closeout_review_id' => $review->id]);
@@ -101,7 +102,7 @@ class InvoiceWorkflow
                     $invoice->lines()->create([
                         'organization_id' => $ticket->organization_id,
                         'line_type' => 'labor',
-                        'description' => "Visit #{$closeout->visit_id} — {$ticket->ticket_number}: {$ticket->title}",
+                        'description' => $this->customerLaborDescription($closeout->visit, $ticket->title, $multipleVisits),
                         'quantity_millis' => intdiv($rounded * 1000, 60),
                         'unit' => 'hour',
                         'unit_price_cents' => $defaultRate?->hourly_rate_cents,
@@ -278,6 +279,7 @@ class InvoiceWorkflow
     public function markReady(Invoice $invoice, User $actor): Invoice
     {
         $this->assertEditable($invoice);
+        $this->refreshLegacyLaborDescriptions($invoice);
         $this->validateForIssue($invoice);
         $invoice->update(['status' => 'ready_for_review', 'updated_by_id' => $actor->id]);
         $this->audit->record($invoice->organization, $actor, 'invoice.ready_for_review', $invoice, ['invoice_id' => $invoice->id, 'from' => 'draft', 'to' => 'ready_for_review']);
@@ -305,6 +307,7 @@ class InvoiceWorkflow
                 $invoice->update($this->sellerSnapshot($organization));
             }
             $this->calculator->recalculate($invoice);
+            $this->refreshLegacyLaborDescriptions($invoice);
             $this->validateForIssue($invoice);
             $invoice->update([
                 'status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $actor->id, 'issue_token' => $token,
@@ -465,15 +468,33 @@ class InvoiceWorkflow
         if ($invoice->discount_type && blank($invoice->discount_reason)) {
             throw ValidationException::withMessages(['discount_reason' => 'A reason is required for a discount.']);
         }
-        if ($invoice->total_cents > 0) {
-            if (! in_array($invoice->preferred_payment_provider, ['square', 'stripe'], true)) {
-                throw ValidationException::withMessages(['preferred_payment_provider' => 'Choose Square or Stripe before issuing a positive-value invoice.']);
-            }
-            $provider = PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->where('provider', $invoice->preferred_payment_provider)->first();
-            if (! $provider?->isReady()) {
-                throw ValidationException::withMessages(['preferred_payment_provider' => 'The selected payment provider is not ready in Billing Settings.']);
+        $rawVisitDescription = $invoice->lines()->whereNotNull('source_visit_id')->get()
+            ->first(fn (InvoiceLine $line): bool => str_contains($line->description, 'Visit #'.$line->source_visit_id));
+        if ($rawVisitDescription) {
+            throw ValidationException::withMessages(['lines' => 'Remove the internal Visit database ID from customer-facing invoice line descriptions before issue.']);
+        }
+    }
+
+    private function refreshLegacyLaborDescriptions(Invoice $invoice): void
+    {
+        $lines = $invoice->lines()->where('line_type', 'labor')->whereNotNull('source_visit_id')->with('sourceVisit')->get();
+        $multipleVisits = $lines->pluck('source_visit_id')->unique()->count() > 1;
+        foreach ($lines as $line) {
+            $legacy = "Visit #{$line->source_visit_id} — {$invoice->serviceTicket->ticket_number}: {$invoice->serviceTicket->title}";
+            if ($line->description === $legacy && $line->sourceVisit) {
+                $line->update(['description' => $this->customerLaborDescription($line->sourceVisit, $invoice->serviceTicket->title, $multipleVisits)]);
             }
         }
+    }
+
+    private function customerLaborDescription(Visit $visit, string $ticketTitle, bool $includeDate): string
+    {
+        $description = 'Service Labor — '.$ticketTitle;
+        if ($includeDate && $visit->scheduledStartLocal()) {
+            $description .= ' — '.$visit->scheduledStartLocal()->format('M j, Y');
+        }
+
+        return $description;
     }
 
     private function quantityToMillis(string $value): int

@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\VisitCreator;
 use Carbon\CarbonInterface;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
@@ -12,7 +13,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
-    'organization_id', 'service_ticket_id', 'service_location_id', 'return_of_visit_id', 'current_closeout_id',
+    'organization_id', 'service_ticket_id', 'ticket_visit_number', 'service_location_id', 'return_of_visit_id', 'current_closeout_id',
     'status', 'timezone', 'scheduled_start_at', 'scheduled_end_at', 'en_route_at',
     'en_route_by_id', 'on_site_at', 'on_site_by_id', 'canceled_at', 'canceled_by_id',
     'cancellation_reason', 'return_reason', 'scheduled_by_id', 'created_by_id', 'updated_by_id',
@@ -21,6 +22,15 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 class Visit extends Model
 {
     use HasFactory, SoftDeletes;
+
+    protected static function booted(): void
+    {
+        static::creating(function (Visit $visit): void {
+            if (! $visit->ticket_visit_number) {
+                app(VisitCreator::class)->assignNumber($visit);
+            }
+        });
+    }
 
     protected function casts(): array
     {
@@ -92,5 +102,25 @@ class Visit extends Model
     public function scheduledEndLocal(): ?CarbonInterface
     {
         return $this->scheduled_end_at?->copy()->timezone($this->timezone);
+    }
+
+    public function displayNumber(): string
+    {
+        return 'Visit '.$this->ticket_visit_number;
+    }
+
+    public function displayLabel(): string
+    {
+        $label = $this->displayNumber();
+        if ($this->return_of_visit_id) {
+            $sourceNumber = $this->relationLoaded('returnOfVisit')
+                ? $this->returnOfVisit?->ticket_visit_number
+                : $this->returnOfVisit()->value('ticket_visit_number');
+            if ($sourceNumber) {
+                $label .= ' · Return of Visit '.$sourceNumber;
+            }
+        }
+
+        return $label;
     }
 }
