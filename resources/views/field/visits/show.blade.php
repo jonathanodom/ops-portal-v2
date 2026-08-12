@@ -264,15 +264,28 @@
             </section>
 
             <section class="surface mt-4 p-5">
-                <h2 class="font-bold">Parts / equipment</h2>
+                <div class="flex flex-wrap items-start justify-between gap-3">
+                    <div><h2 class="font-bold">Catalog items / parts &amp; equipment</h2><p class="mt-1 text-sm text-slate-600">Select a standard Catalog item or record a custom proposal.</p></div>
+                    @if($activeMembership->hasCapability('catalog.use'))
+                        <x-catalog-picker
+                            :id="'field-catalog-'.$visit->id"
+                            :action="route('field.visits.catalog-items.store', $visit)"
+                            :services="$catalogServices ?? collect()"
+                            :products="$catalogProducts ?? collect()"
+                            :packages="$catalogPackages ?? collect()"
+                            :field-mode="true"
+                        />
+                    @endif
+                </div>
                 @foreach ($activeParts as $part)
                     <div class="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-slate-200 pt-3">
-                        <p><span class="font-semibold">{{ $part->description }}</span><br><span class="text-sm text-slate-600">{{ $part->quantity }} {{ $part->unit }} · {{ ucfirst(str_replace('_', ' ', $part->billing_treatment)) }}</span></p>
+                        <p><span class="font-semibold">{{ $part->catalog_name_snapshot ?: $part->description }}</span>@if($part->catalog_item_type)<span class="ml-2 status-active">{{ ucfirst($part->catalog_item_type) }}</span>@endif<br><span class="text-sm text-slate-600">{{ $part->catalog_quantity_millis ? rtrim(rtrim(number_format($part->catalog_quantity_millis / 1000, 3, '.', ''), '0'), '.') : $part->quantity }} {{ $part->unit }} · {{ ucfirst(str_replace('_', ' ', $part->billing_treatment)) }}</span></p>
                         <form method="POST" action="{{ route('field.visits.parts.remove', [$visit, $part]) }}">@csrf @method('DELETE')<button class="button-secondary">Remove</button></form>
                     </div>
                 @endforeach
                 <form method="POST" action="{{ route('field.visits.parts.store', $visit) }}" class="mt-4 space-y-3">
                     @csrf
+                    <h3 class="font-bold">Add custom proposal</h3>
                     <label class="form-label" for="part_description">Description</label><input class="form-input" id="part_description" name="description" required>
                     <label class="form-label" for="quantity">Quantity</label><input class="form-input" id="quantity" type="number" step=".01" name="quantity" required>
                     <label class="form-label" for="unit">Unit</label><input class="form-input" id="unit" name="unit">

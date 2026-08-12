@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Field;
 
+use App\Domain\CatalogLineSnapshotFactory;
 use App\Domain\FieldExecution;
 use App\Http\Controllers\Controller;
 use App\Jobs\DeleteRemovedVisitMedia;
@@ -122,6 +123,48 @@ class ExecutionController extends Controller
         return back()->with('status', 'Part proposal added.');
     }
 
+    public function addCatalogItem(Request $request, string $visit, FieldExecution $flow, CatalogLineSnapshotFactory $snapshots): RedirectResponse
+    {
+        abort_unless($request->attributes->get('membership')->hasCapability('catalog.use'), 403);
+        $visit = $this->writable($request, $visit);
+        $closeout = $flow->draft($visit, $request->user());
+        abort_if($closeout->status !== 'draft', 422);
+        $data = $request->validate([
+            'catalog_item' => ['required', 'regex:/^(service|product|package):\d+$/'],
+            'catalog_service_variant_id' => ['nullable', 'integer'],
+            'catalog_quantity' => ['required', 'regex:/^\d{1,7}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'],
+            'billing_treatment' => ['required', Rule::in(array_keys(config('field_execution.billing_treatments')))],
+            'technician_note' => ['nullable', 'string', 'max:5000'],
+        ]);
+        [$type, $itemId] = explode(':', $data['catalog_item'], 2);
+        $quantityMillis = $this->decimalToMillis($data['catalog_quantity']);
+        $snapshot = $snapshots->create($visit->organization_id, $type, (int) $itemId, $quantityMillis, filled($data['catalog_service_variant_id'] ?? null) ? (int) $data['catalog_service_variant_id'] : null);
+        $proposal = VisitPartProposal::query()->create($snapshot + [
+            'organization_id' => $visit->organization_id,
+            'visit_id' => $visit->id,
+            'closeout_id' => $closeout->id,
+            'proposed_by_id' => $request->user()->id,
+            'description' => $snapshot['catalog_name_snapshot'],
+            'quantity' => number_format($quantityMillis / 1000, 2, '.', ''),
+            'unit' => $snapshot['catalog_unit_name_snapshot'],
+            'billing_treatment' => $data['billing_treatment'],
+            'technician_note' => $data['technician_note'] ?? null,
+            'catalog_selected_by_id' => $request->user()->id,
+            'catalog_selected_at' => now(),
+        ]);
+        app(AuditRecorder::class)->record($request->attributes->get('organization'), $request->user(), 'catalog.field_item_selected', $proposal, [
+            'visit_id' => $visit->id,
+            'closeout_id' => $closeout->id,
+            'proposal_id' => $proposal->id,
+            'catalog_item_type' => $type,
+            'catalog_source_id' => (int) $itemId,
+            'catalog_variant_id' => $snapshot['catalog_service_variant_id'] ?? null,
+            'quantity_millis' => $quantityMillis,
+        ]);
+
+        return back()->with('status', 'Catalog item added to the closeout proposal.');
+    }
+
     public function removePart(Request $r, string $visit, string $part): RedirectResponse
     {
         $v = $this->writable($r, $visit);
@@ -193,5 +236,12 @@ class ExecutionController extends Controller
         }$flow->submit($v, $c, $r->user(), $d['submission_token']);
 
         return back()->with('status', 'Closeout submitted for office review.');
+    }
+
+    private function decimalToMillis(string $value): int
+    {
+        [$whole, $decimal] = array_pad(explode('.', $value, 2), 2, '');
+
+        return ((int) $whole * 1000) + (int) str_pad(substr($decimal, 0, 3), 3, '0');
     }
 }

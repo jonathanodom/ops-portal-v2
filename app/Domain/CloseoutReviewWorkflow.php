@@ -65,7 +65,15 @@ class CloseoutReviewWorkflow
                 'last_saved_by_id' => $actor->id,
             ]);
             $closeout->parts()->whereNull('removed_at')->each(function (VisitPartProposal $part) use ($next): void {
-                $next->parts()->create([
+                $next->parts()->create(Arr::only($part->getAttributes(), [
+                    'catalog_item_type', 'catalog_service_id', 'catalog_service_variant_id',
+                    'catalog_product_id', 'catalog_package_id', 'catalog_code_snapshot',
+                    'catalog_name_snapshot', 'catalog_description_snapshot',
+                    'catalog_unit_code_snapshot', 'catalog_unit_name_snapshot',
+                    'catalog_quantity_millis', 'catalog_original_unit_price_cents',
+                    'catalog_unit_price_cents', 'catalog_taxable',
+                    'catalog_selected_by_id', 'catalog_selected_at',
+                ]) + ['catalog_package_recipe_snapshot' => $part->catalog_package_recipe_snapshot] + [
                     'organization_id' => $part->organization_id,
                     'visit_id' => $part->visit_id,
                     'source_proposal_id' => $part->id,

@@ -2,10 +2,14 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\CatalogLineSnapshotFactory;
 use App\Domain\InvoiceWorkflow;
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\BillingLaborRate;
+use App\Models\CatalogPackage;
+use App\Models\CatalogProduct;
+use App\Models\CatalogService;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\PaymentProviderConfiguration;
@@ -31,8 +35,12 @@ class InvoiceController extends Controller
         }
         $rates = BillingLaborRate::query()->forOrganization($invoice->organization_id)->where('active', true)->orderByDesc('is_default')->orderBy('name')->get();
         $paymentProviders = PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->whereIn('provider', ['square', 'stripe'])->get()->keyBy('provider');
+        $canUseCatalog = $request->attributes->get('membership')->hasCapability('catalog.use');
+        $catalogServices = $canUseCatalog ? CatalogService::query()->forOrganization($invoice->organization_id)->where('active', true)->with(['salesUom', 'variants' => fn ($query) => $query->where('active', true)])->orderBy('name')->get() : collect();
+        $catalogProducts = $canUseCatalog ? CatalogProduct::query()->forOrganization($invoice->organization_id)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get() : collect();
+        $catalogPackages = $canUseCatalog ? CatalogPackage::query()->forOrganization($invoice->organization_id)->where('active', true)->with('salesUom')->orderBy('name')->get() : collect();
 
-        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders'));
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
@@ -76,6 +84,24 @@ class InvoiceController extends Controller
         return back()->with('status', 'Invoice line added.');
     }
 
+    public function storeCatalogLine(Request $request, string $invoice, InvoiceWorkflow $workflow, CatalogLineSnapshotFactory $snapshots): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        abort_unless($request->attributes->get('membership')->hasCapability('catalog.use'), 403);
+        $data = $request->validate([
+            'catalog_item' => ['required', 'regex:/^(service|product|package):\d+$/'],
+            'catalog_service_variant_id' => ['nullable', 'integer'],
+            'catalog_quantity' => ['required', 'regex:/^\d{1,7}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'],
+        ]);
+        [$type, $itemId] = explode(':', $data['catalog_item'], 2);
+        $quantityMillis = $this->decimalToScaled($data['catalog_quantity'], 1000);
+        $snapshot = $snapshots->create($invoice->organization_id, $type, (int) $itemId, $quantityMillis, filled($data['catalog_service_variant_id'] ?? null) ? (int) $data['catalog_service_variant_id'] : null);
+        $workflow->addCatalogLine($invoice, $request->user(), $snapshot);
+
+        return back()->with('status', 'Catalog item added with an immutable source snapshot.');
+    }
+
     public function updateLine(Request $request, string $invoice, string $line, InvoiceWorkflow $workflow): RedirectResponse
     {
         $invoice = $this->invoice($request, $invoice);
@@ -89,6 +115,9 @@ class InvoiceController extends Controller
         }
         if ($line->source_part_proposal_id && $values['billing_treatment'] !== $line->billing_treatment && blank($values['override_reason'])) {
             return back()->withErrors(['override_reason' => 'A reason is required to change source billing treatment.'])->withInput();
+        }
+        if ($line->catalog_item_type && $values['unit_price_cents'] !== $line->unit_price_cents && blank($values['override_reason'])) {
+            return back()->withErrors(['override_reason' => 'A reason is required to override Catalog pricing.'])->withInput();
         }
         $workflow->updateLine($invoice, $line, $request->user(), $values);
 

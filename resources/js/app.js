@@ -204,6 +204,74 @@ document.querySelectorAll('[data-copy-target]').forEach((button) => button.addEv
     button.textContent = 'Copied';
 }));
 
+document.querySelectorAll('[data-catalog-picker]').forEach((picker) => {
+    const dialog = picker.querySelector('[data-catalog-dialog]');
+    const launcher = picker.querySelector('[data-catalog-dialog-open]');
+    const form = picker.querySelector('[data-catalog-form]');
+    const search = picker.querySelector('[data-catalog-search]');
+    const item = picker.querySelector('[data-catalog-item]');
+    const status = picker.querySelector('[data-catalog-status]');
+    const variantWrap = picker.querySelector('[data-catalog-variant-wrap]');
+    const variant = picker.querySelector('[data-catalog-variant]');
+    let dirty = false;
+    let submitting = false;
+
+    const updateVariant = () => {
+        const selected = item?.selectedOptions[0];
+        const serviceId = selected?.dataset.serviceId;
+        const choices = [...(variant?.options ?? [])].filter((option) => option.value);
+        choices.forEach((option) => {
+            const available = Boolean(serviceId) && option.dataset.serviceId === serviceId;
+            option.hidden = !available;
+            option.disabled = !available;
+        });
+        const hasVariants = choices.some((option) => !option.disabled);
+        variantWrap.hidden = !hasVariants;
+        if (!hasVariants || variant?.selectedOptions[0]?.disabled) variant.value = '';
+    };
+
+    const filter = () => {
+        const query = search.value.trim().toLowerCase();
+        let count = 0;
+        [...item.options].forEach((option) => {
+            if (!option.value) return;
+            const matches = !query || option.dataset.search.includes(query);
+            option.hidden = !matches;
+            option.disabled = !matches;
+            if (matches) count += 1;
+        });
+        if (item.selectedOptions[0]?.disabled) item.value = '';
+        status.textContent = query ? `${count} matching Catalog item${count === 1 ? '' : 's'}.` : `${count} active Catalog item${count === 1 ? '' : 's'} available.`;
+        updateVariant();
+    };
+
+    const close = () => {
+        if (!submitting && dirty && !window.confirm('Discard this Catalog selection?')) return;
+        dialog.close();
+        launcher?.focus();
+    };
+
+    launcher?.addEventListener('click', () => {
+        dirty = false;
+        submitting = false;
+        dialog.showModal();
+        filter();
+        requestAnimationFrame(() => search?.focus());
+    });
+    picker.querySelectorAll('[data-catalog-dialog-close]').forEach((button) => button.addEventListener('click', close));
+    dialog?.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+    form?.addEventListener('input', () => dirty = true);
+    form?.addEventListener('submit', () => {
+        submitting = true;
+        dirty = false;
+    });
+    search?.addEventListener('input', filter);
+    item?.addEventListener('change', updateVariant);
+});
+
 const customerPicker = document.querySelector('[data-ticket-customer-picker]');
 if (customerPicker) {
     const searchInput = customerPicker.querySelector('#customer_search');

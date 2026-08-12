@@ -128,6 +128,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::middleware('capability:invoices.manage')->group(function (): void {
                 Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->whereNumber('invoice')->name('invoices.update');
                 Route::post('/invoices/{invoice}/lines', [InvoiceController::class, 'storeLine'])->whereNumber('invoice')->name('invoices.lines.store');
+                Route::post('/invoices/{invoice}/catalog-lines', [InvoiceController::class, 'storeCatalogLine'])->whereNumber('invoice')->middleware('capability:catalog.use')->name('invoices.catalog-lines.store');
                 Route::put('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'updateLine'])->whereNumber(['invoice', 'line'])->name('invoices.lines.update');
                 Route::post('/invoices/{invoice}/proposals/{part}', [InvoiceController::class, 'includeProposal'])->whereNumber(['invoice', 'part'])->name('invoices.proposals.include');
                 Route::post('/invoices/{invoice}/ready', [InvoiceController::class, 'ready'])->whereNumber('invoice')->name('invoices.ready');
@@ -256,6 +257,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/visits/{visit}/timer', [ExecutionController::class, 'timer'])->name('visits.timer');
             Route::put('/visits/{visit}/time/{entry}', [ExecutionController::class, 'updateTime'])->name('visits.time.update');
             Route::post('/visits/{visit}/parts', [ExecutionController::class, 'addPart'])->name('visits.parts.store');
+            Route::post('/visits/{visit}/catalog-items', [ExecutionController::class, 'addCatalogItem'])->middleware('capability:catalog.use')->name('visits.catalog-items.store');
             Route::delete('/visits/{visit}/parts/{part}', [ExecutionController::class, 'removePart'])->name('visits.parts.remove');
             Route::post('/visits/{visit}/media', [ExecutionController::class, 'upload'])->name('visits.media.store');
             Route::delete('/visits/{visit}/media/{media}', [ExecutionController::class, 'removeMedia'])->name('visits.media.remove');

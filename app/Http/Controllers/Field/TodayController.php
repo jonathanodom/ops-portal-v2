@@ -5,6 +5,9 @@ namespace App\Http\Controllers\Field;
 use App\Domain\FieldExecution;
 use App\Domain\ServiceTicketWorkflow;
 use App\Http\Controllers\Controller;
+use App\Models\CatalogPackage;
+use App\Models\CatalogProduct;
+use App\Models\CatalogService;
 use App\Models\Closeout;
 use App\Models\OrganizationMembership;
 use App\Models\Visit;
@@ -50,8 +53,16 @@ class TodayController extends Controller
 
         $versions = Closeout::query()->where('visit_id', $visit->id)->where('organization_id', $visit->organization_id)
             ->with(['reviews.reviewer', 'media', 'parts'])->orderBy('version')->get();
+        $catalogServices = collect();
+        $catalogProducts = collect();
+        $catalogPackages = collect();
+        if ($request->attributes->get('membership')->hasCapability('catalog.use')) {
+            $catalogServices = CatalogService::query()->forOrganization($visit->organization_id)->where('active', true)->with(['salesUom', 'variants' => fn ($query) => $query->where('active', true)])->orderBy('name')->get();
+            $catalogProducts = CatalogProduct::query()->forOrganization($visit->organization_id)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get();
+            $catalogPackages = CatalogPackage::query()->forOrganization($visit->organization_id)->where('active', true)->with('salesUom')->orderBy('name')->get();
+        }
 
-        return view('field.visits.show', compact('visit', 'versions'));
+        return view('field.visits.show', compact('visit', 'versions', 'catalogServices', 'catalogProducts', 'catalogPackages'));
     }
 
     public function transition(Request $request, string $visit, ServiceTicketWorkflow $workflow, FieldExecution $execution): RedirectResponse

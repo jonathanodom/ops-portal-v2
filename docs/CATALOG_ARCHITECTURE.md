@@ -2,14 +2,14 @@
 
 ## Checkpoint status
 
-Phase 8 Checkpoints 1 through 3 implement the organization-scoped Catalog foundation, Services, Products, Product-specific purchase-unit conversions, and Packages with standard Product/Service recipes. Field/invoice selection, transactional snapshots, and customer subscriptions are not implemented yet.
+Phase 8 Checkpoints 1 through 4 implement the organization-scoped Catalog foundation, Services, Products, Product-specific purchase-unit conversions, Packages with standard Product/Service recipes, permission-aware field selection, invoice selection, and immutable transactional snapshots. Customer Service enrollment remains unimplemented pending explicit Checkpoint 5 approval.
 
 ## Catalog boundaries
 
 - A Service describes labor or a standardized customer outcome.
 - A Product describes a physical item with a base consumption unit, a contextual sales unit, and Product-specific purchase conversions.
 - A Package describes one customer-facing sale with an internal Product/Service recipe.
-- A catalog definition is a current default. Checkpoint 4 will create immutable transaction snapshots when a definition is selected.
+- A catalog definition is a current default. Field proposals and Invoice Lines retain immutable source snapshots when a definition is selected.
 - Manual invoice lines remain supported.
 - No quantity on hand, warehouse/truck stock, receiving, purchasing, proposal builder, project BOM allocation, or accounting integration exists in Phase 8.
 
@@ -55,7 +55,7 @@ The Product `tracking_type` (`standard`, `serialized`, or `lot_or_roll`) is clas
 
 Recipe quantity is the expected estimating standard. Actual usage is a separate future execution record and must never overwrite `quantity_millis`. Deactivating a component removes it from current demand without deleting the recipe history.
 
-`PackageDemandCalculator` scales active components using checked integer arithmetic and deterministic half-up rounding. It returns Product standard demand, Product planning demand after component-specific waste, and Service demand. It does not create invoice lines, inventory transactions, job-cost records, or actual-consumption records.
+`PackageDemandCalculator` scales active components using checked integer arithmetic and deterministic half-up rounding. It returns Product standard demand, Product planning demand after component-specific waste, and Service demand. `CatalogLineSnapshotFactory` uses that result when a Package is selected so the customer transaction remains one Package line while the internal recipe and expected demand become immutable transaction metadata. Neither service creates inventory transactions, job-cost records, or actual-consumption records.
 
 Integrated Smart Home TV Rough-In is represented as one Package sold per Location. Its recipe retains a 175-foot standard allowance per pull: two Blue Cat6 pulls, two Yellow Cat6 pulls, one 16/2 speaker-wire pull, and one 16/4 speaker-wire pull. The resolved per-location Product quantities are 350 ft, 350 ft, 175 ft, and 175 ft. Quantity five therefore produces standard demand of 1,750 ft, 1,750 ft, 875 ft, and 875 ft respectively while the future customer transaction remains five Package units.
 
@@ -82,7 +82,17 @@ Service add-ons are simple related-Service suggestions. They never add themselve
 
 Catalog prices use unsigned integer cents. Input strings are converted without floating-point arithmetic. Catalog Services, Products, and Packages carry a taxable boolean; later invoice selection will snapshot this boolean while the existing Invoice continues supplying the organization tax rate in basis points.
 
-`CatalogPricingResolver` returns integer cents, requires a valid active Variant for variant pricing, and returns `null` for quote-required work. It does not calculate invoice discounts or tax; `InvoiceCalculator` remains canonical for financial totals.
+`CatalogPricingResolver` returns integer cents, requires a valid active Variant for variant pricing, and returns `null` for quote-required work. `CatalogLineSnapshotFactory` copies that result, source identity, customer description, UOM, tax default, selected Variant, and optional Package recipe into field/invoice snapshot columns. It does not calculate invoice discounts or tax; `InvoiceCalculator` remains canonical for financial totals.
+
+## Field and Invoice integration
+
+The field closeout workspace and editable Office Invoice use the same responsive Catalog picker. It is search-first, supports explicit Service Variants and fixed-point quantity, and is available only with `catalog.use` in an already-authorized workflow.
+
+Field selection extends `visit_part_proposals`, which already participates in closeout correction lineage, reviewer treatment/quantity adjustments, and ticket-wide invoice generation. Catalog-selected proposals add immutable typed snapshot columns; custom proposals retain their existing nullable Catalog fields. Technicians never receive price inputs or Catalog price-management authority. The selected price is retained server-side for Billing review.
+
+Editable Invoice Lines can be added directly from the Catalog or generated from approved field proposals. Both retain nullable source foreign keys plus immutable code, name, customer description, UOM, selected quantity, original/effective selected price, tax behavior, selected Variant, selection actor/time, and Package recipe/demand. Invoice Line description, effective quantity, price, inclusion, and treatment remain invoice-owned transactional fields. Reasoned Billing edits never rewrite the source snapshot.
+
+Manual Invoice Lines remain fully supported and have null Catalog source/snapshot fields. Inactive or later-edited Catalog definitions do not change existing proposals, invoices, void/reissue copies, issued HTML, or PDFs. Customer presentation renders the Package line only; it never exposes the internal recipe snapshot.
 
 ## Organization scope and authorization
 
@@ -95,13 +105,13 @@ Capabilities:
 - `catalog.manage`: maintain descriptions, classification, variants, add-ons, UOMs, and active state.
 - `catalog.pricing.manage`: change pricing model, prices, recurring cadence, and tax defaults.
 
-Super Admin receives all capabilities. Dispatcher and Billing receive view/use, Technician receives field-oriented view/use for later integration, and Reviewer receives view. An explicit membership denial remains authoritative. Checkpoint 1 exposes Catalog management only in Office; field lookup arrives with Checkpoint 4.
+Super Admin receives all capabilities. Dispatcher and Billing receive view/use, Technician receives field-oriented view/use, and Reviewer receives view. An explicit membership denial remains authoritative. `catalog.use` never grants visit execution or Invoice management by itself; the surrounding workflow policy remains independently required.
 
 ## Audit and history
 
 Create, update, deactivation, Variant, add-on, and rejected cross-organization actions use the existing `audit_events` infrastructure. Metadata contains record IDs, state/model names, and changed field names—not descriptions or price-input strings.
 
-Catalog records have no hard-delete routes. Product, purchase-option, Package, and recipe-component deactivation preserves relationships and standard history. Checkpoint 4 will snapshot catalog identity, description, unit price, tax behavior, selected Variant, and Package recipe so later catalog edits cannot change historical billing.
+Catalog records have no hard-delete routes. Product, purchase-option, Package, and recipe-component deactivation preserves relationships and standard history. Transaction snapshots preserve catalog identity, description, unit price, tax behavior, selected Variant, and Package recipe so later Catalog edits cannot change historical billing.
 
 ## Later checkpoints
 

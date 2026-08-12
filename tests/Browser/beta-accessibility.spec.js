@@ -344,6 +344,34 @@ test.describe('desktop beta', () => {
         await expect(page.getByText('1750 Feet').first()).toBeVisible();
         await expectAccessible(page);
 
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/field/visits/2');
+        const catalogLauncher = page.getByRole('button', { name: 'Add Catalog item' });
+        await expect(catalogLauncher).toBeVisible();
+        await catalogLauncher.focus();
+        await catalogLauncher.click();
+        const catalogDialog = page.getByRole('dialog', { name: 'Add Catalog item' });
+        await expect(catalogDialog).toBeVisible();
+        const catalogDimensions = await catalogDialog.evaluate((element) => ({
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+            viewportWidth: innerWidth,
+            viewportHeight: innerHeight,
+        }));
+        expect(catalogDimensions.width).toBe(catalogDimensions.viewportWidth);
+        expect(catalogDimensions.height).toBe(catalogDimensions.viewportHeight);
+        await catalogDialog.getByLabel('Search Catalog').fill(`CAT6-BLUE-${suffix}`);
+        const matchingCatalogOption = catalogDialog.getByLabel('Catalog item').locator('option', { hasText: `CAT6-BLUE-${suffix}` });
+        await expect(matchingCatalogOption).toHaveCount(1);
+        await expect(matchingCatalogOption).not.toHaveAttribute('hidden', '');
+        await expect(catalogDialog.getByText('$0.95')).toHaveCount(0);
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await expectAccessible(page);
+        page.once('dialog', (confirmation) => confirmation.accept());
+        await catalogDialog.getByRole('button', { name: 'Cancel' }).click();
+        await expect(catalogDialog).toBeHidden();
+        await expect(catalogLauncher).toBeFocused();
+
         for (const viewport of [
             { width: 390, height: 844 },
             { width: 768, height: 1024 },

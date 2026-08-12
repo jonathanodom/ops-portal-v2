@@ -123,15 +123,15 @@ class InvoiceWorkflow
                     if ($treatment !== 'billable') {
                         continue;
                     }
-                    $invoice->lines()->create([
+                    $invoice->lines()->create($this->catalogSnapshotFromProposal($part) + [
                         'organization_id' => $ticket->organization_id,
-                        'line_type' => 'part',
+                        'line_type' => $this->lineTypeForCatalog($part->catalog_item_type),
                         'description' => $part->description,
-                        'quantity_millis' => $this->quantityToMillis($quantity),
+                        'quantity_millis' => $adjustment ? $this->quantityToMillis($quantity) : ($part->catalog_quantity_millis ?? $this->quantityToMillis($quantity)),
                         'unit' => $adjustment?->approved_unit ?? $part->unit,
-                        'unit_price_cents' => null,
+                        'unit_price_cents' => $part->catalog_item_type ? $part->catalog_unit_price_cents : null,
                         'billing_treatment' => $treatment,
-                        'taxable' => true,
+                        'taxable' => $part->catalog_item_type ? (bool) $part->catalog_taxable : true,
                         'source_visit_id' => $closeout->visit_id,
                         'source_closeout_id' => $closeout->id,
                         'source_review_id' => $review->id,
@@ -179,6 +179,41 @@ class InvoiceWorkflow
         });
     }
 
+    /** @param array<string, mixed> $snapshot */
+    public function addCatalogLine(Invoice $invoice, User $actor, array $snapshot): InvoiceLine
+    {
+        return DB::transaction(function () use ($invoice, $actor, $snapshot): InvoiceLine {
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            $this->assertEditable($invoice);
+            $selectedAt = now();
+            $line = $invoice->lines()->create($snapshot + [
+                'organization_id' => $invoice->organization_id,
+                'line_type' => $this->lineTypeForCatalog($snapshot['catalog_item_type']),
+                'description' => $snapshot['catalog_name_snapshot'],
+                'quantity_millis' => $snapshot['catalog_quantity_millis'],
+                'unit' => $snapshot['catalog_unit_name_snapshot'],
+                'unit_price_cents' => $snapshot['catalog_unit_price_cents'],
+                'included' => true,
+                'billing_treatment' => 'billable',
+                'taxable' => $snapshot['catalog_taxable'],
+                'sort_order' => ((int) $invoice->lines()->max('sort_order')) + 10,
+                'catalog_selected_by_id' => $actor->id,
+                'catalog_selected_at' => $selectedAt,
+            ]);
+            $this->calculator->recalculate($invoice);
+            $this->audit->record($invoice->organization, $actor, 'invoice.catalog_line_created', $line, [
+                'invoice_id' => $invoice->id,
+                'invoice_line_id' => $line->id,
+                'catalog_item_type' => $line->catalog_item_type,
+                'catalog_source_id' => $line->catalog_service_id ?: ($line->catalog_product_id ?: $line->catalog_package_id),
+                'catalog_variant_id' => $line->catalog_service_variant_id,
+                'quantity_millis' => $line->quantity_millis,
+            ]);
+
+            return $line;
+        });
+    }
+
     /** @param array<string, mixed> $values */
     public function updateLine(Invoice $invoice, InvoiceLine $line, User $actor, array $values): InvoiceLine
     {
@@ -186,9 +221,20 @@ class InvoiceWorkflow
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
             $this->assertEditable($invoice);
             $line = InvoiceLine::query()->where('invoice_id', $invoice->id)->lockForUpdate()->findOrFail($line->id);
+            $currentPrice = $line->unit_price_cents === null ? null : (int) $line->unit_price_cents;
+            $nextPrice = ($values['unit_price_cents'] ?? null) === null ? null : (int) $values['unit_price_cents'];
+            $priceChanged = $line->catalog_item_type && array_key_exists('unit_price_cents', $values) && $currentPrice !== $nextPrice;
             $line->update($values);
             $this->calculator->recalculate($invoice);
             $this->audit->record($invoice->organization, $actor, 'invoice.line_updated', $line, ['invoice_id' => $invoice->id, 'line_type' => $line->line_type, 'changed_fields' => array_keys($values)]);
+            if ($priceChanged) {
+                $this->audit->record($invoice->organization, $actor, 'invoice.catalog_price_overridden', $line, [
+                    'invoice_id' => $invoice->id,
+                    'invoice_line_id' => $line->id,
+                    'catalog_item_type' => $line->catalog_item_type,
+                    'changed_fields' => ['unit_price_cents'],
+                ]);
+            }
 
             return $line;
         });
@@ -209,11 +255,11 @@ class InvoiceWorkflow
             if ($existing = $invoice->lines()->where('source_part_proposal_id', $part->id)->first()) {
                 return $existing;
             }
-            $line = $invoice->lines()->create([
-                'organization_id' => $invoice->organization_id, 'line_type' => 'part', 'description' => $part->description,
-                'quantity_millis' => $this->quantityToMillis((string) ($adjustment?->approved_quantity ?? $part->quantity)),
-                'unit' => $adjustment?->approved_unit ?? $part->unit, 'unit_price_cents' => null, 'included' => true,
-                'billing_treatment' => 'billable', 'taxable' => true, 'source_visit_id' => $part->visit_id,
+            $line = $invoice->lines()->create($this->catalogSnapshotFromProposal($part) + [
+                'organization_id' => $invoice->organization_id, 'line_type' => $this->lineTypeForCatalog($part->catalog_item_type), 'description' => $part->description,
+                'quantity_millis' => $adjustment ? $this->quantityToMillis((string) $adjustment->approved_quantity) : ($part->catalog_quantity_millis ?? $this->quantityToMillis((string) $part->quantity)),
+                'unit' => $adjustment?->approved_unit ?? $part->unit, 'unit_price_cents' => $part->catalog_item_type ? $part->catalog_unit_price_cents : null, 'included' => true,
+                'billing_treatment' => 'billable', 'taxable' => $part->catalog_item_type ? (bool) $part->catalog_taxable : true, 'source_visit_id' => $part->visit_id,
                 'source_closeout_id' => $part->closeout_id, 'source_review_id' => $review->id,
                 'source_part_proposal_id' => $part->id, 'sort_order' => ((int) $invoice->lines()->max('sort_order')) + 10,
                 'override_reason' => $reason,
@@ -315,7 +361,10 @@ class InvoiceWorkflow
                 'reissue_of_invoice_id' => $invoice->id, 'creation_token' => $token, 'pdf_status' => 'not_requested', 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id,
             ]);
             foreach ($invoice->lines as $line) {
-                $replacement->lines()->create(Arr::except($line->getAttributes(), ['id', 'invoice_id', 'created_at', 'updated_at']) + ['organization_id' => $invoice->organization_id]);
+                $replacement->lines()->create(Arr::except($line->getAttributes(), ['id', 'invoice_id', 'catalog_package_recipe_snapshot', 'created_at', 'updated_at']) + [
+                    'organization_id' => $invoice->organization_id,
+                    'catalog_package_recipe_snapshot' => $line->catalog_package_recipe_snapshot,
+                ]);
             }
             foreach ($invoice->closeoutLinks as $link) {
                 $replacement->closeoutLinks()->create(Arr::except($link->getAttributes(), ['id', 'invoice_id', 'created_at', 'updated_at']) + ['organization_id' => $invoice->organization_id]);
@@ -341,6 +390,33 @@ class InvoiceWorkflow
 
             return $adjustment?->approved_minutes ?? (int) ceil($entry->started_at->diffInSeconds($entry->ended_at) / 60);
         });
+    }
+
+    /** @return array<string, mixed> */
+    private function catalogSnapshotFromProposal(VisitPartProposal $part): array
+    {
+        if (! $part->catalog_item_type) {
+            return [];
+        }
+
+        return Arr::only($part->getAttributes(), [
+            'catalog_item_type', 'catalog_service_id', 'catalog_service_variant_id',
+            'catalog_product_id', 'catalog_package_id', 'catalog_code_snapshot',
+            'catalog_name_snapshot', 'catalog_description_snapshot',
+            'catalog_unit_code_snapshot', 'catalog_unit_name_snapshot',
+            'catalog_quantity_millis', 'catalog_original_unit_price_cents',
+            'catalog_unit_price_cents', 'catalog_taxable',
+            'catalog_selected_by_id', 'catalog_selected_at',
+        ]) + ['catalog_package_recipe_snapshot' => $part->catalog_package_recipe_snapshot];
+    }
+
+    private function lineTypeForCatalog(?string $type): string
+    {
+        return match ($type) {
+            'service', 'package' => 'service_charge',
+            'product' => 'part',
+            default => 'part',
+        };
     }
 
     /** @return array<string, mixed> */
