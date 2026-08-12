@@ -89,4 +89,6 @@ The complete automated scenarios exercise provider-free Issue, cash and check, p
 
 The migration `down()` removes the unique Visit-number constraint and the two numbering columns only. Rolling back after new Visits exist discards their ticket-relative business numbers; use the verified backup when that identity must be retained. Checkpoints 1 and 2 require application rollback rather than data rollback; deleted draft Invoices are intentionally not recoverable from the active database, but their durable handoff audit record remains.
 
-GitHub Actions status is recorded in the draft PR after push. Phase 9 remains blocked until CI is green and Jonathan manually approves realistic cash/check, Square/Stripe sandbox, multi-Visit, and delete/recreate scenario validation.
+GitHub Actions run [31648924138](https://github.com/jonathanodom/ops-portal-v2/actions/runs/31648924138) passed the MySQL 8.4 migration, full suite, backup/restore, deterministic beta, benchmarks, Playwright/axe, build, and diff gates. Its only annotation is GitHub's non-blocking notice that `actions/checkout@v4` and `actions/setup-node@v4` target the deprecated Node 20 action runtime and are currently forced onto Node 24.
+
+Phase 9 remains blocked until Jonathan manually approves realistic cash/check, Square/Stripe sandbox, multi-Visit, and delete/recreate scenario validation. No live-provider or production scenario has been performed.
