@@ -26,7 +26,7 @@ test.describe('desktop beta', () => {
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
         test.setTimeout(90_000);
         await login(page, 'super_admin');
-        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/settings/organization', '/office/settings/billing', '/office/settings/invoices', '/office/operations/health', '/office/admin/archive']) {
+        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/subscriptions', '/office/settings/organization', '/office/settings/billing', '/office/settings/invoices', '/office/operations/health', '/office/admin/archive']) {
             await page.goto(path);
             await expect(page.locator('body')).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();

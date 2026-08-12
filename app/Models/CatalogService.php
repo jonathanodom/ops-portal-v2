@@ -44,6 +44,11 @@ class CatalogService extends Model
         return $this->hasMany(CatalogPackageComponent::class, 'catalog_service_id');
     }
 
+    public function customerEnrollments(): HasMany
+    {
+        return $this->hasMany(CustomerServiceEnrollment::class, 'catalog_service_id');
+    }
+
     public function addons(): BelongsToMany
     {
         return $this->belongsToMany(self::class, 'catalog_service_addons', 'catalog_service_id', 'addon_service_id')->withPivot('sort_order')->withTimestamps()->orderByPivot('sort_order');

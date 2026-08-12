@@ -62,6 +62,9 @@ class CustomerController extends Controller
             'contacts' => fn ($query) => $query->orderByDesc('is_preferred')->orderByDesc('active')->orderBy('name'),
             'serviceLocations' => fn ($query) => $query->with('primaryContact')->orderByDesc('is_primary')->orderByDesc('active')->orderBy('name'),
         ]);
+        if ($request->attributes->get('membership')->hasCapability('subscriptions.view')) {
+            $customer->load(['serviceEnrollments' => fn ($query) => $query->with('serviceLocation')->orderByRaw("case status when 'active' then 1 when 'paused' then 2 else 3 end")->orderByDesc('id')]);
+        }
 
         return view('office.customers.show', compact('customer'));
     }
@@ -95,6 +98,11 @@ class CustomerController extends Controller
         if ($data['status'] === 'inactive' && $customer->serviceTickets()->whereNotIn('status', ['completed', 'canceled'])->exists()) {
             throw ValidationException::withMessages([
                 'status' => 'Cancel or complete this customer’s open service tickets before archiving the customer.',
+            ]);
+        }
+        if ($data['status'] === 'inactive' && $customer->serviceEnrollments()->whereIn('status', ['active', 'paused'])->exists()) {
+            throw ValidationException::withMessages([
+                'status' => 'Cancel this Customerâ€™s current recurring Service enrollments before archiving the Customer.',
             ]);
         }
 

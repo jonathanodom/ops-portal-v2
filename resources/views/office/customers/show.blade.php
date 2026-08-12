@@ -16,7 +16,7 @@
         @endif
     </x-office.record-header>
 
-    <x-office.detail-nav :items="['overview' => 'Overview', 'locations' => 'Locations', 'contacts' => 'Contacts']" />
+    <x-office.detail-nav :items="['overview' => 'Overview', 'locations' => 'Locations', 'contacts' => 'Contacts'] + ($activeMembership->hasCapability('subscriptions.view') ? ['customer-services' => 'Customer Services'] : [])" />
 
     <div class="office-detail-grid" data-office-detail-grid>
         <div class="office-detail-main xl:order-first" data-office-detail-main>
@@ -69,6 +69,29 @@
                     @endforelse
                 </div>
             </section>
+
+            @if($activeMembership->hasCapability('subscriptions.view'))
+                <section id="customer-services" class="office-detail-section" aria-labelledby="customer-services-heading">
+                    <div class="office-detail-section-header">
+                        <div>
+                            <h2 id="customer-services-heading" class="office-detail-section-title">Recurring customer Services</h2>
+                            <p class="mt-1 text-sm text-slate-500">Tracked enrollment only. No automatic invoice or payment is created.</p>
+                        </div>
+                        @if($activeMembership->hasCapability('subscriptions.manage') && $customer->status === 'active')<a href="{{ route('office.customers.subscriptions.create', $customer) }}" class="button-primary">Add recurring Service</a>@endif
+                    </div>
+                    <div class="office-detail-list">
+                        @forelse($customer->serviceEnrollments as $enrollment)
+                            <a href="{{ route('office.subscriptions.show', $enrollment) }}" class="office-detail-row grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+                                <div><strong class="text-slate-950">{{ $enrollment->service_name_snapshot }}</strong><p class="mt-1 text-sm text-slate-500">{{ $enrollment->service_code_snapshot }}@if($enrollment->variant_label_snapshot) Â· {{ $enrollment->variant_label_snapshot }}@endif</p></div>
+                                <div class="text-sm"><p class="font-semibold text-slate-500">Scope</p><p class="mt-1 text-slate-800">{{ $enrollment->serviceLocation?->name ?: 'Customer-wide' }}</p></div>
+                                <span class="{{ $enrollment->status === 'active' ? 'status-active' : ($enrollment->status === 'paused' ? 'status-hold' : 'status-inactive') }} w-fit">{{ ucfirst($enrollment->status) }}</span>
+                            </a>
+                        @empty
+                            <p class="office-detail-empty">No recurring Services are enrolled for this Customer.</p>
+                        @endforelse
+                    </div>
+                </section>
+            @endif
         </div>
 
         <aside id="overview" class="office-detail-rail order-first xl:order-last" aria-labelledby="overview-heading" data-office-detail-rail>

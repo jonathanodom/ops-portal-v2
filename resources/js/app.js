@@ -272,6 +272,24 @@ document.querySelectorAll('[data-catalog-picker]').forEach((picker) => {
     item?.addEventListener('change', updateVariant);
 });
 
+const subscriptionService = document.querySelector('[data-subscription-service]');
+const subscriptionVariant = document.querySelector('[data-subscription-variant]');
+if (subscriptionService && subscriptionVariant) {
+    const filterSubscriptionVariants = () => {
+        const serviceId = subscriptionService.value;
+        let selectedStillAvailable = !subscriptionVariant.value;
+        [...subscriptionVariant.options].forEach((option) => {
+            if (!option.value) return;
+            option.hidden = option.dataset.serviceId !== serviceId;
+            option.disabled = option.hidden;
+            if (option.selected && !option.hidden) selectedStillAvailable = true;
+        });
+        if (!selectedStillAvailable) subscriptionVariant.value = '';
+    };
+    subscriptionService.addEventListener('change', filterSubscriptionVariants);
+    filterSubscriptionVariants();
+}
+
 const customerPicker = document.querySelector('[data-ticket-customer-picker]');
 if (customerPicker) {
     const searchInput = customerPicker.querySelector('#customer_search');

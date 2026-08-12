@@ -44,6 +44,11 @@ class ServiceLocation extends Model
         return $this->hasMany(Visit::class);
     }
 
+    public function serviceEnrollments(): HasMany
+    {
+        return $this->hasMany(CustomerServiceEnrollment::class);
+    }
+
     public function formattedAddress(): string
     {
         return collect([

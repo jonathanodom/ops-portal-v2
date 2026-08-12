@@ -45,6 +45,11 @@ class Customer extends Model
         return $this->hasMany(ServiceTicket::class);
     }
 
+    public function serviceEnrollments(): HasMany
+    {
+        return $this->hasMany(CustomerServiceEnrollment::class);
+    }
+
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
     {
         return $query->where('organization_id', $organizationId);

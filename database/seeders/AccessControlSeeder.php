@@ -45,6 +45,8 @@ class AccessControlSeeder extends Seeder
         'catalog.use' => 'Select catalog records in authorized workflows',
         'catalog.manage' => 'Create and maintain catalog records',
         'catalog.pricing.manage' => 'Manage protected catalog pricing and tax defaults',
+        'subscriptions.view' => 'View recurring customer Service enrollments',
+        'subscriptions.manage' => 'Create and manage recurring customer Service enrollments',
     ];
 
     private const ROLES = [
@@ -60,6 +62,7 @@ class AccessControlSeeder extends Seeder
                 'service_tickets.view',
                 'closeouts.inspect',
                 'catalog.view', 'catalog.use',
+                'subscriptions.view', 'subscriptions.manage',
             ],
         ],
         'technician' => [
@@ -68,11 +71,11 @@ class AccessControlSeeder extends Seeder
         ],
         'reviewer' => [
             'name' => 'Reviewer',
-            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view', 'service_tickets.view', 'closeouts.inspect', 'invoices.view', 'catalog.view'],
+            'capabilities' => ['experience.office.access', 'closeouts.review', 'customers.view', 'service_tickets.view', 'closeouts.inspect', 'invoices.view', 'catalog.view', 'subscriptions.view'],
         ],
         'billing' => [
             'name' => 'Billing',
-            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'payments.view', 'payments.collect', 'payments.record_manual', 'payments.manage_links', 'customers.view', 'service_tickets.view', 'catalog.view', 'catalog.use'],
+            'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'payments.view', 'payments.collect', 'payments.record_manual', 'payments.manage_links', 'customers.view', 'service_tickets.view', 'catalog.view', 'catalog.use', 'subscriptions.view'],
         ],
     ];
 

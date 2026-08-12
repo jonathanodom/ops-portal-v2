@@ -2,7 +2,7 @@
 
 ## Checkpoint status
 
-Phase 8 Checkpoints 1 through 4 implement the organization-scoped Catalog foundation, Services, Products, Product-specific purchase-unit conversions, Packages with standard Product/Service recipes, permission-aware field selection, invoice selection, and immutable transactional snapshots. Customer Service enrollment remains unimplemented pending explicit Checkpoint 5 approval.
+Phase 8 Checkpoints 1 through 5 implement the organization-scoped Catalog foundation, Services, Products, Product-specific purchase-unit conversions, Packages with standard Product/Service recipes, permission-aware field selection, invoice selection, immutable transactional snapshots, and recurring Customer Service enrollment tracking.
 
 ## Catalog boundaries
 
@@ -72,7 +72,17 @@ Supported pricing models:
 - `recurring`: a catalog definition with an amount, cadence, and interval.
 - `quote_required`: known scope without a catalog price.
 
-Recurring definitions do not enroll a Customer and do not charge a payment method. Subscription records remain Checkpoint 5 work requiring explicit approval.
+Recurring definitions do not themselves enroll a Customer or charge a payment method. Checkpoint 5 adds separate Customer Service enrollment records.
+
+## Recurring Customer Services
+
+`customer_service_enrollments` belongs to one Organization and Customer, with an optional active Service Location. It selects an active recurring Catalog Service and optional Variant, then snapshots Service code/name/customer description, Variant code/label, sales UOM, cadence/interval, tax default, and integer-cent billing amount. Later Catalog changes or deactivation cannot rewrite this commercial history.
+
+An enrollment may be `active`, `paused`, or `canceled`. Active and paused are current states. Canceling is terminal and clears a nullable unique scope key so a new enrollment can later restart the same Customer/location/Service/Variant combination while preserving canceled history. The unique key prevents duplicate current enrollments for the exact same scope under concurrency.
+
+The enrollment may record start, optional end, and optional next-billing dates. These dates are operational planning data only. A reasoned amount override is stored on the enrollment; audit metadata records only safe field names and identifiers, never the reason or internal notes.
+
+Enrollment creates no Service Ticket, Visit, Invoice, Billing Handoff, Payment Attempt, saved payment method, provider subscription, or electronic charge. Pausing or canceling likewise does not alter existing invoices or payments. Automatic invoice generation and recurring Square/Stripe charging require a separate, later-approved architecture.
 
 Service Variants are explicit records rather than generalized pricing rules. The TV Mounting acceptance shape is supported with Up to 55-inch, 56–75-inch, and 76-inch-plus variants.
 
@@ -104,6 +114,8 @@ Capabilities:
 - `catalog.use`: select Catalog records in later authorized workflows.
 - `catalog.manage`: maintain descriptions, classification, variants, add-ons, UOMs, and active state.
 - `catalog.pricing.manage`: change pricing model, prices, recurring cadence, and tax defaults.
+- `subscriptions.view`: view recurring Customer Service enrollments.
+- `subscriptions.manage`: create, update, pause, resume, and cancel enrollments.
 
 Super Admin receives all capabilities. Dispatcher and Billing receive view/use, Technician receives field-oriented view/use, and Reviewer receives view. An explicit membership denial remains authoritative. `catalog.use` never grants visit execution or Invoice management by itself; the surrounding workflow policy remains independently required.
 
@@ -118,6 +130,6 @@ Catalog records have no hard-delete routes. Product, purchase-option, Package, a
 - Checkpoint 2 extends this foundation with Products, base/sales units, protected cost/sell defaults, and Product-specific purchase conversions.
 - Checkpoint 3 adds Packages, standard recipes, optional waste, and the reusable Package demand calculator.
 - Checkpoint 4 adds permission-aware field/Office selection and immutable invoice snapshots while retaining manual lines.
-- Checkpoint 5 adds customer Service enrollment only after explicit approval. It will not add automatic recurring card charges without a separate approved payments design.
+- Checkpoint 5 adds Customer Service enrollment tracking, immutable commercial snapshots, and lifecycle management. It does not add automatic invoicing or recurring card charges.
 
 Future Inventory and Purchasing must extend Product base units, purchase conversions, and Package standard demand. They must add actual consumption separately and must never overwrite Package standard recipes.

@@ -21,6 +21,7 @@ use App\Http\Controllers\Office\CatalogServiceVariantController;
 use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
+use App\Http\Controllers\Office\CustomerServiceEnrollmentController;
 use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\OperationalHealthController;
@@ -229,6 +230,16 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                     Route::get('/units/{unit}/edit', [UnitOfMeasureController::class, 'edit'])->whereNumber('unit')->name('units.edit');
                     Route::put('/units/{unit}', [UnitOfMeasureController::class, 'update'])->whereNumber('unit')->name('units.update');
                 });
+            });
+            Route::prefix('subscriptions')->name('subscriptions.')->middleware('capability:subscriptions.view')->group(function (): void {
+                Route::get('/', [CustomerServiceEnrollmentController::class, 'index'])->name('index');
+                Route::get('/{enrollment}', [CustomerServiceEnrollmentController::class, 'show'])->whereNumber('enrollment')->name('show');
+            });
+            Route::middleware('capability:subscriptions.manage')->group(function (): void {
+                Route::get('/customers/{customer}/subscriptions/create', [CustomerServiceEnrollmentController::class, 'create'])->whereNumber('customer')->name('customers.subscriptions.create');
+                Route::post('/customers/{customer}/subscriptions', [CustomerServiceEnrollmentController::class, 'store'])->whereNumber('customer')->name('customers.subscriptions.store');
+                Route::put('/subscriptions/{enrollment}', [CustomerServiceEnrollmentController::class, 'update'])->whereNumber('enrollment')->name('subscriptions.update');
+                Route::post('/subscriptions/{enrollment}/transition', [CustomerServiceEnrollmentController::class, 'transition'])->whereNumber('enrollment')->name('subscriptions.transition');
             });
             Route::middleware('capability:customers.manage')->group(function (): void {
                 Route::get('/customers/create', [CustomerController::class, 'create'])->name('customers.create');

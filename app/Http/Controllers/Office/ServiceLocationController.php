@@ -104,6 +104,11 @@ class ServiceLocationController extends Controller
                 'active' => 'Cancel or move this location’s active visits before archiving the location.',
             ]);
         }
+        if (! $data['active'] && $location->serviceEnrollments()->whereIn('status', ['active', 'paused'])->exists()) {
+            throw ValidationException::withMessages([
+                'active' => 'Cancel or move this locationâ€™s current recurring Service enrollments before archiving it.',
+            ]);
+        }
 
         DB::transaction(function () use ($request, $location, $data, $audit): void {
             $location->customer->serviceLocations()->lockForUpdate()->get();

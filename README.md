@@ -140,7 +140,7 @@ Phase 7 payment architecture, encrypted Square/Stripe configuration, provider lo
 
 ## Phase 8 Products & Services Catalog
 
-Checkpoints 1 through 4 add organization-scoped Categories, reusable Units of Measure, Services, explicit Service Variants, optional related-Service add-ons, Products, base/sales units, Product-specific purchase conversions, Packages, standard Product/Service recipes, explainable pull-count allowances, optional waste, deterministic demand calculation, field/Invoice Catalog selection, and immutable transaction snapshots. Inventory quantities and customer subscriptions remain later gated checkpoints.
+Checkpoints 1 through 5 add organization-scoped Categories, reusable Units of Measure, Services, explicit Service Variants, optional related-Service add-ons, Products, base/sales units, Product-specific purchase conversions, Packages, standard Product/Service recipes, explainable pull-count allowances, optional waste, deterministic demand calculation, field/Invoice Catalog selection, immutable transaction snapshots, and recurring Customer Service enrollment tracking. Inventory quantities and recurring billing automation remain future work.
 
 See [Catalog Architecture](docs/CATALOG_ARCHITECTURE.md) for pricing models, UOM boundaries, permissions, audit behavior, historical snapshot plans, and the future Inventory/Purchasing extension boundary.
 
@@ -149,6 +149,8 @@ See [Phase 8 Checkpoint 2](docs/PHASE_8_CHECKPOINT_2.md) for Product schema, wir
 See [Phase 8 Checkpoint 3](docs/PHASE_8_CHECKPOINT_3.md) for Package schema, the Integrated Smart Home TV Rough-In acceptance case, standard-versus-actual boundaries, preservation evidence, and rollback notes.
 
 See [Phase 8 Checkpoint 4](docs/PHASE_8_CHECKPOINT_4.md) for field and Invoice selection, snapshot provenance, authorization, privacy, local preservation, and validation results.
+
+See [Phase 8 Checkpoint 5](docs/PHASE_8_CHECKPOINT_5.md) for recurring Customer Service enrollment scope, immutable commercial snapshots, lifecycle rules, automation boundaries, preservation evidence, and validation results.
 
 ## Quality commands
 
