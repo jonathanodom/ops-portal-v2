@@ -276,7 +276,7 @@ class CatalogInvoiceIntegrationTest extends TestCase
         $copied = $visit->fresh()->currentCloseout->parts()->where('source_proposal_id', $source->id)->firstOrFail();
         $this->assertSame('Correction Package', $copied->catalog_name_snapshot);
         $this->assertSame(50000, $copied->catalog_unit_price_cents);
-        $this->assertSame($source->catalog_package_recipe_snapshot, $copied->catalog_package_recipe_snapshot);
+        $this->assertEquals($source->catalog_package_recipe_snapshot, $copied->catalog_package_recipe_snapshot);
         $this->assertSame($source->catalog_selected_at->toISOString(), $copied->catalog_selected_at->toISOString());
     }
 
