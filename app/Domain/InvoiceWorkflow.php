@@ -52,7 +52,7 @@ class InvoiceWorkflow
                 ->where('status', 'submitted')
                 ->whereHas('visit', fn ($query) => $query->where('service_ticket_id', $ticket->id)->whereNull('deleted_at')->where('status', 'approved'))
                 ->whereHas('reviews', fn ($query) => $query->where('decision', 'approved'))
-                ->with(['visit.timeEntries', 'reviews.adjustments', 'parts'])
+                ->with(['visit.timeEntries', 'reviews.adjustments', 'reviews.tripCharge', 'parts'])
                 ->orderBy('visit_id')->orderBy('version')->get()
                 ->filter(fn (Closeout $closeout) => $closeout->reviews->contains('decision', 'approved'))
                 ->values();
@@ -124,6 +124,38 @@ class InvoiceWorkflow
                         'source_closeout_id' => $closeout->id,
                         'source_review_id' => $review->id,
                         'sort_order' => $sort++,
+                    ]);
+                }
+                if ($tripCharge = $review->tripCharge) {
+                    $invoice->lines()->create([
+                        'organization_id' => $ticket->organization_id,
+                        'line_type' => 'travel',
+                        'description' => $tripCharge->catalog_name_snapshot,
+                        'quantity_millis' => 1000,
+                        'unit' => $tripCharge->catalog_unit_name_snapshot,
+                        'unit_price_cents' => $tripCharge->catalog_unit_price_cents,
+                        'included' => true,
+                        'billing_treatment' => 'billable',
+                        'taxable' => $tripCharge->catalog_taxable,
+                        'source_visit_id' => $closeout->visit_id,
+                        'source_closeout_id' => $closeout->id,
+                        'source_review_id' => $review->id,
+                        'source_travel_seconds' => $tripCharge->recorded_travel_seconds,
+                        'sort_order' => $sort++,
+                        'catalog_item_type' => 'service',
+                        'catalog_service_id' => $tripCharge->catalog_service_id,
+                        'catalog_service_variant_id' => $tripCharge->catalog_service_variant_id,
+                        'catalog_code_snapshot' => $tripCharge->catalog_code_snapshot,
+                        'catalog_name_snapshot' => $tripCharge->catalog_name_snapshot,
+                        'catalog_description_snapshot' => $tripCharge->catalog_description_snapshot,
+                        'catalog_unit_code_snapshot' => $tripCharge->catalog_unit_code_snapshot,
+                        'catalog_unit_name_snapshot' => $tripCharge->catalog_unit_name_snapshot,
+                        'catalog_quantity_millis' => 1000,
+                        'catalog_original_unit_price_cents' => $tripCharge->catalog_unit_price_cents,
+                        'catalog_unit_price_cents' => $tripCharge->catalog_unit_price_cents,
+                        'catalog_taxable' => $tripCharge->catalog_taxable,
+                        'catalog_selected_by_id' => $tripCharge->selected_by_id,
+                        'catalog_selected_at' => $tripCharge->selected_at,
                     ]);
                 }
                 $adjustments = $review->adjustments->where('type', 'part')->keyBy('visit_part_proposal_id');

@@ -4,9 +4,11 @@ namespace Tests\Feature;
 
 use App\Domain\NewDayCatalogBootstrap;
 use App\Models\AuditEvent;
+use App\Models\BillingHandoff;
 use App\Models\Closeout;
 use App\Models\CloseoutReview;
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
 use App\Models\OrganizationMembership;
@@ -105,6 +107,60 @@ class Phase87TripChargeReviewTest extends TestCase
         $this->assertDatabaseCount('closeout_review_trip_charges', 0);
     }
 
+    public function test_invoice_uses_the_approved_trip_snapshot_with_complete_provenance(): void
+    {
+        [$reviewer, $visit, $closeout] = $this->submittedVisitWithTravel(52 * 60);
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", [
+            'decision_token' => (string) Str::uuid(),
+            'trip_charge_selected' => 1,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $review = CloseoutReview::query()->where('closeout_id', $closeout->id)->firstOrFail();
+        $approved = $review->tripCharge()->firstOrFail();
+        $approved->variant()->update(['price_override_cents' => 9900]);
+        $billing = $this->userWithRole('billing', $visit->organization_id);
+        $handoff = BillingHandoff::query()->where('service_ticket_id', $visit->service_ticket_id)->firstOrFail();
+
+        $this->actingAs($billing)->post("/office/billing-handoffs/{$handoff->id}/invoice", [
+            'creation_token' => (string) Str::uuid(),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $invoice = Invoice::query()->where('billing_handoff_id', $handoff->id)->firstOrFail();
+        $line = $invoice->lines()->where('line_type', 'travel')->firstOrFail();
+        $this->assertSame('Trip / Dispatch Charge — 45–60 Minute Travel', $line->description);
+        $this->assertSame(4500, $line->unit_price_cents);
+        $this->assertSame(4500, $line->catalog_original_unit_price_cents);
+        $this->assertSame('TRIP:TRIP-45-60', $line->catalog_code_snapshot);
+        $this->assertSame($visit->id, $line->source_visit_id);
+        $this->assertSame($closeout->id, $line->source_closeout_id);
+        $this->assertSame($review->id, $line->source_review_id);
+        $this->assertSame(3120, $line->source_travel_seconds);
+        $this->assertSame($reviewer->id, $line->catalog_selected_by_id);
+        $this->assertTrue($line->catalog_selected_at->equalTo($approved->selected_at));
+        $this->assertSame(4500, $invoice->fresh()->subtotal_cents);
+
+        $approved->update(['catalog_unit_price_cents' => 12000]);
+        $this->assertSame(4500, $line->fresh()->unit_price_cents);
+    }
+
+    public function test_waived_recommendation_generates_no_trip_invoice_line(): void
+    {
+        [$reviewer, $visit, $closeout] = $this->submittedVisitWithTravel(60 * 60);
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", [
+            'decision_token' => (string) Str::uuid(),
+            'trip_charge_selected' => 0,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $billing = $this->userWithRole('billing', $visit->organization_id);
+        $handoff = BillingHandoff::query()->where('service_ticket_id', $visit->service_ticket_id)->firstOrFail();
+
+        $this->actingAs($billing)->post("/office/billing-handoffs/{$handoff->id}/invoice", [
+            'creation_token' => (string) Str::uuid(),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $invoice = Invoice::query()->where('billing_handoff_id', $handoff->id)->firstOrFail();
+        $this->assertFalse($invoice->lines()->where('line_type', 'travel')->exists());
+    }
+
     /** @return array{User, Visit, Closeout} */
     private function submittedVisitWithTravel(int $seconds, bool $autoSelect = false): array
     {
@@ -180,5 +236,18 @@ class Phase87TripChargeReviewTest extends TestCase
         ]);
 
         return [$reviewer, $visit->fresh(), $closeout];
+    }
+
+    private function userWithRole(string $roleKey, int $organizationId): User
+    {
+        $user = User::factory()->create(['status' => 'active']);
+        $membership = OrganizationMembership::query()->create([
+            'organization_id' => $organizationId,
+            'user_id' => $user->id,
+            'status' => 'active',
+        ]);
+        $membership->roles()->attach(Role::query()->where('key', $roleKey)->firstOrFail());
+
+        return $user;
     }
 }

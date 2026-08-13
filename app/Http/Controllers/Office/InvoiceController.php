@@ -98,7 +98,7 @@ class InvoiceController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
-        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
+        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'lines.catalogSelectedBy', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'closeoutLinks.review.tripCharge.selectedBy', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
         if (! $request->attributes->get('membership')->hasCapability('invoices.manage')) {
             return view('office.invoices.summary', compact('invoice'));
         }
