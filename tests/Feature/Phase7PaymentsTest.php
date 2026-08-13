@@ -86,7 +86,7 @@ class Phase7PaymentsTest extends TestCase
         app(StripePaymentProviderAdapter::class)->parseWebhook($configuration, $stripeBody.' ', ['stripe-signature' => $stripeSignature], '');
     }
 
-    public function test_checkout_is_idempotent_locks_provider_and_only_authoritative_result_creates_payment(): void
+    public function test_checkout_is_idempotent_and_only_authoritative_result_locks_provider_and_creates_payment(): void
     {
         Queue::fake();
         [$invoice, $admin, $configuration] = $this->invoiceScenario();
@@ -95,7 +95,7 @@ class Phase7PaymentsTest extends TestCase
         $result = $workflow->createCheckout($invoice, $admin, 4000, $token);
         $retry = $workflow->createCheckout($invoice->fresh(), $admin, 4000, $token);
         $this->assertSame($result['attempt']->id, $retry['attempt']->id);
-        $this->assertSame('stripe', $invoice->fresh()->electronic_payment_provider);
+        $this->assertNull($invoice->fresh()->electronic_payment_provider);
         $this->assertDatabaseCount('payment_transactions', 0);
         $this->expectException(ValidationException::class);
         $workflow->recordManual($invoice->fresh(), $admin, 'cash', 1000, now(), null, (string) Str::uuid());
@@ -146,19 +146,16 @@ class Phase7PaymentsTest extends TestCase
         $this->actingAs($outsider)->post("/office/invoices/{$invoice->id}/payments/manual", ['method' => 'cash', 'amount' => '1.00', 'received_at' => now()->format('Y-m-d H:i'), 'idempotency_key' => (string) Str::uuid()])->assertNotFound();
     }
 
-    public function test_issued_invoice_without_provider_accepts_cash_and_check_but_rejects_checkout(): void
+    public function test_issued_invoice_without_selection_uses_sole_ready_provider_and_accepts_cash_and_check(): void
     {
         Queue::fake();
         [$invoice, $admin] = $this->invoiceScenario();
         $invoice->forceFill(['preferred_payment_provider' => null])->save();
         $workflow = app(PaymentWorkflow::class);
 
-        try {
-            $workflow->createCheckout($invoice, $admin, 1000, (string) Str::uuid());
-            $this->fail('Checkout should require an electronic provider.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('provider', $exception->errors());
-        }
+        $attempt = $workflow->createCheckout($invoice, $admin, 1000, (string) Str::uuid())['attempt'];
+        $this->assertSame('stripe', $attempt->provider);
+        $workflow->expire($attempt, $admin);
 
         $cash = $workflow->recordManual($invoice->fresh(), $admin, 'cash', 1000, now(), null, (string) Str::uuid());
         $check = $workflow->recordManual($invoice->fresh(), $admin, 'check', 1000, now(), 'CHK-8501', (string) Str::uuid());
@@ -169,7 +166,7 @@ class Phase7PaymentsTest extends TestCase
         $workflow->recordManual($invoice->fresh(), $admin, 'check', 1000, now(), null, (string) Str::uuid());
     }
 
-    public function test_ready_square_or_stripe_can_be_selected_after_issue_and_locks_on_checkout(): void
+    public function test_authorized_override_can_select_ready_provider_but_active_attempt_only_temporarily_blocks_switching(): void
     {
         Queue::fake();
         [$invoice, $admin, $stripe] = $this->invoiceScenario();
@@ -191,10 +188,16 @@ class Phase7PaymentsTest extends TestCase
         $workflow->setPreferredProvider($invoice, $admin, 'square');
         $result = $workflow->createCheckout($invoice->fresh(), $admin, 1000, (string) Str::uuid());
         $this->assertSame($square->id, $result['attempt']->payment_provider_configuration_id);
-        $this->assertSame('square', $invoice->fresh()->electronic_payment_provider);
+        $this->assertNull($invoice->fresh()->electronic_payment_provider);
 
-        $this->expectException(ValidationException::class);
-        $workflow->setPreferredProvider($invoice->fresh(), $admin, $stripe->provider);
+        try {
+            $workflow->setPreferredProvider($invoice->fresh(), $admin, $stripe->provider);
+            $this->fail('Active checkout should temporarily block switching.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('preferred_payment_provider', $exception->errors());
+        }
+        $workflow->expire($result['attempt'], $admin);
+        $this->assertSame('stripe', $workflow->setPreferredProvider($invoice->fresh(), $admin, 'stripe')->preferred_payment_provider);
     }
 
     /** @return array{Invoice,User,PaymentProviderConfiguration} */

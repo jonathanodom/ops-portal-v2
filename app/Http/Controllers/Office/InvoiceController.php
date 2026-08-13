@@ -13,6 +13,7 @@ use App\Models\CatalogProduct;
 use App\Models\CatalogService;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
+use App\Models\OrganizationBillingSetting;
 use App\Models\PaymentProviderConfiguration;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
@@ -36,6 +37,15 @@ class InvoiceController extends Controller
         }
         $rates = BillingLaborRate::query()->forOrganization($invoice->organization_id)->where('active', true)->orderByDesc('is_default')->orderBy('name')->get();
         $paymentProviders = PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->whereIn('provider', ['square', 'stripe'])->get()->keyBy('provider');
+        $defaultPaymentProvider = OrganizationBillingSetting::query()->where('organization_id', $invoice->organization_id)->value('default_payment_provider');
+        $readyPaymentProviders = $paymentProviders->filter->isReady();
+        $checkoutPaymentProvider = $invoice->electronic_payment_provider ?: $invoice->preferred_payment_provider;
+        if (! $checkoutPaymentProvider && $defaultPaymentProvider && $paymentProviders->get($defaultPaymentProvider)?->isReady()) {
+            $checkoutPaymentProvider = $defaultPaymentProvider;
+        }
+        if (! $checkoutPaymentProvider && $readyPaymentProviders->count() === 1) {
+            $checkoutPaymentProvider = $readyPaymentProviders->keys()->first();
+        }
         $canUseCatalog = $request->attributes->get('membership')->hasCapability('catalog.use');
         $catalogServices = $canUseCatalog ? CatalogService::query()->forOrganization($invoice->organization_id)->where('active', true)->with(['salesUom', 'variants' => fn ($query) => $query->where('active', true)])->orderBy('name')->get() : collect();
         $catalogProducts = $canUseCatalog ? CatalogProduct::query()->forOrganization($invoice->organization_id)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get() : collect();
@@ -43,7 +53,7 @@ class InvoiceController extends Controller
 
         $canDeleteDraft = Gate::allows('deleteDraft', $invoice) && $deletion->canDelete($invoice);
 
-        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'canDeleteDraft'));
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'canDeleteDraft'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
@@ -52,7 +62,6 @@ class InvoiceController extends Controller
         Gate::authorize('manage', $invoice);
         $rules = [
             'payment_terms' => ['required', Rule::in(['due_on_receipt', 'custom'])], 'due_on' => ['nullable', 'date'],
-            'preferred_payment_provider' => ['nullable', Rule::in(['square', 'stripe'])],
             'billing_name' => ['required', 'string', 'max:255'], 'billing_legal_name' => ['nullable', 'string', 'max:255'],
             'billing_contact_name' => ['nullable', 'string', 'max:255'], 'billing_email' => ['nullable', 'email', 'max:255'], 'billing_phone' => ['nullable', 'string', 'max:50'],
             'billing_address_line_1' => ['nullable', 'string', 'max:255'], 'billing_address_line_2' => ['nullable', 'string', 'max:255'],

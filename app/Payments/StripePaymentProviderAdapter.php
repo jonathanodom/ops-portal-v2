@@ -64,23 +64,8 @@ class StripePaymentProviderAdapter implements PaymentProviderAdapter
     public function parseWebhook(PaymentProviderConfiguration $configuration, string $rawBody, array $headers, string $notificationUrl): array
     {
         $event = Webhook::constructEvent($rawBody, (string) ($headers['stripe-signature'] ?? ''), (string) $configuration->webhook_secret);
-        $object = $event->data->object;
-        $attemptId = $object->metadata->payment_attempt_id ?? null;
-        $status = match ($event->type) {
-            'checkout.session.completed', 'payment_intent.succeeded' => 'succeeded',
-            'checkout.session.expired' => 'expired',
-            'payment_intent.payment_failed' => 'failed',
-            'refund.updated', 'charge.refunded' => 'refunded',
-            default => 'ignored',
-        };
 
-        return [
-            'event_id' => $event->id, 'type' => $event->type, 'status' => $status,
-            'session_id' => $object->object === 'checkout.session' ? $object->id : null,
-            'order_id' => null, 'payment_id' => $object->payment_intent ?? ($object->id ?? null),
-            'transaction_id' => $object->id ?? null, 'amount_cents' => $object->amount_total ?? ($object->amount_received ?? ($object->amount ?? null)),
-            'method' => 'card', 'attempt_id' => $attemptId ? (int) $attemptId : null,
-        ];
+        return PaymentWebhookNormalizer::stripe(json_decode(json_encode($event, JSON_THROW_ON_ERROR), true, flags: JSON_THROW_ON_ERROR));
     }
 
     private function client(PaymentProviderConfiguration $configuration): StripeClient

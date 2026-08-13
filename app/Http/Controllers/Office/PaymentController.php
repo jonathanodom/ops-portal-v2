@@ -19,16 +19,6 @@ use Symfony\Component\HttpFoundation\Response;
 
 class PaymentController extends Controller
 {
-    public function provider(Request $request, Invoice $invoice, PaymentWorkflow $workflow): RedirectResponse
-    {
-        $invoice = $this->invoice($request, $invoice);
-        $this->capability($request, 'payments.collect');
-        $data = $request->validate(['preferred_payment_provider' => ['nullable', Rule::in(['square', 'stripe'])]]);
-        $workflow->setPreferredProvider($invoice, $request->user(), $data['preferred_payment_provider'] ?? null);
-
-        return back()->with('status', 'Electronic payment provider updated.');
-    }
-
     public function checkout(Request $request, Invoice $invoice, PaymentWorkflow $workflow): RedirectResponse
     {
         $invoice = $this->invoice($request, $invoice);

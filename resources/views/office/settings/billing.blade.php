@@ -32,7 +32,7 @@
                         @if($provider==='square')<div><dt class="text-slate-500">Merchant</dt><dd class="break-all font-bold">{{ $configuration->external_account_id ?: 'Not detected' }}</dd></div><div><dt class="text-slate-500">Payment location</dt><dd class="font-bold">{{ $configuration->location_name ?: ($configuration->location_id ?: 'Not selected') }}</dd></div>@endif
                         @if($provider==='stripe')<div><dt class="text-slate-500">Account</dt><dd class="break-all font-bold">{{ $configuration->external_account_id ?: 'Not connected' }}</dd></div><div><dt class="text-slate-500">Payments enabled</dt><dd class="font-bold">{{ $configuration->payments_enabled === null ? 'Not verified' : ($configuration->payments_enabled ? 'Yes' : 'No') }}</dd></div>@endif
                     </dl>
-                    @if($configuration->connection_method === 'legacy_credentials')<p class="mt-3 break-all text-xs text-slate-500">Legacy webhook: {{ route('payments.webhook',[$provider,$configuration->public_id]) }}</p>@endif
+                    <p class="mt-3 break-all text-xs text-slate-500">{{ $configuration->connection_method === 'oauth' ? 'Connected webhook' : 'Legacy webhook' }}: {{ $configuration->connection_method === 'oauth' ? route('payments.webhook.canonical',$provider) : route('payments.webhook',[$provider,$configuration->public_id]) }}</p>
 
                     @if($activeMembership->hasCapability('payments.settings.manage'))
                         @if($provider==='square')
