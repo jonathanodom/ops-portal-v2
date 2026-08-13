@@ -84,142 +84,100 @@ class NewDayCatalogBootstrap
         private readonly AuditRecorder $audit,
     ) {}
 
-    /** @return array{created: list<string>, unchanged: list<string>} */
-    public function ensureLaborServices(Organization $organization, ?User $actor = null): array
+    /** @return array{created: list<string>, unchanged: list<string>, conflicts: list<string>} */
+    public function bootstrap(Organization $organization, ?User $actor = null): array
     {
         return DB::transaction(function () use ($organization, $actor): array {
             $organization = Organization::query()->lockForUpdate()->findOrFail($organization->id);
             $this->defaults->ensureFor($organization);
+            $result = ['created' => [], 'unchanged' => [], 'conflicts' => []];
 
-            $category = CatalogCategory::query()->firstOrCreate(
-                ['organization_id' => $organization->id, 'code' => self::LABOR_CATEGORY_CODE],
-                [
-                    'name' => 'Labor Services',
-                    'description' => 'Customer-facing hourly labor and professional service offerings.',
-                    'sort_order' => 10,
-                    'active' => true,
-                    'created_by_id' => $actor?->id,
-                    'updated_by_id' => $actor?->id,
-                ],
-            );
-            $hour = UnitOfMeasure::query()
-                ->forOrganization($organization->id)
-                ->where('code', 'hour')
-                ->firstOrFail();
-            $result = ['created' => [], 'unchanged' => []];
-
-            foreach (self::LABOR_SERVICES as $definition) {
-                $existing = CatalogService::query()
-                    ->forOrganization($organization->id)
-                    ->where('service_code', $definition['service_code'])
-                    ->first();
-                if ($existing) {
-                    $result['unchanged'][] = $definition['service_code'];
-
-                    continue;
-                }
-
-                $service = CatalogService::query()->create($definition + [
-                    'organization_id' => $organization->id,
-                    'category_id' => $category->id,
-                    'sales_uom_id' => $hour->id,
-                    'pricing_model' => 'hourly',
-                    'taxable' => false,
-                    'customer_visible' => true,
-                    'requires_office_approval' => false,
-                    'active' => true,
-                    'created_by_id' => $actor?->id,
-                    'updated_by_id' => $actor?->id,
-                ]);
-                $result['created'][] = $service->service_code;
-                $this->audit->record($organization, $actor, 'catalog.bootstrap_service_created', $service, [
-                    'service_code' => $service->service_code,
-                    'changed_fields' => ['category_id', 'sales_uom_id', 'service_code', 'name', 'customer_description', 'internal_description', 'pricing_model', 'default_price_cents', 'taxable', 'customer_visible', 'active'],
-                ]);
-            }
+            $this->bootstrapLaborServices($organization, $actor, $result);
+            $this->bootstrapTripCharge($organization, $actor, $result);
 
             return $result;
         });
     }
 
     /** @return array{created: list<string>, unchanged: list<string>} */
-    public function ensureTripCharge(Organization $organization, ?User $actor = null): array
+    public function ensureLaborServices(Organization $organization, ?User $actor = null): array
     {
-        return DB::transaction(function () use ($organization, $actor): array {
+        $result = ['created' => [], 'unchanged' => [], 'conflicts' => []];
+        DB::transaction(function () use ($organization, $actor, &$result): void {
             $organization = Organization::query()->lockForUpdate()->findOrFail($organization->id);
             $this->defaults->ensureFor($organization);
-            $category = CatalogCategory::query()->firstOrCreate(
-                ['organization_id' => $organization->id, 'code' => self::DISPATCH_CATEGORY_CODE],
-                [
-                    'name' => 'Service & Dispatch',
-                    'description' => 'Service-call and dispatch charges presented to customers.',
-                    'sort_order' => 20,
-                    'active' => true,
-                    'created_by_id' => $actor?->id,
-                    'updated_by_id' => $actor?->id,
-                ],
-            );
-            $visit = UnitOfMeasure::query()
-                ->forOrganization($organization->id)
-                ->where('code', 'visit')
-                ->firstOrFail();
-            $result = ['created' => [], 'unchanged' => []];
-            $service = CatalogService::query()
-                ->forOrganization($organization->id)
-                ->where('service_code', self::TRIP_SERVICE['service_code'])
-                ->first();
-
-            if (! $service) {
-                $service = CatalogService::query()->create(self::TRIP_SERVICE + [
-                    'organization_id' => $organization->id,
-                    'category_id' => $category->id,
-                    'sales_uom_id' => $visit->id,
-                    'pricing_model' => 'variant',
-                    'default_price_cents' => null,
-                    'taxable' => false,
-                    'customer_visible' => true,
-                    'requires_office_approval' => false,
-                    'active' => true,
-                    'created_by_id' => $actor?->id,
-                    'updated_by_id' => $actor?->id,
-                ]);
-                $result['created'][] = self::TRIP_SERVICE['service_code'];
-                $this->audit->record($organization, $actor, 'catalog.bootstrap_service_created', $service, [
-                    'service_code' => $service->service_code,
-                    'changed_fields' => ['category_id', 'sales_uom_id', 'service_code', 'name', 'customer_description', 'internal_description', 'pricing_model', 'taxable', 'customer_visible', 'active'],
-                ]);
-            } else {
-                $result['unchanged'][] = self::TRIP_SERVICE['service_code'];
-            }
-
-            foreach (self::TRIP_VARIANTS as $definition) {
-                $variant = CatalogServiceVariant::query()
-                    ->forOrganization($organization->id)
-                    ->where('catalog_service_id', $service->id)
-                    ->where('code', $definition['code'])
-                    ->first();
-                if ($variant) {
-                    $result['unchanged'][] = $definition['code'];
-
-                    continue;
-                }
-
-                $variant = CatalogServiceVariant::query()->create($definition + [
-                    'organization_id' => $organization->id,
-                    'catalog_service_id' => $service->id,
-                    'active' => true,
-                    'created_by_id' => $actor?->id,
-                    'updated_by_id' => $actor?->id,
-                ]);
-                $result['created'][] = $variant->code;
-                $this->audit->record($organization, $actor, 'catalog.bootstrap_variant_created', $variant, [
-                    'service_id' => $service->id,
-                    'variant_code' => $variant->code,
-                    'changed_fields' => ['catalog_service_id', 'code', 'label', 'customer_label', 'price_override_cents', 'sort_order', 'active'],
-                ]);
-            }
-
-            return $result;
+            $this->bootstrapLaborServices($organization, $actor, $result);
         });
+
+        return ['created' => $result['created'], 'unchanged' => array_merge($result['unchanged'], $result['conflicts'])];
+    }
+
+    /** @return array{created: list<string>, unchanged: list<string>} */
+    public function ensureTripCharge(Organization $organization, ?User $actor = null): array
+    {
+        $result = ['created' => [], 'unchanged' => [], 'conflicts' => []];
+        DB::transaction(function () use ($organization, $actor, &$result): void {
+            $organization = Organization::query()->lockForUpdate()->findOrFail($organization->id);
+            $this->defaults->ensureFor($organization);
+            $this->bootstrapTripCharge($organization, $actor, $result);
+        });
+
+        return ['created' => $result['created'], 'unchanged' => array_merge($result['unchanged'], $result['conflicts'])];
+    }
+
+    /** @param array{created: list<string>, unchanged: list<string>, conflicts: list<string>} $result */
+    private function bootstrapLaborServices(Organization $organization, ?User $actor, array &$result): void
+    {
+        $category = CatalogCategory::query()->firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => self::LABOR_CATEGORY_CODE],
+            ['name' => 'Labor Services', 'description' => 'Customer-facing hourly labor and professional service offerings.', 'sort_order' => 10, 'active' => true, 'created_by_id' => $actor?->id, 'updated_by_id' => $actor?->id],
+        );
+        $hour = UnitOfMeasure::query()->forOrganization($organization->id)->where('code', 'hour')->firstOrFail();
+        foreach (self::LABOR_SERVICES as $definition) {
+            $existing = CatalogService::query()->forOrganization($organization->id)->where('service_code', $definition['service_code'])->first();
+            if ($existing) {
+                $compatible = $existing->active && $existing->pricing_model === 'hourly' && (int) $existing->sales_uom_id === (int) $hour->id && $existing->default_price_cents !== null;
+                $result[$compatible ? 'unchanged' : 'conflicts'][] = $definition['service_code'];
+
+                continue;
+            }
+            $service = CatalogService::query()->create($definition + ['organization_id' => $organization->id, 'category_id' => $category->id, 'sales_uom_id' => $hour->id, 'pricing_model' => 'hourly', 'taxable' => false, 'customer_visible' => true, 'requires_office_approval' => false, 'active' => true, 'created_by_id' => $actor?->id, 'updated_by_id' => $actor?->id]);
+            $result['created'][] = $service->service_code;
+            $this->audit->record($organization, $actor, 'catalog.bootstrap_service_created', $service, ['service_code' => $service->service_code, 'changed_fields' => ['category_id', 'sales_uom_id', 'service_code', 'name', 'customer_description', 'internal_description', 'pricing_model', 'default_price_cents', 'taxable', 'customer_visible', 'active']]);
+        }
+    }
+
+    /** @param array{created: list<string>, unchanged: list<string>, conflicts: list<string>} $result */
+    private function bootstrapTripCharge(Organization $organization, ?User $actor, array &$result): void
+    {
+        $category = CatalogCategory::query()->firstOrCreate(
+            ['organization_id' => $organization->id, 'code' => self::DISPATCH_CATEGORY_CODE],
+            ['name' => 'Service & Dispatch', 'description' => 'Service-call and dispatch charges presented to customers.', 'sort_order' => 20, 'active' => true, 'created_by_id' => $actor?->id, 'updated_by_id' => $actor?->id],
+        );
+        $visit = UnitOfMeasure::query()->forOrganization($organization->id)->where('code', 'visit')->firstOrFail();
+        $service = CatalogService::query()->forOrganization($organization->id)->where('service_code', self::TRIP_SERVICE['service_code'])->first();
+        if ($service && (! $service->active || $service->pricing_model !== 'variant' || (int) $service->sales_uom_id !== (int) $visit->id)) {
+            $result['conflicts'][] = self::TRIP_SERVICE['service_code'];
+
+            return;
+        }
+        if (! $service) {
+            $service = CatalogService::query()->create(self::TRIP_SERVICE + ['organization_id' => $organization->id, 'category_id' => $category->id, 'sales_uom_id' => $visit->id, 'pricing_model' => 'variant', 'default_price_cents' => null, 'taxable' => false, 'customer_visible' => true, 'requires_office_approval' => false, 'active' => true, 'created_by_id' => $actor?->id, 'updated_by_id' => $actor?->id]);
+            $result['created'][] = self::TRIP_SERVICE['service_code'];
+            $this->audit->record($organization, $actor, 'catalog.bootstrap_service_created', $service, ['service_code' => $service->service_code, 'changed_fields' => ['category_id', 'sales_uom_id', 'service_code', 'name', 'customer_description', 'internal_description', 'pricing_model', 'taxable', 'customer_visible', 'active']]);
+        } else {
+            $result['unchanged'][] = self::TRIP_SERVICE['service_code'];
+        }
+        foreach (self::TRIP_VARIANTS as $definition) {
+            $variant = CatalogServiceVariant::query()->forOrganization($organization->id)->where('catalog_service_id', $service->id)->where('code', $definition['code'])->first();
+            if ($variant) {
+                $result[$variant->active && $variant->price_override_cents !== null ? 'unchanged' : 'conflicts'][] = $definition['code'];
+
+                continue;
+            }
+            $variant = CatalogServiceVariant::query()->create($definition + ['organization_id' => $organization->id, 'catalog_service_id' => $service->id, 'active' => true, 'created_by_id' => $actor?->id, 'updated_by_id' => $actor?->id]);
+            $result['created'][] = $variant->code;
+            $this->audit->record($organization, $actor, 'catalog.bootstrap_variant_created', $variant, ['service_id' => $service->id, 'variant_code' => $variant->code, 'changed_fields' => ['catalog_service_id', 'code', 'label', 'customer_label', 'price_override_cents', 'sort_order', 'active']]);
+        }
     }
 }
