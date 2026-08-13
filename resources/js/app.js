@@ -8,7 +8,7 @@ function updateConnectivity() {
     }
 
     document.querySelectorAll('form').forEach((form) => {
-        if ((form.method || 'get').toLowerCase() !== 'get') {
+        if ((form.getAttribute('method') || 'get').toLowerCase() !== 'get') {
             form.querySelectorAll('button, input[type="submit"]').forEach((control) => {
                 control.disabled = !navigator.onLine;
             });
@@ -17,7 +17,7 @@ function updateConnectivity() {
 }
 
 document.addEventListener('submit', (event) => {
-    if ((event.target.method || 'get').toLowerCase() !== 'get' && !navigator.onLine) {
+    if ((event.target.getAttribute('method') || 'get').toLowerCase() !== 'get' && !navigator.onLine) {
         event.preventDefault();
         if (connectivityBanner) connectivityBanner.hidden = false;
     }
@@ -245,6 +245,41 @@ document.querySelectorAll('[data-invoice-item-dialog]').forEach((dialog) => {
         close();
     });
     if (dialog.dataset.autoOpen === 'true') open(document.querySelector(`[data-invoice-item-open="${CSS.escape(dialog.id)}"]`));
+});
+
+const paymentOverlays = new Map();
+document.querySelectorAll('[data-payment-overlay]').forEach((dialog) => {
+    let launcher;
+    const firstFocusable = () => dialog.querySelector('[aria-invalid="true"], input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href]');
+    const open = (button) => {
+        launcher = button ?? launcher;
+        if (!dialog.open) dialog.showModal();
+        requestAnimationFrame(() => firstFocusable()?.focus());
+    };
+    const close = (restoreFocus = true) => {
+        if (dialog.open) dialog.close();
+        if (restoreFocus) launcher?.focus();
+    };
+    paymentOverlays.set(dialog.id, { dialog, open, close });
+    dialog.querySelectorAll('[data-payment-overlay-close]').forEach((button) => button.addEventListener('click', () => close()));
+    dialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+});
+
+document.querySelectorAll('[data-payment-overlay-open]').forEach((button) => button.addEventListener('click', () => {
+    paymentOverlays.get(button.dataset.paymentOverlayOpen)?.open(button);
+}));
+
+document.querySelectorAll('[data-payment-overlay-switch]').forEach((button) => button.addEventListener('click', () => {
+    const current = button.closest('[data-payment-overlay]');
+    if (current) paymentOverlays.get(current.id)?.close(false);
+    paymentOverlays.get(button.dataset.paymentOverlaySwitch)?.open(button);
+}));
+
+document.querySelectorAll('[data-payment-overlay][data-auto-open="true"]').forEach((dialog) => {
+    paymentOverlays.get(dialog.id)?.open(document.querySelector(`[data-payment-overlay-open="${CSS.escape(dialog.id)}"]`));
 });
 
 document.querySelectorAll('[data-catalog-picker]').forEach((picker) => {

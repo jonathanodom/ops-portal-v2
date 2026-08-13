@@ -119,9 +119,9 @@ class PaymentWorkflow
         return $this->applyAuthoritativeResult($attempt, $result, $actor);
     }
 
-    public function recordManual(Invoice $invoice, User $actor, string $method, int $amountCents, \DateTimeInterface $receivedAt, ?string $reference, string $idempotencyKey): PaymentTransaction
+    public function recordManual(Invoice $invoice, User $actor, string $method, int $amountCents, \DateTimeInterface $receivedAt, ?string $reference, string $idempotencyKey, ?string $note = null): PaymentTransaction
     {
-        return DB::transaction(function () use ($invoice, $actor, $method, $amountCents, $receivedAt, $reference, $idempotencyKey): PaymentTransaction {
+        return DB::transaction(function () use ($invoice, $actor, $method, $amountCents, $receivedAt, $reference, $idempotencyKey, $note): PaymentTransaction {
             if ($existing = PaymentTransaction::query()->where('idempotency_key', $idempotencyKey)->first()) {
                 abort_unless((int) $existing->invoice_id === (int) $invoice->id, 422);
 
@@ -140,7 +140,7 @@ class PaymentWorkflow
             if ($method === 'check' && blank($reference)) {
                 throw ValidationException::withMessages(['reference' => 'A check reference is required.']);
             }
-            $transaction = PaymentTransaction::query()->create(['organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $method, 'amount_cents' => $amountCents, 'manual_reference' => $reference, 'idempotency_key' => $idempotencyKey, 'received_at' => $receivedAt, 'confirmed_at' => now(), 'recorded_by_id' => $actor->id]);
+            $transaction = PaymentTransaction::query()->create(['organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $method, 'amount_cents' => $amountCents, 'manual_reference' => $reference, 'reason' => $note, 'idempotency_key' => $idempotencyKey, 'received_at' => $receivedAt, 'confirmed_at' => now(), 'recorded_by_id' => $actor->id]);
             $this->createReceipt($transaction);
             $this->audit->record($invoice->organization, $actor, 'payment.manual_recorded', $transaction, ['invoice_id' => $invoice->id, 'transaction_id' => $transaction->id, 'method' => $method, 'amount_cents' => $amountCents]);
 

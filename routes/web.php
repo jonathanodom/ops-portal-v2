@@ -142,6 +142,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy'])->whereNumber('invoice')->middleware('capability:invoices.delete_draft')->name('invoices.destroy');
             Route::post('/invoices/{invoice}/pdf/retry', [InvoiceController::class, 'retryPdf'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.pdf.retry');
             Route::post('/invoices/{invoice}/payments/checkout', [PaymentController::class, 'checkout'])->whereNumber('invoice')->name('invoices.payments.checkout');
+            Route::put('/invoices/{invoice}/payments/provider', [PaymentController::class, 'provider'])->whereNumber('invoice')->middleware('capability:payments.settings.manage')->name('invoices.payments.provider');
             Route::post('/invoices/{invoice}/payments/manual', [PaymentController::class, 'manual'])->whereNumber('invoice')->name('invoices.payments.manual');
             Route::post('/invoices/{invoice}/payments/{attempt}/expire', [PaymentController::class, 'expire'])->whereNumber(['invoice', 'attempt'])->name('invoices.payments.expire');
             Route::post('/invoices/{invoice}/payments/{attempt}/reconcile', [PaymentController::class, 'reconcile'])->whereNumber(['invoice', 'attempt'])->name('invoices.payments.reconcile');

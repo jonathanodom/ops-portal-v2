@@ -309,6 +309,38 @@ test.describe('desktop beta', () => {
         await expect(billingDialog).toBeHidden();
         await expect(billingLauncher).toBeFocused();
 
+        await page.goto('/office/invoices/1');
+        const recordPaymentLauncher = page.locator('[data-invoice-command-bar]').getByRole('button', { name: 'Record payment' });
+        await recordPaymentLauncher.click();
+        const recordPaymentDialog = page.getByRole('dialog', { name: 'Record payment' });
+        await expect(recordPaymentDialog).toBeVisible();
+        await expect(recordPaymentDialog.getByText('Balance due')).toBeVisible();
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
+        await expect(recordPaymentDialog).toBeHidden();
+        await expect(recordPaymentLauncher).toBeFocused();
+
+        const securePaymentLauncher = page.locator('[data-invoice-command-bar]').getByRole('button', { name: 'Pay securely' });
+        await securePaymentLauncher.click();
+        const securePaymentDialog = page.getByRole('dialog', { name: 'Pay securely' });
+        await expect(securePaymentDialog).toBeVisible();
+        await expect(securePaymentDialog.getByText(/Connected/).first()).toBeVisible();
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
+        await expect(securePaymentDialog).toBeHidden();
+        await expect(securePaymentLauncher).toBeFocused();
+
+        const paymentHistoryLauncher = page.locator('[data-invoice-command-bar]').getByRole('button', { name: /Open payment history/ });
+        await paymentHistoryLauncher.click();
+        const paymentHistoryDialog = page.getByRole('dialog', { name: 'Payment history' });
+        await expect(paymentHistoryDialog).toBeVisible();
+        await expect(paymentHistoryDialog.getByText('Current balance')).toBeVisible();
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
+        await expect(paymentHistoryDialog).toBeHidden();
+        await expect(paymentHistoryLauncher).toBeFocused();
+
+        await page.goBack();
         await page.setViewportSize({ width: 390, height: 844 });
         await expect(page.locator('[data-invoice-item-table]')).toBeHidden();
         await expect(page.locator('[data-invoice-item-cards]')).toBeVisible();

@@ -3,6 +3,7 @@
     $isPaid = $invoice->status === 'issued' && $invoice->paymentState() === 'paid';
     $displayStatus = $isPaid ? 'Paid' : ucfirst(str_replace('_', ' ', $invoice->status));
     $statusClass = $invoice->status === 'void' ? 'status-inactive' : ($isPaid || $invoice->status === 'issued' ? 'status-active' : 'status-hold');
+    $hasOpenAttempt = $invoice->relationLoaded('paymentAttempts') && $invoice->paymentAttempts->contains(fn ($attempt) => $attempt->isOpen());
 @endphp
 
 <section class="invoice-command-bar" data-invoice-command-bar aria-label="Invoice actions">
@@ -17,10 +18,18 @@
         </div>
     </div>
 
+    @if($invoice->status === 'issued' && $activeMembership->hasCapability('payments.view'))
+        <button type="button" class="invoice-command-total group" data-payment-overlay-open="payment-history-dialog" aria-label="Open payment history. Balance due ${{ number_format(max(0, $invoice->balanceCents()) / 100, 2) }}">
+            <span class="block text-xs font-bold uppercase tracking-[0.08em] text-slate-500 group-hover:text-brand-blue">Balance due</span>
+            <span class="block text-xl font-bold text-slate-950">${{ number_format(max(0, $invoice->balanceCents()) / 100, 2) }}</span>
+            <span class="mt-1 block text-xs font-semibold text-brand-blue">View payment history</span>
+        </button>
+    @else
     <div class="invoice-command-total">
         <p class="text-xs font-bold uppercase tracking-[0.08em] text-slate-500">{{ $invoice->status === 'issued' ? 'Balance due' : 'Invoice total' }}</p>
         <p class="text-xl font-bold text-slate-950">${{ number_format(($invoice->status === 'issued' ? max(0, $invoice->balanceCents()) : $invoice->total_cents) / 100, 2) }}</p>
     </div>
+    @endif
 
     <div class="invoice-command-actions">
         @if($invoice->status === 'draft')
@@ -42,10 +51,10 @@
             @if($invoice->pdf_status === 'ready')<a class="button-secondary" href="{{ route('invoices.pdf', $invoice) }}">PDF</a>@endif
             @if($activeMembership->hasCapability('payments.view'))
                 @if($isPaid)
-                    <a class="button-secondary" href="#payments">Payments / receipts</a>
+                    <button class="button-secondary" type="button" data-payment-overlay-open="payment-history-dialog">Payments / receipts</button>
                 @else
-                    @if($activeMembership->hasCapability('payments.record_manual'))<a class="button-secondary" href="#record-manual-payment">Record payment</a>@endif
-                    @if($activeMembership->hasCapability('payments.collect'))<a class="button-primary" href="#hosted-checkout">Pay securely</a>@endif
+                    @if($activeMembership->hasCapability('payments.record_manual') && ! $hasOpenAttempt)<button class="button-secondary" type="button" data-payment-overlay-open="record-payment-dialog">Record payment</button>@endif
+                    @if($activeMembership->hasCapability('payments.collect'))<button class="button-primary" type="button" data-payment-overlay-open="secure-payment-dialog">Pay securely</button>@endif
                 @endif
             @endif
         @endif

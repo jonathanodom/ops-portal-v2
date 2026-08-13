@@ -139,7 +139,10 @@ class Phase86CanonicalWebhooksAndProviderResolutionTest extends TestCase
 
         $response = $this->actingAs($admin)->get('/office/invoices/'.$invoice->id)->assertOk();
         $response->assertDontSee('Electronic payment provider')->assertDontSee('preferred_payment_provider');
-        $this->actingAs($admin)->put('/office/invoices/'.$invoice->id.'/payments/provider', ['preferred_payment_provider' => 'stripe'])->assertNotFound();
+        $this->actingAs($admin)->put('/office/invoices/'.$invoice->id.'/payments/provider', [
+            'payment_form_context' => 'secure',
+            'preferred_payment_provider' => 'stripe',
+        ])->assertSessionHasErrors('preferred_payment_provider');
     }
 
     public function test_provider_switching_is_blocked_only_by_active_attempt_then_success_establishes_lock(): void

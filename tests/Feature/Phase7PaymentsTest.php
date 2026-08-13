@@ -200,6 +200,120 @@ class Phase7PaymentsTest extends TestCase
         $this->assertSame('stripe', $workflow->setPreferredProvider($invoice->fresh(), $admin, 'stripe')->preferred_payment_provider);
     }
 
+    public function test_issued_invoice_uses_payment_overlays_and_only_admin_sees_provider_override(): void
+    {
+        [$invoice, $admin] = $this->invoiceScenario();
+        PaymentProviderConfiguration::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'public_id' => (string) Str::uuid(),
+            'provider' => 'square',
+            'environment' => 'sandbox',
+            'api_secret' => 'square_fake',
+            'webhook_secret' => 'square_webhook',
+            'location_id' => 'LOCATION',
+            'credential_fingerprint' => 'SQUARE860000',
+            'enabled' => true,
+            'connection_status' => 'connected',
+        ]);
+
+        $this->actingAs($admin)->get(route('office.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('id="record-payment-dialog"', false)
+            ->assertSee('id="secure-payment-dialog"', false)
+            ->assertSee('id="payment-history-dialog"', false)
+            ->assertSee('Use Square instead')
+            ->assertDontSee('<select name="preferred_payment_provider"', false);
+
+        [$billing] = $this->userWithRole('billing', $invoice->organization);
+        $this->actingAs($billing)->get(route('office.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('id="record-payment-dialog"', false)
+            ->assertSee('id="secure-payment-dialog"', false)
+            ->assertDontSee('Use Square instead');
+    }
+
+    public function test_office_secure_payment_creation_reopens_workspace_and_provider_override_obeys_locking(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $square = PaymentProviderConfiguration::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'public_id' => (string) Str::uuid(),
+            'provider' => 'square',
+            'environment' => 'sandbox',
+            'api_secret' => 'square_fake',
+            'webhook_secret' => 'square_webhook',
+            'location_id' => 'LOCATION',
+            'credential_fingerprint' => 'SQUARE860001',
+            'enabled' => true,
+            'connection_status' => 'connected',
+        ]);
+
+        $this->actingAs($admin)->put(route('office.invoices.payments.provider', $invoice), [
+            'payment_form_context' => 'secure',
+            'preferred_payment_provider' => 'square',
+        ])->assertRedirect()->assertSessionHas('payment_overlay', 'secure');
+        $this->assertSame('square', $invoice->fresh()->preferred_payment_provider);
+
+        $response = $this->actingAs($admin)->from(route('office.invoices.show', $invoice))->post(route('office.invoices.payments.checkout', $invoice), [
+            'payment_form_context' => 'secure',
+            'amount' => '25.00',
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+        $response->assertRedirect(route('office.invoices.show', $invoice))->assertSessionHas('payment_overlay', 'secure');
+        $attempt = $invoice->paymentAttempts()->firstOrFail();
+        $this->assertSame($square->id, $attempt->payment_provider_configuration_id);
+
+        $this->actingAs($admin)->get(route('office.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Payment link ready')
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee(route('office.invoices.payments.qr', [$invoice, $attempt]), false);
+
+        $this->actingAs($admin)->put(route('office.invoices.payments.provider', $invoice), [
+            'payment_form_context' => 'secure',
+            'preferred_payment_provider' => 'stripe',
+        ])->assertSessionHasErrors('preferred_payment_provider');
+    }
+
+    public function test_manual_payment_validation_reopens_modal_and_optional_note_remains_internal(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $url = route('office.invoices.show', $invoice);
+
+        $this->actingAs($admin)->from($url)->post(route('office.invoices.payments.manual', $invoice), [
+            'payment_form_context' => 'manual',
+            'method' => 'check',
+            'amount' => '15.00',
+            'received_at' => now($invoice->organization->timezone)->format('Y-m-d\TH:i'),
+            'reference' => '',
+            'note' => 'Customer paid after the service appointment.',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertRedirect($url)->assertSessionHasErrors('reference');
+
+        $this->get($url)->assertOk()
+            ->assertSee('Payment details need attention')
+            ->assertSee('id="record-payment-dialog"', false)
+            ->assertSee('data-auto-open="true"', false);
+
+        $this->actingAs($admin)->from($url)->post(route('office.invoices.payments.manual', $invoice), [
+            'payment_form_context' => 'manual',
+            'method' => 'cash',
+            'amount' => '15.00',
+            'received_at' => now($invoice->organization->timezone)->format('Y-m-d\TH:i'),
+            'reference' => '',
+            'note' => 'Internal collection note.',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertRedirect($url)->assertSessionHas('payment_overlay', 'history');
+
+        $transaction = $invoice->paymentTransactions()->firstOrFail();
+        $this->assertSame('Internal collection note.', $transaction->reason);
+        $this->get(route('payments.receipts.show', ['receipt' => $transaction->receipt, 'token' => 'invalid']))
+            ->assertNotFound()
+            ->assertDontSee('Internal collection note.');
+    }
+
     /** @return array{Invoice,User,PaymentProviderConfiguration} */
     private function invoiceScenario(): array
     {
