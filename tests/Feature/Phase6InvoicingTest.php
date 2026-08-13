@@ -9,6 +9,7 @@ use App\Jobs\DeleteUnusedOrganizationBrandAsset;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\AuditEvent;
 use App\Models\BillingHandoff;
+use App\Models\BillingLaborRate;
 use App\Models\Capability;
 use App\Models\CatalogService;
 use App\Models\Closeout;
@@ -110,6 +111,34 @@ class Phase6InvoicingTest extends TestCase
             'quantity_millis' => 1000,
             'catalog_quantity_millis' => 1000,
         ]);
+    }
+
+    public function test_catalog_backed_labor_cannot_be_relinked_to_a_legacy_named_rate(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $line = $invoice->lines()->where('line_type', 'labor')->firstOrFail();
+        $legacy = BillingLaborRate::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'name' => 'Historical rate',
+            'hourly_rate_cents' => 5000,
+            'active' => true,
+        ]);
+
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()->assertDontSee('Named labor rate');
+        $this->actingAs($admin)->put("/office/invoices/{$invoice->id}/lines/{$line->id}", [
+            'line_type' => 'labor',
+            'description' => $line->description,
+            'quantity' => '1.25',
+            'unit' => 'Hour',
+            'unit_price' => '50.00',
+            'included' => '1',
+            'labor_rate_id' => $legacy->id,
+            'override_reason' => 'Forged legacy selection',
+        ])->assertSessionHasErrors('labor_rate_id');
+        $this->assertNull($line->fresh()->labor_rate_id);
+        $this->assertSame(13500, $line->fresh()->unit_price_cents);
     }
 
     public function test_ready_refreshes_exact_legacy_labor_description_and_blocks_manual_database_ids(): void
