@@ -165,6 +165,50 @@ composer check
 
 CI repeats the migrations, seed, tests, formatting check, and production asset build against MySQL 8.4.
 
+## Vultr production deployment
+
+The deployment scripts are deliberately separate:
+
+1. **Initial install** — clone the repository and create a production `.env`:
+
+   ```bash
+   sudo -u viktor-deploy APP_DIR=/var/www/ops-portal-v2 \
+     GIT_REPO_URL=https://github.com/jonathanodom/ops-portal-v2.git \
+     ./scripts/install-production.sh
+   sudoedit /var/www/ops-portal-v2/.env
+   /var/www/ops-portal-v2/scripts/update-production.sh
+   ```
+
+   The install script refuses to overwrite an existing directory and does not
+   write real credentials. Set the database, mail, session, and application
+   values in `.env` before the first update.
+
+2. **Sequential updates** — run the same update command after an approved merge:
+
+   ```bash
+   /var/www/ops-portal-v2/scripts/update-production.sh
+   ```
+
+   Updates use fast-forward-only Git pulls, locked Composer/npm dependencies,
+   production asset builds, additive Laravel migrations, idempotent seeders,
+   cache rebuilds, and queue restarts. They never run `migrate:fresh`,
+   `db:wipe`, `migrate:reset`, or remove Docker/database volumes.
+
+3. **Nightly update** — install the cron entry once:
+
+   ```bash
+   sudo APP_DIR=/var/www/ops-portal-v2 \
+     /var/www/ops-portal-v2/scripts/install-nightly-update.sh
+   ```
+
+   This runs daily at 02:17 server time, uses `flock` to prevent overlapping
+   deployments, and writes output to `storage/logs/nightly-deploy.log`.
+
+The nightly job is intentionally a deployment check, not a backup. Configure
+and verify independent encrypted database and storage backups before enabling
+automatic production updates. Keep the app's `.env`, uploaded files, and
+database outside Git.
+
 ## Safety boundaries
 
 - `jonathanodom/Ops-portal` and `portal.newdaytech.net` are read-only references.
