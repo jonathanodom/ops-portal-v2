@@ -98,7 +98,7 @@ class InvoiceController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
-        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
+        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'lines.catalogSelectedBy', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'closeoutLinks.review.tripCharge.selectedBy', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
         if (! $request->attributes->get('membership')->hasCapability('invoices.manage')) {
             return view('office.invoices.summary', compact('invoice'));
         }
@@ -205,6 +205,9 @@ class InvoiceController extends Controller
         $line = InvoiceLine::query()->where('organization_id', $invoice->organization_id)->where('invoice_id', $invoice->id)->findOrFail($line);
         $data = $request->validate($this->lineRules(true));
         $values = $this->lineValues($data);
+        if ($line->catalog_item_type && ! empty($values['labor_rate_id'])) {
+            return back()->withErrors(['labor_rate_id' => 'Catalog-backed labor cannot use a legacy named labor rate.'])->withInput();
+        }
         if (! empty($values['labor_rate_id'])) {
             $rate = BillingLaborRate::query()->forOrganization($invoice->organization_id)->where('active', true)->findOrFail($values['labor_rate_id']);
             $values['unit_price_cents'] = $rate->hourly_rate_cents;

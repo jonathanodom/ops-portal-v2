@@ -47,8 +47,8 @@ test.describe('desktop beta', () => {
         await expectAccessible(page);
 
         await page.setViewportSize({ width: 1440, height: 900 });
-        await page.goto('/office/billing-handoffs');
-        await page.getByRole('link', { name: 'Open invoice' }).first().click();
+        await page.goto('/office/invoices?status=issued');
+        await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         await expectAccessible(page);
         await page.getByRole('link', { name: 'Customer view' }).click();
@@ -545,8 +545,8 @@ test.describe('mobile beta', () => {
             .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
             .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
         expect(settingsShortControls).toEqual([]);
-        await page.goto('/office/billing-handoffs');
-        await page.getByRole('link', { name: 'Open invoice' }).first().click();
+        await page.goto('/office/invoices?status=issued');
+        await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
         await page.getByRole('link', { name: 'Customer view' }).click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         await expect(page.getByText('Invoice acknowledgment')).toBeVisible();

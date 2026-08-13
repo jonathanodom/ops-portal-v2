@@ -154,6 +154,8 @@ See [Phase 8 Checkpoint 4](docs/PHASE_8_CHECKPOINT_4.md) for field and Invoice s
 
 See [Phase 8 Checkpoint 5](docs/PHASE_8_CHECKPOINT_5.md) for recurring Customer Service enrollment scope, immutable commercial snapshots, lifecycle rules, automation boundaries, preservation evidence, and validation results.
 
+Phase 8.7 makes Catalog authoritative for new labor and trip-charge pricing while Billing Settings owns time-calculation policy. See [Catalog-Aligned Labor Billing](docs/PHASE_8_7_CATALOG_ALIGNED_LABOR_BILLING.md) for Catalog codes, rounding and minimum-time behavior, trip review/provenance, legacy compatibility, production bootstrap commands, preservation evidence, and validation results.
+
 ## Quality commands
 
 ```powershell

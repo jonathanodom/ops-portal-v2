@@ -65,7 +65,7 @@
                         @foreach(['billable', 'warranty', 'customer_owned', 'no_charge'] as $treatment)<option value="{{ $treatment }}" @selected($value('billing_treatment', $line->billing_treatment) === $treatment)>{{ ucfirst(str_replace('_', ' ', $treatment)) }}</option>@endforeach
                     </select>
                 </div>
-                @if($line->line_type === 'labor')
+                @if($line->line_type === 'labor' && !$line->catalog_item_type)
                     <div>
                         <label class="form-label" for="rate-{{ $line->id }}">Named labor rate</label>
                         <select class="form-input" id="rate-{{ $line->id }}" name="labor_rate_id">

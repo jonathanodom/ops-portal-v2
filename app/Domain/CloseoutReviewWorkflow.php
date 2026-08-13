@@ -28,6 +28,8 @@ class CloseoutReviewWorkflow
         private readonly AuditRecorder $audit,
         private readonly ServiceTicketCompletion $ticketCompletion,
         private readonly VisitCreator $visitCreator,
+        private readonly TripChargeRecommender $tripCharges,
+        private readonly CatalogLineSnapshotFactory $catalogSnapshots,
     ) {}
 
     public function returnForCorrection(Closeout $closeout, User $actor, string $reason, string $token): CloseoutReview
@@ -101,7 +103,7 @@ class CloseoutReviewWorkflow
     }
 
     /** @param array<int, array<string, mixed>> $timeAdjustments @param array<int, array<string, mixed>> $partAdjustments */
-    public function approve(Closeout $closeout, User $actor, string $token, ?string $disposition, ?string $dispositionReason, array $timeAdjustments, array $partAdjustments): CloseoutReview
+    public function approve(Closeout $closeout, User $actor, string $token, ?string $disposition, ?string $dispositionReason, array $timeAdjustments, array $partAdjustments, bool $selectTripCharge = false): CloseoutReview
     {
         if ($existing = CloseoutReview::query()->where('decision_token', $token)->first()) {
             if ((int) $existing->closeout_id !== (int) $closeout->id || $existing->decision !== 'approved') {
@@ -123,7 +125,7 @@ class CloseoutReviewWorkflow
             }
         }
 
-        return DB::transaction(function () use ($closeout, $actor, $token, $disposition, $dispositionReason, $timeAdjustments, $partAdjustments, $selfReview): CloseoutReview {
+        return DB::transaction(function () use ($closeout, $actor, $token, $disposition, $dispositionReason, $timeAdjustments, $partAdjustments, $selectTripCharge, $selfReview): CloseoutReview {
             $closeout = Closeout::query()->lockForUpdate()->findOrFail($closeout->id);
             $this->assertReviewable($closeout);
             $visit = Visit::query()->lockForUpdate()->findOrFail($closeout->visit_id);
@@ -142,6 +144,7 @@ class CloseoutReviewWorkflow
                 'decided_at' => now(),
             ]);
             $this->storeAdjustments($review, $closeout, $timeAdjustments, $partAdjustments);
+            $this->storeTripCharge($review, $visit, $actor, $selectTripCharge);
 
             if ($closeout->outcome === 'customer_unavailable') {
                 $this->applyUnavailableDisposition($closeout, $actor, $disposition, $dispositionReason);
@@ -161,6 +164,7 @@ class CloseoutReviewWorkflow
                 'outcome' => $closeout->outcome,
                 'disposition' => $disposition,
                 'adjusted_fields' => collect($review->adjustments)->pluck('type')->unique()->values()->all(),
+                'trip_charge_selected' => $review->tripCharge()->exists(),
                 'self_review_override' => $selfReview,
             ]);
 
@@ -232,5 +236,57 @@ class CloseoutReviewWorkflow
             }
             $review->adjustments()->create(['organization_id' => $closeout->organization_id, 'type' => 'part', 'visit_part_proposal_id' => $part->id, 'excluded' => (bool) ($values['excluded'] ?? false), 'approved_quantity' => $values['approved_quantity'] ?? $part->quantity, 'approved_unit' => $values['approved_unit'] ?? $part->unit, 'approved_billing_treatment' => $values['approved_billing_treatment'] ?? $part->billing_treatment, 'reason' => $values['reason']]);
         }
+    }
+
+    private function storeTripCharge(CloseoutReview $review, Visit $visit, User $actor, bool $selected): void
+    {
+        $recommendation = $this->tripCharges->recommend($visit);
+        if ($selected && ! $recommendation->isRecommended()) {
+            throw ValidationException::withMessages(['trip_charge_selected' => 'The selected Visit does not currently have an eligible standard trip-charge recommendation.']);
+        }
+        if (! $recommendation->isRecommended()) {
+            return;
+        }
+        if (! $selected) {
+            $this->audit->record($visit->serviceTicket->organization, $actor, 'closeout.trip_charge_waived', $review, [
+                'visit_id' => $visit->id,
+                'recorded_travel_seconds' => $recommendation->travelSeconds,
+                'catalog_service_id' => $recommendation->service->id,
+                'catalog_service_variant_id' => $recommendation->variant->id,
+            ]);
+
+            return;
+        }
+
+        $snapshot = $this->catalogSnapshots->create(
+            $visit->organization_id,
+            'service',
+            $recommendation->service->id,
+            1000,
+            $recommendation->variant->id,
+        );
+        $tripCharge = $review->tripCharge()->create([
+            'organization_id' => $visit->organization_id,
+            'visit_id' => $visit->id,
+            'catalog_service_id' => $recommendation->service->id,
+            'catalog_service_variant_id' => $recommendation->variant->id,
+            'recorded_travel_seconds' => $recommendation->travelSeconds,
+            'catalog_code_snapshot' => $snapshot['catalog_code_snapshot'],
+            'catalog_name_snapshot' => $snapshot['catalog_name_snapshot'],
+            'catalog_description_snapshot' => $snapshot['catalog_description_snapshot'],
+            'catalog_unit_code_snapshot' => $snapshot['catalog_unit_code_snapshot'],
+            'catalog_unit_name_snapshot' => $snapshot['catalog_unit_name_snapshot'],
+            'catalog_unit_price_cents' => $snapshot['catalog_unit_price_cents'],
+            'catalog_taxable' => $snapshot['catalog_taxable'],
+            'selected_by_id' => $actor->id,
+            'selected_at' => now(),
+        ]);
+        $this->audit->record($visit->serviceTicket->organization, $actor, 'closeout.trip_charge_selected', $tripCharge, [
+            'visit_id' => $visit->id,
+            'recorded_travel_seconds' => $recommendation->travelSeconds,
+            'catalog_service_id' => $recommendation->service->id,
+            'catalog_service_variant_id' => $recommendation->variant->id,
+            'catalog_unit_price_cents' => $snapshot['catalog_unit_price_cents'],
+        ]);
     }
 }

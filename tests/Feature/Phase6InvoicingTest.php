@@ -4,12 +4,14 @@ namespace Tests\Feature;
 
 use App\Domain\InvoiceCalculator;
 use App\Domain\InvoiceWorkflow;
+use App\Domain\NewDayCatalogBootstrap;
 use App\Jobs\DeleteUnusedOrganizationBrandAsset;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\AuditEvent;
 use App\Models\BillingHandoff;
 use App\Models\BillingLaborRate;
 use App\Models\Capability;
+use App\Models\CatalogService;
 use App\Models\Closeout;
 use App\Models\CloseoutReview;
 use App\Models\Customer;
@@ -63,15 +65,80 @@ class Phase6InvoicingTest extends TestCase
         $this->assertSame($invoice->id, $handoff->fresh()->current_invoice_id);
         $this->assertDatabaseCount('invoices', 1);
         $this->assertDatabaseCount('invoice_closeouts', 2);
-        $this->assertDatabaseHas('invoice_lines', ['invoice_id' => $invoice->id, 'source_visit_id' => $first->id, 'line_type' => 'labor', 'quantity_millis' => 1250, 'unit_price_cents' => 12000]);
-        $this->assertDatabaseHas('invoice_lines', ['invoice_id' => $invoice->id, 'source_visit_id' => $second->id, 'line_type' => 'labor', 'quantity_millis' => 500, 'unit_price_cents' => 12000]);
+        $this->assertDatabaseHas('invoice_lines', ['invoice_id' => $invoice->id, 'source_visit_id' => $first->id, 'line_type' => 'labor', 'quantity_millis' => 1250, 'unit_price_cents' => 13500, 'labor_rate_id' => null, 'catalog_service_id' => $organization->billingSetting->default_labor_catalog_service_id, 'catalog_code_snapshot' => 'LABOR-BUS']);
+        $this->assertDatabaseHas('invoice_lines', ['invoice_id' => $invoice->id, 'source_visit_id' => $second->id, 'line_type' => 'labor', 'quantity_millis' => 500, 'unit_price_cents' => 13500, 'labor_rate_id' => null, 'catalog_service_id' => $organization->billingSetting->default_labor_catalog_service_id, 'catalog_code_snapshot' => 'LABOR-BUS']);
         $this->assertDatabaseHas('invoice_lines', ['invoice_id' => $invoice->id, 'source_part_proposal_id' => VisitPartProposal::query()->value('id'), 'unit_price_cents' => null]);
-        $this->assertSame(21000, $invoice->fresh()->subtotal_cents);
+        $this->assertSame(23625, $invoice->fresh()->subtotal_cents);
         $this->assertSame($organization->id, $invoice->organization_id);
         foreach ($invoice->lines->where('line_type', 'labor') as $line) {
             $this->assertSame('Service Labor — Multi-visit repair', $line->description);
             $this->assertStringNotContainsString('Visit #', $line->description);
+            $this->assertSame('Business Service Labor', $line->catalog_name_snapshot);
+            $this->assertSame('Hour', $line->catalog_unit_name_snapshot);
+            $this->assertSame(13500, $line->catalog_original_unit_price_cents);
+            $this->assertSame($line->source_closeout_id, $invoice->closeoutLinks->firstWhere('visit_id', $line->source_visit_id)->closeout_id);
         }
+        $labor = CatalogService::query()->findOrFail($organization->billingSetting->default_labor_catalog_service_id);
+        $labor->update(['name' => 'Changed after invoice creation', 'default_price_cents' => 99900, 'taxable' => true]);
+        foreach ($invoice->fresh()->lines->where('line_type', 'labor') as $line) {
+            $this->assertSame('Business Service Labor', $line->catalog_name_snapshot);
+            $this->assertSame(13500, $line->unit_price_cents);
+            $this->assertSame(13500, $line->catalog_original_unit_price_cents);
+            $this->assertFalse($line->catalog_taxable);
+        }
+    }
+
+    public function test_automatic_labor_uses_the_configured_rounding_and_minimum_policy(): void
+    {
+        [, $admin, $handoff, $first, $second] = $this->billingScenario(false);
+        OrganizationBillingSetting::query()->where('organization_id', $handoff->organization_id)->update([
+            'labor_billing_increment_minutes' => 30,
+            'labor_rounding_rule' => 'nearest',
+            'minimum_billable_minutes' => 60,
+        ]);
+
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+
+        $this->assertDatabaseHas('invoice_lines', [
+            'invoice_id' => $invoice->id,
+            'source_visit_id' => $first->id,
+            'quantity_millis' => 1000,
+            'catalog_quantity_millis' => 1000,
+        ]);
+        $this->assertDatabaseHas('invoice_lines', [
+            'invoice_id' => $invoice->id,
+            'source_visit_id' => $second->id,
+            'quantity_millis' => 1000,
+            'catalog_quantity_millis' => 1000,
+        ]);
+    }
+
+    public function test_catalog_backed_labor_cannot_be_relinked_to_a_legacy_named_rate(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $line = $invoice->lines()->where('line_type', 'labor')->firstOrFail();
+        $legacy = BillingLaborRate::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'name' => 'Historical rate',
+            'hourly_rate_cents' => 5000,
+            'active' => true,
+        ]);
+
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()->assertDontSee('Named labor rate');
+        $this->actingAs($admin)->put("/office/invoices/{$invoice->id}/lines/{$line->id}", [
+            'line_type' => 'labor',
+            'description' => $line->description,
+            'quantity' => '1.25',
+            'unit' => 'Hour',
+            'unit_price' => '50.00',
+            'included' => '1',
+            'labor_rate_id' => $legacy->id,
+            'override_reason' => 'Forged legacy selection',
+        ])->assertSessionHasErrors('labor_rate_id');
+        $this->assertNull($line->fresh()->labor_rate_id);
+        $this->assertSame(13500, $line->fresh()->unit_price_cents);
     }
 
     public function test_ready_refreshes_exact_legacy_labor_description_and_blocks_manual_database_ids(): void
@@ -539,8 +606,9 @@ class Phase6InvoicingTest extends TestCase
         $customer = Customer::factory()->create(['organization_id' => $organization->id, 'display_name' => 'Invoice Customer', 'legal_name' => 'Invoice Customer LLC', 'email' => 'billing@example.test']);
         $location = ServiceLocation::factory()->create(['organization_id' => $organization->id, 'customer_id' => $customer->id, 'name' => 'Main Site', 'timezone' => 'America/Chicago']);
         $ticket = ServiceTicket::query()->create(['organization_id' => $organization->id, 'customer_id' => $customer->id, 'service_location_id' => $location->id, 'ticket_number' => 'NDT-ST-2026-6001', 'title' => 'Multi-visit repair', 'priority' => 'normal', 'source' => 'phone', 'status' => 'completed']);
-        OrganizationBillingSetting::query()->create(['organization_id' => $organization->id, 'seller_name' => 'NewDay Tech', 'seller_legal_name' => 'NewDay Tech LLC', 'seller_email' => 'billing@newdaytech.net', 'seller_phone' => '555-0100', 'seller_address_line_1' => '100 Service Way', 'seller_city' => 'Dallas', 'seller_state' => 'TX', 'seller_postal_code' => '75001', 'default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt', 'default_tax_rate_basis_points' => 0]);
-        BillingLaborRate::query()->create(['organization_id' => $organization->id, 'name' => 'Standard', 'hourly_rate_cents' => 12000, 'is_default' => true, 'active' => true, 'created_by_id' => $admin->id]);
+        app(NewDayCatalogBootstrap::class)->ensureLaborServices($organization, $admin);
+        $labor = CatalogService::query()->forOrganization($organization->id)->where('service_code', 'LABOR-BUS')->firstOrFail();
+        OrganizationBillingSetting::query()->create(['organization_id' => $organization->id, 'seller_name' => 'NewDay Tech', 'seller_legal_name' => 'NewDay Tech LLC', 'seller_email' => 'billing@newdaytech.net', 'seller_phone' => '555-0100', 'seller_address_line_1' => '100 Service Way', 'seller_city' => 'Dallas', 'seller_state' => 'TX', 'seller_postal_code' => '75001', 'default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt', 'default_tax_rate_basis_points' => 0, 'default_labor_catalog_service_id' => $labor->id, 'labor_billing_increment_minutes' => 15, 'labor_rounding_rule' => 'up', 'minimum_billable_minutes' => 0]);
         $first = $this->approvedVisit($organization, $ticket, $location, $admin, 'needs_return_trip', 61);
         $second = $this->approvedVisit($organization, $ticket, $location, $admin, 'resolved', 16, 'other');
         if ($withPart) {

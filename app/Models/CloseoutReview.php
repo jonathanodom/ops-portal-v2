@@ -6,6 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable(['organization_id', 'closeout_id', 'reviewer_id', 'decision', 'reason', 'disposition', 'disposition_reason', 'self_review_override', 'administrative_completion', 'administrative_completion_reason', 'administratively_completed_at', 'decision_token', 'decided_at'])]
 class CloseoutReview extends Model
@@ -33,5 +34,10 @@ class CloseoutReview extends Model
     public function adjustments(): HasMany
     {
         return $this->hasMany(CloseoutReviewAdjustment::class);
+    }
+
+    public function tripCharge(): HasOne
+    {
+        return $this->hasOne(CloseoutReviewTripCharge::class);
     }
 }
