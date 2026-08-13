@@ -57,6 +57,16 @@ class PaymentSettingsController extends Controller
         return back()->with('status', ucfirst($configuration->provider).' credentials cleared.');
     }
 
+    public function defaultProvider(Request $request, PaymentSettingsWorkflow $workflow): RedirectResponse
+    {
+        $this->authorizeManage($request);
+        $data = $request->validate(['default_payment_provider' => ['nullable', Rule::in(['square', 'stripe'])]]);
+        $provider = filled($data['default_payment_provider'] ?? null) ? $data['default_payment_provider'] : null;
+        $workflow->setDefaultProvider($request->attributes->get('organization'), $request->user(), $provider);
+
+        return back()->with('status', $provider ? ucfirst($provider).' is now the default electronic payment provider.' : 'The default electronic payment provider was cleared.');
+    }
+
     private function authorizeManage(Request $request): void
     {
         abort_unless($request->attributes->get('membership')->hasCapability('payments.settings.manage'), 403);

@@ -149,6 +149,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/invoices/{invoice}/receipts/{receipt}/retry', [PaymentController::class, 'retryReceipt'])->whereNumber(['invoice', 'receipt'])->name('invoices.receipts.retry');
             Route::get('/settings', [OrganizationSettingsController::class, 'index'])->name('settings.index');
             Route::get('/settings/billing', [BillingSettingsController::class, 'edit'])->name('settings.billing.edit');
+            Route::put('/settings/billing/payments/default', [PaymentSettingsController::class, 'defaultProvider'])->name('settings.billing.payments.default');
             Route::put('/settings/billing/payments/{provider}', [PaymentSettingsController::class, 'update'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.update');
             Route::post('/settings/billing/payments/{provider}/test', [PaymentSettingsController::class, 'test'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.test');
             Route::post('/settings/billing/payments/{provider}/toggle', [PaymentSettingsController::class, 'toggle'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.toggle');
