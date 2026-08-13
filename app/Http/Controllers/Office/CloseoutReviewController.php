@@ -16,6 +16,8 @@ use Illuminate\View\View;
 
 class CloseoutReviewController extends Controller
 {
+    public function __construct(private readonly TripChargeRecommender $tripCharges) {}
+
     public function index(Request $request): View
     {
         $organization = $request->attributes->get('organization');
@@ -37,7 +39,7 @@ class CloseoutReviewController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $closeout, TripChargeRecommender $tripCharges): View
+    public function show(Request $request, string $closeout): View
     {
         $closeout = $this->closeout($request, $closeout);
         $closeout->load('returnVisit.returnOfVisit');
@@ -55,7 +57,7 @@ class CloseoutReviewController extends Controller
                 $query->where(fn ($q) => $q->where('subject_type', $visit->getMorphClass())->where('subject_id', $visit->id))
                     ->orWhere(fn ($q) => $q->where('subject_type', $visit->serviceTicket->getMorphClass())->where('subject_id', $visit->service_ticket_id));
             })->with('actor')->latest('occurred_at')->limit(50)->get();
-        $tripChargeRecommendation = $tripCharges->recommend($visit);
+        $tripChargeRecommendation = $this->tripCharges->recommend($visit);
 
         return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'events', 'completionBlockingVisits', 'tripChargeRecommendation'));
     }
