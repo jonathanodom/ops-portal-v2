@@ -2,6 +2,7 @@
 
 namespace App\Providers;
 
+use App\Contracts\SquareConnectionClient;
 use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\CustomerServiceEnrollment;
@@ -9,6 +10,7 @@ use App\Models\Invoice;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\Visit;
+use App\Payments\SquareOAuthConnectionClient;
 use App\Policies\ContactPolicy;
 use App\Policies\CustomerPolicy;
 use App\Policies\CustomerServiceEnrollmentPolicy;
@@ -30,7 +32,7 @@ class AppServiceProvider extends ServiceProvider
      */
     public function register(): void
     {
-        //
+        $this->app->bind(SquareConnectionClient::class, SquareOAuthConnectionClient::class);
     }
 
     /**

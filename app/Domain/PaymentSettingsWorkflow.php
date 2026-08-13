@@ -32,6 +32,9 @@ class PaymentSettingsWorkflow
     {
         return DB::transaction(function () use ($configuration, $actor, $values): PaymentProviderConfiguration {
             $configuration = PaymentProviderConfiguration::query()->lockForUpdate()->findOrFail($configuration->id);
+            if ($configuration->connection_method === 'oauth' && filled($values['api_secret'] ?? null)) {
+                throw ValidationException::withMessages(['provider' => 'Disconnect the hosted provider account before using legacy credentials.']);
+            }
             $changed = ['environment'];
             $configuration->environment = $values['environment'];
             $configuration->location_id = $configuration->provider === 'square' ? ($values['location_id'] ?? null) : null;
@@ -83,8 +86,8 @@ class PaymentSettingsWorkflow
 
     public function setEnabled(PaymentProviderConfiguration $configuration, User $actor, bool $enabled, bool $confirmLive): PaymentProviderConfiguration
     {
-        if ($enabled && $configuration->connection_status !== 'connected') {
-            throw ValidationException::withMessages(['enabled' => 'Test the provider connection successfully before enabling it.']);
+        if ($enabled && ! $configuration->hasUsableConnection()) {
+            throw ValidationException::withMessages(['enabled' => 'Connect the provider and select any required payment location before enabling it.']);
         }
         if ($enabled && $this->isLive($configuration)) {
             if (! app()->environment('production') || ! str_starts_with((string) config('app.url'), 'https://') || ! config('payments.live_enabled') || ! $confirmLive) {
@@ -145,6 +148,9 @@ class PaymentSettingsWorkflow
 
     public function clear(PaymentProviderConfiguration $configuration, User $actor, string $confirmation): void
     {
+        if ($configuration->connection_method === 'oauth') {
+            throw ValidationException::withMessages(['provider' => 'Use the hosted account disconnect action so provider authorization is revoked safely.']);
+        }
         if ($configuration->enabled || strtoupper(trim($confirmation)) !== 'CLEAR '.strtoupper($configuration->provider)) {
             throw ValidationException::withMessages(['confirmation' => 'Disable the provider and enter the required confirmation text.']);
         }

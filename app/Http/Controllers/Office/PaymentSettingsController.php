@@ -15,6 +15,7 @@ class PaymentSettingsController extends Controller
     {
         $this->authorizeManage($request);
         $provider = $this->provider($provider);
+        abort_if($provider === 'square', 404);
         $configuration = $workflow->configuration($request->attributes->get('organization'), $provider);
         $environments = $provider === 'square' ? ['sandbox', 'production'] : ['test', 'live'];
         $data = $request->validate([

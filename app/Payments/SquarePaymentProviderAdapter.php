@@ -94,6 +94,8 @@ class SquarePaymentProviderAdapter implements PaymentProviderAdapter
 
     private function client(PaymentProviderConfiguration $configuration): SquareClient
     {
-        return new SquareClient((string) $configuration->api_secret, options: ['baseUrl' => $configuration->environment === 'production' ? Environments::Production->value : Environments::Sandbox->value]);
+        $token = $configuration->connection_method === 'oauth' ? $configuration->oauth_access_token : $configuration->api_secret;
+
+        return new SquareClient((string) $token, options: ['baseUrl' => $configuration->environment === 'production' ? Environments::Production->value : Environments::Sandbox->value]);
     }
 }

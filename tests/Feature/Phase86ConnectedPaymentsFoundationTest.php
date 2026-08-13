@@ -145,7 +145,7 @@ class Phase86ConnectedPaymentsFoundationTest extends TestCase
         $this->actingAs($admin)->get('/office/settings/billing')->assertOk()->assertDontSee('server-application-secret');
     }
 
-    public function test_legacy_credential_rotation_clears_future_oauth_material_without_auditing_secrets(): void
+    public function test_hosted_connection_blocks_legacy_secret_rotation_without_auditing_secrets(): void
     {
         [$organization, $admin] = $this->actor('super_admin');
         $configuration = PaymentProviderConfiguration::query()->create([
@@ -154,19 +154,20 @@ class Phase86ConnectedPaymentsFoundationTest extends TestCase
             'oauth_refresh_token' => 'old-oauth-refresh', 'connection_status' => 'connected', 'external_account_id' => 'acct_old',
         ]);
 
-        app(PaymentSettingsWorkflow::class)->save($configuration, $admin, [
-            'environment' => 'test', 'api_secret' => 'new-legacy-secret', 'webhook_secret' => 'new-webhook-secret',
-        ]);
+        try {
+            app(PaymentSettingsWorkflow::class)->save($configuration, $admin, [
+                'environment' => 'test', 'api_secret' => 'new-legacy-secret', 'webhook_secret' => 'new-webhook-secret',
+            ]);
+            $this->fail('Hosted connections must be disconnected before legacy credentials can be used.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('provider', $exception->errors());
+        }
 
         $configuration->refresh();
-        $this->assertSame('legacy_credentials', $configuration->connection_method);
-        $this->assertNull($configuration->oauth_access_token);
-        $this->assertNull($configuration->oauth_refresh_token);
-        $this->assertNull($configuration->external_account_id);
-        $metadata = json_encode(DB::table('audit_events')->latest('id')->value('metadata'), JSON_THROW_ON_ERROR);
-        $this->assertStringNotContainsString('new-legacy-secret', $metadata);
-        $this->assertStringNotContainsString('new-webhook-secret', $metadata);
-        $this->assertStringNotContainsString('old-oauth', $metadata);
+        $this->assertSame('oauth', $configuration->connection_method);
+        $this->assertSame('old-oauth-access', $configuration->oauth_access_token);
+        $this->assertSame('old-oauth-refresh', $configuration->oauth_refresh_token);
+        $this->assertDatabaseMissing('audit_events', ['organization_id' => $organization->id, 'event_type' => 'payments.provider_credentials_updated']);
     }
 
     /** @return array{Organization, User, OrganizationMembership} */
