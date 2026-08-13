@@ -94,6 +94,56 @@
         @apply inline-flex min-h-14 items-center justify-center rounded-lg bg-brand-orange px-6 text-base font-bold text-slate-950 transition-colors hover:bg-orange-400;
     }
 
+    .field-section-nav {
+        scrollbar-width: none;
+    }
+
+    .field-section-nav::-webkit-scrollbar {
+        display: none;
+    }
+
+    .field-section-link {
+        @apply inline-flex min-h-11 shrink-0 items-center justify-center rounded-lg px-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-brand-blue-dark;
+    }
+
+    .field-outcome-option {
+        @apply relative flex min-h-20 cursor-pointer flex-col justify-center rounded-lg border border-slate-300 bg-white p-3 text-left transition-colors hover:border-brand-blue;
+    }
+
+    .field-outcome-option:has(input:checked) {
+        @apply border-brand-blue bg-blue-50 ring-2 ring-brand-blue/20;
+    }
+
+    .field-outcome-option[data-outcome="resolved"]:has(input:checked) {
+        @apply border-emerald-500 bg-emerald-50 ring-emerald-500/20;
+    }
+
+    .field-outcome-option[data-outcome="needs_return_trip"]:has(input:checked),
+    .field-outcome-option[data-outcome="on_hold"]:has(input:checked) {
+        @apply border-brand-orange bg-orange-50 ring-brand-orange/20;
+    }
+
+    .field-outcome-option[data-outcome="customer_unavailable"]:has(input:checked) {
+        @apply border-red-500 bg-red-50 ring-red-500/20;
+    }
+
+    .field-selected-outcome {
+        @apply inline-flex rounded-full bg-slate-200 px-3 py-1 text-xs font-bold text-slate-700;
+    }
+
+    .field-selected-outcome[data-outcome="resolved"] {
+        @apply bg-emerald-100 text-emerald-800;
+    }
+
+    .field-selected-outcome[data-outcome="needs_return_trip"],
+    .field-selected-outcome[data-outcome="on_hold"] {
+        @apply bg-orange-100 text-orange-900;
+    }
+
+    .field-selected-outcome[data-outcome="customer_unavailable"] {
+        @apply bg-red-100 text-red-800;
+    }
+
     .office-page-header {
         @apply flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between;
     }

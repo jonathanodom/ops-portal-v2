@@ -509,6 +509,17 @@ test.describe('mobile beta', () => {
         await expect(visitLink).toBeVisible();
         await visitLink.click();
         await expectAccessible(page);
+        await expect(page.locator('[data-connectivity-label]')).toHaveText('Online');
+        const workspaceNavigation = page.getByRole('navigation', { name: 'Visit workspace sections' });
+        await expect(workspaceNavigation.getByRole('link', { name: 'Time' })).toBeVisible();
+        await expect(workspaceNavigation.getByRole('link', { name: 'Notes & outcome' })).toBeVisible();
+        await expect(workspaceNavigation.getByRole('link', { name: 'Photos' })).toBeVisible();
+        await expect(workspaceNavigation.getByRole('link', { name: 'Parts' })).toBeVisible();
+        await page.getByText('Needs return trip', { exact: true }).click();
+        await expect(page.locator('[data-selected-outcome]')).toHaveText('Needs return trip');
+        await expect(page.locator('[data-selected-outcome]')).toHaveAttribute('data-outcome', 'needs_return_trip');
+        await workspaceNavigation.getByRole('link', { name: 'Photos' }).click();
+        await expect(page.getByRole('heading', { name: 'Private photos' })).toBeVisible();
         const shortControls = await page.locator('button, input, select, textarea, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
             .filter((element) => element.offsetParent !== null)
             .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
@@ -517,6 +528,7 @@ test.describe('mobile beta', () => {
         await context.setOffline(true);
         await page.evaluate(() => window.dispatchEvent(new Event('offline')));
         await expect(page.locator('[data-connectivity-banner]')).toBeVisible();
+        await expect(page.locator('[data-connectivity-label]')).toHaveText('Offline');
         const enabledWriteButtons = await page.locator('form[method="POST"] button:not([disabled])').count();
         expect(enabledWriteButtons).toBe(0);
         await context.setOffline(false);

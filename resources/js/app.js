@@ -1,10 +1,23 @@
 import './bootstrap';
 
 const connectivityBanner = document.querySelector('[data-connectivity-banner]');
+const connectivityStatus = document.querySelector('[data-connectivity-status]');
+const connectivityLabel = document.querySelector('[data-connectivity-label]');
 
 function updateConnectivity() {
     if (connectivityBanner) {
         connectivityBanner.hidden = navigator.onLine;
+    }
+    if (connectivityStatus && connectivityLabel) {
+        connectivityLabel.textContent = navigator.onLine ? 'Online' : 'Offline';
+        connectivityStatus.classList.toggle('border-emerald-300', navigator.onLine);
+        connectivityStatus.classList.toggle('bg-emerald-50', navigator.onLine);
+        connectivityStatus.classList.toggle('text-emerald-800', navigator.onLine);
+        connectivityStatus.classList.toggle('border-amber-400', !navigator.onLine);
+        connectivityStatus.classList.toggle('bg-amber-100', !navigator.onLine);
+        connectivityStatus.classList.toggle('text-amber-950', !navigator.onLine);
+        connectivityStatus.querySelector('[aria-hidden="true"]')?.classList.toggle('bg-emerald-600', navigator.onLine);
+        connectivityStatus.querySelector('[aria-hidden="true"]')?.classList.toggle('bg-amber-600', !navigator.onLine);
     }
 
     document.querySelectorAll('form').forEach((form) => {
@@ -26,6 +39,18 @@ document.addEventListener('submit', (event) => {
 window.addEventListener('online', updateConnectivity);
 window.addEventListener('offline', updateConnectivity);
 updateConnectivity();
+
+document.querySelectorAll('[data-outcome-selector]').forEach((selector) => {
+    const summary = document.querySelector('[data-selected-outcome]');
+    const updateOutcome = () => {
+        const selected = selector.querySelector('input[name="outcome"]:checked');
+        if (!summary) return;
+        summary.textContent = selected ? selected.dataset.outcomeLabel : 'Not selected';
+        summary.dataset.outcome = selected?.value || '';
+    };
+    selector.addEventListener('change', updateOutcome);
+    updateOutcome();
+});
 
 document.querySelectorAll('[data-dirty-form]').forEach((form) => {
     let dirty = false;

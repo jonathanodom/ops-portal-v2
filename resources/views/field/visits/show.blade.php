@@ -1,6 +1,8 @@
 <x-layouts.field :title="$visit->serviceTicket->ticket_number">
     @php
         $closeout = $visit->currentCloseout;
+        $selectedOutcome = old('outcome', $closeout?->outcome);
+        $outcomeLabels = ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'];
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
@@ -8,7 +10,10 @@
     @endphp
 
     @if (session('status'))
-        <div class="mb-4 rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900" role="status">{{ session('status') }}</div>
+        <div class="mb-4 rounded-lg border border-emerald-400 bg-emerald-50 p-4 text-emerald-950" role="status" data-save-feedback>
+            <p class="font-bold">Saved successfully</p>
+            <p class="mt-1 text-sm font-semibold">{{ session('status') }}</p>
+        </div>
     @endif
     @if (! empty($draftConflict))
         <div class="mb-4 rounded-lg border border-amber-400 bg-amber-50 p-4 text-amber-950" role="alert">
@@ -42,19 +47,30 @@
 
     @can('execute', $visit)
         @if ($visit->status === 'assigned')
-            <form method="POST" action="{{ route('field.visits.transition', $visit) }}" class="mt-5">
+            <form method="POST" action="{{ route('field.visits.transition', $visit) }}" class="sticky top-20 z-10 mt-5 rounded-xl border border-orange-300 bg-white p-2">
                 @csrf
                 <input type="hidden" name="status" value="en_route">
                 <button class="button-action w-full">Start En Route</button>
             </form>
         @endif
         @if ($visit->status === 'en_route')
-            <form method="POST" action="{{ route('field.visits.transition', $visit) }}" class="mt-5">
+            <form method="POST" action="{{ route('field.visits.transition', $visit) }}" class="sticky top-20 z-10 mt-5 rounded-xl border border-orange-300 bg-white p-2">
                 @csrf
                 <input type="hidden" name="status" value="on_site">
                 <button class="button-action w-full">Mark On Site</button>
             </form>
         @endif
+    @endcan
+
+    @can('execute', $visit)
+        <nav class="field-section-nav mt-4 flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1" aria-label="Visit workspace sections">
+            <a class="field-section-link" href="#visit-time">Time</a>
+            @if($visit->status !== 'canceled')<a class="field-section-link" href="#visit-closeout">Notes &amp; outcome</a>@endif
+            @if($visit->status !== 'canceled' && (! $closeout || $closeout->status === 'draft'))
+                <a class="field-section-link" href="#visit-photos">Photos</a>
+                <a class="field-section-link" href="#visit-parts">Parts</a>
+            @endif
+        </nav>
     @endcan
 
     <section class="surface mt-5 p-5">
@@ -92,7 +108,7 @@
     </section>
 
     @can('execute', $visit)
-        <section class="surface mt-4 p-5">
+        <section id="visit-time" class="surface mt-4 scroll-mt-24 p-5">
             <h2 class="text-lg font-bold">Time</h2>
             @forelse ($closeout?->timeEntries ?? collect() as $entry)
                 <div class="mt-3 border-t border-slate-200 pt-3 text-sm">
@@ -129,23 +145,25 @@
         </section>
 
         @if($visit->status !== 'canceled')
-        <section class="surface mt-4 p-5">
+        <section id="visit-closeout" class="surface mt-4 scroll-mt-24 p-5">
             <h2 class="text-lg font-bold">Closeout</h2>
             @if (! $closeout || $closeout->status === 'draft')
                 <form method="POST" action="{{ route('field.visits.draft', $visit) }}" class="mt-4" data-dirty-form>
                     @csrf
                     <input type="hidden" name="content_version" value="{{ $closeout?->content_version ?? 1 }}">
 
-                    <fieldset class="space-y-4">
+                    <fieldset class="space-y-4" data-outcome-selector>
                         <legend class="text-base font-bold text-slate-900">Visit outcome</legend>
                         <p class="text-sm text-slate-600">Choose the result that best describes this visit.</p>
-                        <label class="form-label" for="outcome">Outcome</label>
-                        <select class="form-input @error('outcome') border-red-500 bg-red-50 @enderror" id="outcome" name="outcome" @error('outcome') aria-invalid="true" aria-describedby="outcome-error" @enderror>
-                            <option value="">Choose outcome</option>
-                            @foreach (['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'] as $value => $label)
-                                <option value="{{ $value }}" @selected(old('outcome', $closeout?->outcome) === $value)>{{ $label }}</option>
+                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 @error('outcome') rounded-lg border border-red-500 bg-red-50 p-2 @enderror">
+                            @foreach ($outcomeLabels as $value => $label)
+                                <label class="field-outcome-option" data-outcome="{{ $value }}">
+                                    <input class="sr-only" type="radio" name="outcome" value="{{ $value }}" data-outcome-label="{{ $label }}" @checked($selectedOutcome === $value) @error('outcome') aria-invalid="true" aria-describedby="outcome-error" @enderror>
+                                    <span class="font-bold text-slate-950">{{ $label }}</span>
+                                    <span class="mt-1 text-xs text-slate-600">{{ match($value) {'resolved' => 'Work is complete.', 'needs_return_trip' => 'More work must be scheduled.', 'customer_unavailable' => 'Work could not be completed with the customer.', default => 'Pause this ticket for office follow-up.'} }}</span>
+                                </label>
                             @endforeach
-                        </select>
+                        </div>
                         <x-field-error field="outcome" />
                     </fieldset>
 
@@ -236,7 +254,7 @@
         </section>
 
         @if (! $closeout || $closeout->status === 'draft')
-            <section class="surface mt-4 p-5">
+            <section id="visit-photos" class="surface mt-4 scroll-mt-24 p-5">
                 <h2 class="font-bold">Private photos</h2>
                 <form action="{{ route('field.visits.media.store', $visit) }}" method="POST" enctype="multipart/form-data" class="mt-4 space-y-3" data-upload-form>
                     @csrf
@@ -263,7 +281,7 @@
                 @endif
             </section>
 
-            <section class="surface mt-4 p-5">
+            <section id="visit-parts" class="surface mt-4 scroll-mt-24 p-5">
                 <div class="flex flex-wrap items-start justify-between gap-3">
                     <div><h2 class="font-bold">Catalog items / parts &amp; equipment</h2><p class="mt-1 text-sm text-slate-600">Select a standard Catalog item or record a custom proposal.</p></div>
                     @if($activeMembership->hasCapability('catalog.use'))
@@ -300,6 +318,10 @@
                 <form method="POST" action="{{ route('field.visits.submit', $visit) }}">
                     @csrf
                     <input type="hidden" name="submission_token" value="{{ Str::uuid() }}">
+                    <div class="mb-3 flex items-center justify-between gap-3 border-b border-orange-200 pb-3">
+                        <span class="text-sm font-semibold text-slate-600">Selected outcome</span>
+                        <span data-selected-outcome data-outcome="{{ $selectedOutcome }}" class="field-selected-outcome">{{ $outcomeLabels[$selectedOutcome] ?? 'Not selected' }}</span>
+                    </div>
                     <label class="flex min-h-11 gap-3 rounded-lg @error('acknowledgment_confirmed') border border-red-500 bg-red-50 p-3 @enderror">
                         <input type="checkbox" name="acknowledgment_confirmed" value="1" @error('acknowledgment_confirmed') aria-invalid="true" aria-describedby="acknowledgment_confirmed-error" @enderror>
                         <span class="text-sm font-semibold">I confirm the work and outcome were reviewed with the customer or point of contact named above.</span>
