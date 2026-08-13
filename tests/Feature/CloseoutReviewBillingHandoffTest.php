@@ -121,7 +121,7 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
             ->assertOk()
             ->assertSee('This Service Ticket will remain open.')
-            ->assertSee("planned return visit #{$return->id}");
+            ->assertSee($return->displayLabel());
 
         $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", ['decision_token' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
         $this->assertSame('open', $visit->serviceTicket->fresh()->status);
@@ -207,7 +207,7 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
             ->assertOk()
             ->assertSee('Approval will not close the Service Ticket yet.')
-            ->assertSee("Visit #{$blockingVisit->id}")
+            ->assertSee($blockingVisit->displayLabel())
             ->assertSee('Planned');
 
         $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", ['decision_token' => (string) Str::uuid()])

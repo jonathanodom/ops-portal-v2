@@ -20,6 +20,11 @@ class Closeout extends Model
         return $this->belongsTo(Visit::class);
     }
 
+    public function returnVisit(): BelongsTo
+    {
+        return $this->belongsTo(Visit::class, 'return_visit_id')->withTrashed();
+    }
+
     public function parent(): BelongsTo
     {
         return $this->belongsTo(self::class, 'parent_closeout_id');

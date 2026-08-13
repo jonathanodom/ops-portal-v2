@@ -21,7 +21,7 @@
                     <tr>
                         <td><a href="{{ route('office.closeout-reviews.show',$closeout) }}" class="font-bold text-brand-blue hover:text-brand-blue-deep">{{ $closeout->visit->serviceTicket->ticket_number }}</a><p class="mt-0.5 text-xs text-slate-500">Version {{ $closeout->version }}</p></td>
                         <td><p class="font-semibold text-slate-900">{{ $closeout->visit->serviceTicket->customer->display_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ $closeout->visit->serviceLocation->name }}</p></td>
-                        <td>#{{ $closeout->visit_id }}</td>
+                        <td>{{ $closeout->visit->displayNumber() }}</td>
                         <td><span class="{{ in_array($closeout->visit->serviceTicket->priority,['high','urgent'],true) ? 'status-priority' : 'status-active' }}">{{ ucfirst(str_replace('_',' ',$closeout->outcome)) }}</span></td>
                         <td>{{ $closeout->submittedBy?->name ?? 'Former user' }}</td>
                         <td><x-local-time :value="$closeout->submitted_at" :timezone="$closeout->visit->timezone" /></td>
@@ -38,7 +38,7 @@
         @forelse($closeouts as $closeout)
             <a href="{{ route('office.closeout-reviews.show',$closeout) }}" class="office-mobile-card">
                 <div class="flex items-start justify-between gap-3"><div><p class="font-bold text-brand-blue">{{ $closeout->visit->serviceTicket->ticket_number }}</p><p class="mt-1 font-semibold text-slate-950">{{ $closeout->visit->serviceTicket->customer->display_name }}</p></div><span class="{{ in_array($closeout->visit->serviceTicket->priority,['high','urgent'],true) ? 'status-priority' : 'status-active' }}">{{ ucfirst(str_replace('_',' ',$closeout->outcome)) }}</span></div>
-                <p class="mt-2 text-sm text-slate-600">{{ $closeout->visit->serviceLocation->name }} &middot; Visit #{{ $closeout->visit_id }} &middot; Version {{ $closeout->version }}</p>
+                <p class="mt-2 text-sm text-slate-600">{{ $closeout->visit->serviceLocation->name }} &middot; {{ $closeout->visit->displayLabel() }} &middot; Version {{ $closeout->version }}</p>
                 <p class="mt-3 text-sm text-slate-500">{{ $closeout->submittedBy?->name ?? 'Former user' }} &middot; <x-local-time :value="$closeout->submitted_at" :timezone="$closeout->visit->timezone" /></p>
             </a>
         @empty

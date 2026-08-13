@@ -23,8 +23,8 @@ class PaymentController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         $this->capability($request, 'payments.collect');
-        $data = $request->validate(['preferred_payment_provider' => ['required', Rule::in(['square', 'stripe'])]]);
-        $workflow->setPreferredProvider($invoice, $request->user(), $data['preferred_payment_provider']);
+        $data = $request->validate(['preferred_payment_provider' => ['nullable', Rule::in(['square', 'stripe'])]]);
+        $workflow->setPreferredProvider($invoice, $request->user(), $data['preferred_payment_provider'] ?? null);
 
         return back()->with('status', 'Electronic payment provider updated.');
     }

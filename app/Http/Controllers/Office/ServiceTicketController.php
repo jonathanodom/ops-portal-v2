@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Office;
 
 use App\Domain\AdminManualCloseoutWorkflow;
 use App\Domain\ServiceTicketWorkflow;
+use App\Domain\VisitCreator;
 use App\Domain\VisitScheduler;
 use App\Http\Controllers\Controller;
 use App\Models\AuditEvent;
@@ -94,12 +95,13 @@ class ServiceTicketController extends Controller
         ServiceTicketNumber $numbers,
         ScheduleWindow $windows,
         AuditRecorder $audit,
+        VisitCreator $visitCreator,
     ): RedirectResponse {
         $organization = $this->organization($request);
         Gate::authorize('create', [ServiceTicket::class, $organization]);
         $data = $this->validated($request, $organization);
 
-        $ticket = DB::transaction(function () use ($request, $organization, $data, $numbers, $windows, $audit): ServiceTicket {
+        $ticket = DB::transaction(function () use ($request, $organization, $data, $numbers, $windows, $audit, $visitCreator): ServiceTicket {
             $contactId = $data['contact_id'] ?? $this->defaultContactId((int) $data['service_location_id'], (int) $data['customer_id']);
             $ticket = ServiceTicket::query()->create([
                 'organization_id' => $organization->id,
@@ -125,9 +127,7 @@ class ServiceTicketController extends Controller
             ]);
 
             if ($request->boolean('create_visit')) {
-                $visit = Visit::query()->create([
-                    'organization_id' => $organization->id,
-                    'service_ticket_id' => $ticket->id,
+                $visit = $visitCreator->create($ticket, [
                     'service_location_id' => $ticket->service_location_id,
                     'status' => 'planned',
                     'timezone' => $ticket->serviceLocation->timezone,
@@ -162,7 +162,7 @@ class ServiceTicketController extends Controller
             'contact',
             'invoices' => fn ($query) => $query->latest('generation')->withExists('acknowledgments'),
             'notes.author',
-            'visits' => fn ($query) => $query->with(['assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('id'),
+            'visits' => fn ($query) => $query->with(['returnOfVisit', 'assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('ticket_visit_number'),
         ]);
         $events = AuditEvent::query()->where('organization_id', $ticket->organization_id)
             ->with('actor')

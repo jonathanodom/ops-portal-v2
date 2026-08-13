@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Office;
 
 use App\Domain\ServiceTicketWorkflow;
+use App\Domain\VisitCreator;
 use App\Domain\VisitScheduler;
 use App\Http\Controllers\Controller;
 use App\Models\Organization;
@@ -37,15 +38,14 @@ class VisitController extends Controller
         ScheduleWindow $windows,
         VisitScheduler $scheduler,
         AuditRecorder $audit,
+        VisitCreator $visitCreator,
     ): RedirectResponse {
         $ticket = $this->ticket($request, $serviceTicket);
         Gate::authorize('update', $ticket);
         abort_if($ticket->status === 'canceled', 422, 'Canceled tickets cannot receive visits.');
         $data = $this->validated($request);
-        $visit = DB::transaction(function () use ($request, $ticket, $data, $windows, $scheduler, $audit): Visit {
-            $visit = Visit::query()->create([
-                'organization_id' => $ticket->organization_id,
-                'service_ticket_id' => $ticket->id,
+        $visit = DB::transaction(function () use ($request, $ticket, $data, $windows, $scheduler, $audit, $visitCreator): Visit {
+            $visit = $visitCreator->create($ticket, [
                 'service_location_id' => $ticket->service_location_id,
                 'status' => 'planned',
                 'timezone' => $ticket->serviceLocation->timezone,
@@ -114,7 +114,7 @@ class VisitController extends Controller
         return back()->with('status', 'Visit canceled.');
     }
 
-    public function createReturn(Request $request, string $visit, AuditRecorder $audit): RedirectResponse
+    public function createReturn(Request $request, string $visit, AuditRecorder $audit, VisitCreator $visitCreator): RedirectResponse
     {
         $source = $this->visit($request, $visit);
         Gate::authorize('dispatch', [Visit::class, $this->organization($request)]);
@@ -122,9 +122,7 @@ class VisitController extends Controller
         if ($source->status !== 'on_site') {
             throw ValidationException::withMessages(['reason' => 'A return visit can only be created after the source visit is on site.']);
         }
-        $return = Visit::query()->create([
-            'organization_id' => $source->organization_id,
-            'service_ticket_id' => $source->service_ticket_id,
+        $return = $visitCreator->create($source->serviceTicket, [
             'service_location_id' => $source->service_location_id,
             'return_of_visit_id' => $source->id,
             'status' => 'planned',

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Office;
 
 use App\Domain\CatalogLineSnapshotFactory;
 use App\Domain\InvoiceWorkflow;
+use App\Domain\UnissuedInvoiceDeletionWorkflow;
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\BillingLaborRate;
@@ -25,11 +26,11 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InvoiceController extends Controller
 {
-    public function show(Request $request, string $invoice): View
+    public function show(Request $request, string $invoice, UnissuedInvoiceDeletionWorkflow $deletion): View
     {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
-        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
+        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
         if (! $request->attributes->get('membership')->hasCapability('invoices.manage')) {
             return view('office.invoices.summary', compact('invoice'));
         }
@@ -40,7 +41,9 @@ class InvoiceController extends Controller
         $catalogProducts = $canUseCatalog ? CatalogProduct::query()->forOrganization($invoice->organization_id)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get() : collect();
         $catalogPackages = $canUseCatalog ? CatalogPackage::query()->forOrganization($invoice->organization_id)->where('active', true)->with('salesUom')->orderBy('name')->get() : collect();
 
-        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages'));
+        $canDeleteDraft = Gate::allows('deleteDraft', $invoice) && $deletion->canDelete($invoice);
+
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'canDeleteDraft'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
@@ -162,6 +165,20 @@ class InvoiceController extends Controller
         $replacement = $workflow->voidAndReissue($invoice, $request->user(), $data['void_reason'], $data['void_token']);
 
         return redirect()->route('office.invoices.show', $replacement)->with('status', 'Invoice voided and replacement draft created.');
+    }
+
+    public function destroy(Request $request, string $invoice, UnissuedInvoiceDeletionWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('deleteDraft', $invoice);
+        $data = $request->validate([
+            'deletion_reason' => ['required', 'string', 'max:2000'],
+            'confirm_invoice_number' => ['required', 'string', Rule::in([$invoice->invoice_number])],
+            'confirm_delete' => ['accepted'],
+        ]);
+        $workflow->delete($invoice, $request->user(), $data['deletion_reason']);
+
+        return redirect()->route('office.billing-handoffs.index')->with('status', 'Unissued invoice deleted. The billing handoff is ready to create a new invoice.');
     }
 
     public function download(Request $request, string $invoice): StreamedResponse

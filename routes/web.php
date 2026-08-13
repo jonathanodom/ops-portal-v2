@@ -136,6 +136,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             });
             Route::post('/invoices/{invoice}/issue', [InvoiceController::class, 'issue'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.issue');
             Route::post('/invoices/{invoice}/void', [InvoiceController::class, 'void'])->whereNumber('invoice')->middleware('capability:invoices.void')->name('invoices.void');
+            Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy'])->whereNumber('invoice')->middleware('capability:invoices.delete_draft')->name('invoices.destroy');
             Route::post('/invoices/{invoice}/pdf/retry', [InvoiceController::class, 'retryPdf'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.pdf.retry');
             Route::post('/invoices/{invoice}/payments/checkout', [PaymentController::class, 'checkout'])->whereNumber('invoice')->name('invoices.payments.checkout');
             Route::put('/invoices/{invoice}/payments/provider', [PaymentController::class, 'provider'])->whereNumber('invoice')->name('invoices.payments.provider');

@@ -26,6 +26,7 @@ class AccessControlSeeder extends Seeder
         'invoices.present' => 'Present issued invoices to customers',
         'invoices.discount' => 'Apply invoice discounts',
         'invoices.void' => 'Void and reissue invoices',
+        'invoices.delete_draft' => 'Delete eligible unissued invoice drafts',
         'billing.settings.manage' => 'Manage organization billing settings and labor rates',
         'organization.settings.manage' => 'Manage organization identity, timezone, and branding',
         'payments.view' => 'View payment status and safe transaction summaries',

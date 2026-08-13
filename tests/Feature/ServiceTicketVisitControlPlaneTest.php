@@ -241,6 +241,44 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
             ->assertSee('All assignees');
     }
 
+    public function test_visits_use_ticket_relative_numbers_and_never_reuse_them(): void
+    {
+        $organization = Organization::factory()->create(['timezone' => 'America/Chicago']);
+        [$customer, , $location] = $this->customerGraph($organization);
+        $firstTicket = $this->ticket($organization, $customer, $location);
+        $secondTicket = $this->ticket($organization, $customer, $location);
+
+        $first = $this->visit($firstTicket);
+        $second = $this->visit($firstTicket);
+        $return = Visit::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $firstTicket->id,
+            'service_location_id' => $location->id,
+            'return_of_visit_id' => $first->id,
+            'status' => 'planned',
+            'timezone' => 'America/Chicago',
+        ]);
+
+        $this->assertSame(1, $first->ticket_visit_number);
+        $this->assertSame(2, $second->ticket_visit_number);
+        $this->assertSame(3, $return->ticket_visit_number);
+        $this->assertSame('Visit 3 · Return of Visit 1', $return->displayLabel());
+
+        $second->delete();
+        $return->forceDelete();
+        $next = $this->visit($firstTicket);
+        $otherTicketFirst = $this->visit($secondTicket);
+
+        $this->assertSame(4, $next->ticket_visit_number);
+        $this->assertSame(1, $otherTicketFirst->ticket_visit_number);
+        $this->assertSame(5, $firstTicket->fresh()->next_visit_number);
+        $this->assertDatabaseHas('visits', [
+            'service_ticket_id' => $firstTicket->id,
+            'ticket_visit_number' => 2,
+            'deleted_at' => $second->deleted_at,
+        ]);
+    }
+
     /** @return array{User, Organization, OrganizationMembership} */
     private function userWithRole(string $roleKey, ?Organization $organization = null): array
     {

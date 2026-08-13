@@ -39,6 +39,7 @@ class CloseoutReviewController extends Controller
     public function show(Request $request, string $closeout): View
     {
         $closeout = $this->closeout($request, $closeout);
+        $closeout->load('returnVisit.returnOfVisit');
         $visit = $closeout->visit;
         $versions = Closeout::query()->where('organization_id', $closeout->organization_id)->where('visit_id', $visit->id)
             ->with(['submittedBy', 'lastSavedBy', 'timeEntries.user', 'media', 'parts', 'reviews.reviewer', 'reviews.adjustments'])->orderBy('version')->get();
@@ -46,7 +47,7 @@ class CloseoutReviewController extends Controller
         $completionBlockingVisits = $visit->serviceTicket->visits
             ->where('id', '!=', $visit->id)
             ->whereNotIn('status', ['approved', 'canceled', 'customer_unavailable'])
-            ->sortBy('id')
+            ->sortBy('ticket_visit_number')
             ->values();
         $events = AuditEvent::query()->where('organization_id', $closeout->organization_id)
             ->where(function ($query) use ($visit): void {

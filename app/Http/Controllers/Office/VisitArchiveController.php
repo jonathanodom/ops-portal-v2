@@ -28,7 +28,7 @@ class VisitArchiveController extends Controller
             ->when(filled($filters['search'] ?? null), function ($query) use ($filters): void {
                 $search = trim($filters['search']);
                 $query->where(function ($inner) use ($search): void {
-                    $inner->whereKey(is_numeric($search) ? (int) $search : 0)
+                    $inner->where('ticket_visit_number', is_numeric($search) ? (int) $search : 0)
                         ->orWhereHas('serviceTicket', fn ($ticket) => $ticket
                             ->where('ticket_number', 'like', "%{$search}%")
                             ->orWhere('title', 'like', "%{$search}%")
@@ -73,12 +73,13 @@ class VisitArchiveController extends Controller
             throw $exception;
         }
 
-        return back()->with('status', "Visit #{$visit->id} restored.");
+        return back()->with('status', $visit->displayNumber().' restored.');
     }
 
     public function destroy(Request $request, string $visit, VisitArchiveWorkflow $workflow): RedirectResponse
     {
         $visit = $this->visit($request, $visit, true);
+        $displayNumber = $visit->displayNumber();
         $request->validate(['confirm_visit_id' => ['required', 'integer', Rule::in([$visit->id])]]);
         try {
             $workflow->purge($visit, $request->user());
@@ -87,7 +88,7 @@ class VisitArchiveController extends Controller
             throw $exception;
         }
 
-        return back()->with('status', "Visit #{$visit->id} permanently deleted.");
+        return back()->with('status', $displayNumber.' permanently deleted.');
     }
 
     private function visit(Request $request, string $id, bool $archived): Visit
