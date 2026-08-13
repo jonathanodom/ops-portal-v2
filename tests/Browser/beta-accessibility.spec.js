@@ -297,8 +297,8 @@ test.describe('desktop beta', () => {
         await expectAccessible(page);
 
         await page.setViewportSize({ width: 1440, height: 900 });
-        await page.goto('/office/billing-handoffs');
-        await page.getByRole('link', { name: 'Open invoice' }).nth(1).click();
+        await page.goto('/office/invoices?status=draft');
+        await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
         await expect(page.getByRole('region', { name: 'Invoice actions' })).toBeVisible();
         await expect(page.locator('[data-invoice-item-workspace]')).toBeVisible();
         await expect(page.locator('[data-invoice-item-table]')).toBeVisible();
