@@ -4,7 +4,6 @@ namespace App\Domain;
 
 use App\Jobs\RenderInvoicePdf;
 use App\Models\BillingHandoff;
-use App\Models\BillingLaborRate;
 use App\Models\Closeout;
 use App\Models\Invoice;
 use App\Models\InvoiceAcknowledgment;
@@ -25,6 +24,9 @@ class InvoiceWorkflow
     public function __construct(
         private readonly InvoiceNumber $numbers,
         private readonly InvoiceCalculator $calculator,
+        private readonly BillableLaborCalculator $laborCalculator,
+        private readonly LaborServiceResolver $laborServices,
+        private readonly CatalogLineSnapshotFactory $catalogSnapshots,
         private readonly AuditRecorder $audit,
     ) {}
 
@@ -58,11 +60,8 @@ class InvoiceWorkflow
                 throw ValidationException::withMessages(['handoff' => 'No eligible approved closeout versions were found.']);
             }
             $settings = OrganizationBillingSetting::query()->firstOrCreate(['organization_id' => $ticket->organization_id], ['default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt']);
-            $defaultRate = BillingLaborRate::query()->forOrganization($ticket->organization_id)->where('active', true)->where('is_default', true)->first();
             $hasLabor = $closeouts->contains(fn (Closeout $closeout) => $this->effectiveMinutes($closeout) > 0);
-            if ($hasLabor && ! $defaultRate) {
-                throw ValidationException::withMessages(['labor_rate' => 'Configure one active default labor rate before creating this invoice.']);
-            }
+            $laborService = $hasLabor ? $this->laborServices->resolve($ticket->organization_id) : null;
             $contact = $ticket->contact?->active ? $ticket->contact : $ticket->customer->preferredContact;
             $invoice = Invoice::query()->create([
                 'organization_id' => $ticket->organization_id,
@@ -98,15 +97,29 @@ class InvoiceWorkflow
                 $invoice->closeoutLinks()->create(['organization_id' => $ticket->organization_id, 'visit_id' => $closeout->visit_id, 'closeout_id' => $closeout->id, 'closeout_review_id' => $review->id]);
                 $minutes = $this->effectiveMinutes($closeout);
                 if ($minutes > 0) {
-                    $rounded = (int) (ceil($minutes / 15) * 15);
-                    $invoice->lines()->create([
+                    $calculation = $this->laborCalculator->calculate(
+                        $minutes,
+                        (int) $settings->labor_billing_increment_minutes,
+                        $settings->labor_rounding_rule,
+                        (int) $settings->minimum_billable_minutes,
+                    );
+                    $snapshot = $this->catalogSnapshots->create(
+                        $ticket->organization_id,
+                        'service',
+                        $laborService->id,
+                        $calculation['quantity_millis'],
+                    );
+                    $invoice->lines()->create($snapshot + [
                         'organization_id' => $ticket->organization_id,
                         'line_type' => 'labor',
                         'description' => $this->customerLaborDescription($closeout->visit, $ticket->title, $multipleVisits),
-                        'quantity_millis' => intdiv($rounded * 1000, 60),
-                        'unit' => 'hour',
-                        'unit_price_cents' => $defaultRate?->hourly_rate_cents,
-                        'labor_rate_id' => $defaultRate?->id,
+                        'quantity_millis' => $calculation['quantity_millis'],
+                        'unit' => $snapshot['catalog_unit_name_snapshot'],
+                        'unit_price_cents' => $snapshot['catalog_unit_price_cents'],
+                        'labor_rate_id' => null,
+                        'taxable' => $snapshot['catalog_taxable'],
+                        'catalog_selected_by_id' => $actor->id,
+                        'catalog_selected_at' => now(),
                         'source_visit_id' => $closeout->visit_id,
                         'source_closeout_id' => $closeout->id,
                         'source_review_id' => $review->id,
