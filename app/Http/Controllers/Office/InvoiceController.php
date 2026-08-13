@@ -12,10 +12,12 @@ use App\Models\BillingLaborRate;
 use App\Models\CatalogPackage;
 use App\Models\CatalogProduct;
 use App\Models\CatalogService;
+use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\InvoiceLine;
 use App\Models\OrganizationBillingSetting;
 use App\Models\PaymentProviderConfiguration;
+use App\Models\ServiceTicket;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
@@ -28,6 +30,70 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InvoiceController extends Controller
 {
+    public function index(Request $request): View
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('viewAny', [Invoice::class, $organization]);
+        $filters = $request->validate([
+            'invoice' => ['nullable', 'string', 'max:100'],
+            'customer' => ['nullable', 'string', 'max:255'],
+            'ticket' => ['nullable', 'string', 'max:255'],
+            'status' => ['nullable', Rule::in(['draft', 'ready_for_review', 'issued', 'void'])],
+            'payment_state' => ['nullable', Rule::in(['unpaid', 'partially_paid', 'paid', 'partially_refunded', 'refunded', 'overpaid'])],
+            'balance_state' => ['nullable', Rule::in(['open', 'paid', 'overdue'])],
+            'date_from' => ['nullable', 'date'],
+            'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
+            'sort' => ['nullable', Rule::in(['date', 'invoice', 'customer', 'ticket', 'status', 'due', 'total', 'balance'])],
+            'direction' => ['nullable', Rule::in(['asc', 'desc'])],
+        ]);
+        $paid = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type = 'payment' AND status = 'succeeded'), 0)";
+        $refunded = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type IN ('refund', 'reversal') AND status = 'succeeded'), 0)";
+        $net = "({$paid} - {$refunded})";
+        $balance = "(invoices.total_cents - {$paid} + {$refunded})";
+
+        $query = Invoice::query()->forOrganization($organization->id)
+            ->with(['customer', 'serviceTicket', 'serviceLocation', 'paymentTransactions']);
+
+        $query->when(filled($filters['invoice'] ?? null), fn ($query) => $query->where('invoice_number', 'like', '%'.$filters['invoice'].'%'))
+            ->when(filled($filters['customer'] ?? null), fn ($query) => $query->whereHas('customer', fn ($customer) => $customer->where(fn ($names) => $names->where('display_name', 'like', '%'.$filters['customer'].'%')->orWhere('legal_name', 'like', '%'.$filters['customer'].'%'))))
+            ->when(filled($filters['ticket'] ?? null), fn ($query) => $query->whereHas('serviceTicket', fn ($ticket) => $ticket->where(fn ($identity) => $identity->where('ticket_number', 'like', '%'.$filters['ticket'].'%')->orWhere('title', 'like', '%'.$filters['ticket'].'%'))))
+            ->when(filled($filters['status'] ?? null), fn ($query) => $query->where('status', $filters['status']))
+            ->when(filled($filters['date_from'] ?? null), fn ($query) => $query->where(fn ($dates) => $dates->whereDate('issued_at', '>=', $filters['date_from'])->orWhere(fn ($drafts) => $drafts->whereNull('issued_at')->whereDate('created_at', '>=', $filters['date_from']))))
+            ->when(filled($filters['date_to'] ?? null), fn ($query) => $query->where(fn ($dates) => $dates->whereDate('issued_at', '<=', $filters['date_to'])->orWhere(fn ($drafts) => $drafts->whereNull('issued_at')->whereDate('created_at', '<=', $filters['date_to']))));
+
+        match ($filters['payment_state'] ?? null) {
+            'unpaid' => $query->whereRaw("{$net} BETWEEN 0 AND invoices.total_cents")->whereRaw("{$paid} = 0"),
+            'partially_paid' => $query->whereRaw("{$refunded} = 0")->whereRaw("{$paid} > 0")->whereRaw("{$paid} < invoices.total_cents"),
+            'paid' => $query->whereRaw("{$refunded} = 0")->whereRaw("{$paid} = invoices.total_cents")->whereRaw("{$paid} > 0"),
+            'partially_refunded' => $query->whereRaw("{$refunded} > 0")->whereRaw("{$refunded} < {$paid}")->whereRaw("{$net} <= invoices.total_cents"),
+            'refunded' => $query->whereRaw("{$paid} > 0")->whereRaw("{$refunded} = {$paid}"),
+            'overpaid' => $query->whereRaw("({$net} < 0 OR {$net} > invoices.total_cents)"),
+            default => null,
+        };
+
+        match ($filters['balance_state'] ?? null) {
+            'open' => $query->whereRaw("{$balance} > 0"),
+            'paid' => $query->whereRaw("{$balance} <= 0"),
+            'overdue' => $query->where('status', 'issued')->whereNotNull('due_on')->whereDate('due_on', '<', now($organization->timezone)->toDateString())->whereRaw("{$balance} > 0"),
+            default => null,
+        };
+
+        $direction = $filters['direction'] ?? 'desc';
+        match ($filters['sort'] ?? 'date') {
+            'invoice' => $query->orderBy('invoice_number', $direction),
+            'customer' => $query->orderBy(Customer::query()->select('display_name')->whereColumn('customers.id', 'invoices.customer_id'), $direction),
+            'ticket' => $query->orderBy(ServiceTicket::query()->select('ticket_number')->whereColumn('service_tickets.id', 'invoices.service_ticket_id'), $direction),
+            'status' => $query->orderBy('status', $direction),
+            'due' => $query->orderBy('due_on', $direction),
+            'total' => $query->orderBy('total_cents', $direction),
+            'balance' => $query->orderByRaw("{$balance} {$direction}"),
+            default => $query->orderByRaw("COALESCE(issued_at, created_at) {$direction}"),
+        };
+        $invoices = $query->orderBy('id', 'desc')->paginate(25)->withQueryString();
+
+        return view('office.invoices.index', compact('invoices'));
+    }
+
     public function show(Request $request, string $invoice, UnissuedInvoiceDeletionWorkflow $deletion): View
     {
         $invoice = $this->invoice($request, $invoice);

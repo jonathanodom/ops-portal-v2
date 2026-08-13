@@ -26,7 +26,7 @@ test.describe('desktop beta', () => {
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
         test.setTimeout(90_000);
         await login(page, 'super_admin');
-        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/subscriptions', '/office/settings/organization', '/office/settings/billing', '/office/settings/invoices', '/office/operations/health', '/office/admin/archive']) {
+        for (const path of ['/office/dispatch', '/office/closeout-reviews', '/office/billing-handoffs', '/office/invoices', '/office/subscriptions', '/office/settings/organization', '/office/settings/billing', '/office/settings/invoices', '/office/operations/health', '/office/admin/archive']) {
             await page.goto(path);
             await expect(page.locator('body')).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
@@ -242,7 +242,7 @@ test.describe('desktop beta', () => {
         ]) {
             await page.setViewportSize(viewport);
 
-            for (const path of ['/office/service-tickets', '/office/closeout-reviews', '/office/billing-handoffs']) {
+            for (const path of ['/office/service-tickets', '/office/closeout-reviews', '/office/billing-handoffs', '/office/invoices']) {
                 await page.goto(path);
                 await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
                 const overflow = await page.evaluate(() => ({ scrollWidth: document.body.scrollWidth, viewportWidth: innerWidth }));
@@ -277,6 +277,23 @@ test.describe('desktop beta', () => {
             .filter((element) => element.getBoundingClientRect().height < 44)
             .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
         expect(shortControls).toEqual([]);
+        await expectAccessible(page);
+
+        await page.setViewportSize({ width: 1440, height: 900 });
+        await page.goto('/office/billing-handoffs');
+        await expect(page.getByRole('navigation', { name: 'Billing workspace' }).getByRole('link', { name: 'Queue' })).toHaveAttribute('aria-current', 'page');
+        await page.getByRole('navigation', { name: 'Billing workspace' }).getByRole('link', { name: 'Invoices' }).click();
+        await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+        await expect(page.locator('[data-office-table]')).toBeVisible();
+        await expect(page.locator('[data-office-mobile-list]')).toBeHidden();
+        await page.getByLabel('Invoice number').fill('NDT-INV-2026-0001');
+        await page.getByRole('button', { name: 'Filter' }).click();
+        await expect(page.getByRole('link', { name: 'NDT-INV-2026-0001' }).first()).toBeVisible();
+        await expectAccessible(page);
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(page.locator('[data-office-table]')).toBeHidden();
+        await expect(page.locator('[data-office-mobile-list]')).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
         await expectAccessible(page);
 
         await page.setViewportSize({ width: 1440, height: 900 });

@@ -127,6 +127,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/billing-handoffs/{handoff}/invoice', [BillingHandoffController::class, 'createInvoice'])
                 ->whereNumber('handoff')->middleware('capability:invoices.manage')->name('billing-handoffs.invoice.store');
             Route::middleware('capability:invoices.view')->group(function (): void {
+                Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
                 Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->whereNumber('invoice')->name('invoices.show');
             });
             Route::middleware('capability:invoices.manage')->group(function (): void {

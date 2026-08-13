@@ -342,6 +342,95 @@ class Phase6InvoicingTest extends TestCase
             ->assertSee('value="not-a-rate"', false);
     }
 
+    public function test_billing_queue_and_invoice_ledger_are_separate_capability_aware_workspaces(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+
+        $this->actingAs($admin)->get(route('office.billing-handoffs.index'))
+            ->assertOk()
+            ->assertSee('aria-label="Billing workspace"', false)
+            ->assertSee('>Queue<', false)
+            ->assertSee('>Invoices<', false)
+            ->assertSee('Ready to invoice');
+        $this->actingAs($admin)->get(route('office.invoices.index'))
+            ->assertOk()
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('aria-label="Invoice filters"', false)
+            ->assertSee('data-office-table', false)
+            ->assertSee('data-office-mobile-list', false)
+            ->assertSee('Ticket / Project')
+            ->assertSee($invoice->invoice_number)
+            ->assertDontSee('Create invoice');
+
+        [$reviewer] = $this->userWithRole('reviewer', $invoice->organization);
+        $this->actingAs($reviewer)->get(route('office.invoices.index'))
+            ->assertOk()
+            ->assertSee($invoice->invoice_number)
+            ->assertSee('href="'.route('office.invoices.index').'"', false)
+            ->assertDontSee('href="'.route('office.billing-handoffs.index').'"', false);
+        $this->actingAs($reviewer)->get(route('office.billing-handoffs.index'))->assertForbidden();
+
+        [$technician] = $this->userWithRole('technician', $invoice->organization);
+        $this->actingAs($technician)->get(route('office.invoices.index'))->assertForbidden();
+    }
+
+    public function test_invoice_ledger_search_filters_sorting_pagination_and_organization_scope(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $invoice->forceFill(['status' => 'issued', 'issued_at' => now()->subDays(4), 'due_on' => today()->subDay(), 'total_cents' => 21000])->save();
+        $ticket = $invoice->serviceTicket;
+        $customer = $invoice->customer;
+
+        foreach (range(2, 27) as $generation) {
+            $copy = $invoice->replicate();
+            $copy->forceFill([
+                'generation' => $generation,
+                'invoice_number' => sprintf('NDT-INV-2026-%04d', 6000 + $generation),
+                'status' => $generation === 2 ? 'void' : 'draft',
+                'creation_token' => (string) Str::uuid(),
+                'issue_token' => null,
+                'issued_at' => null,
+                'issued_by_id' => null,
+                'due_on' => null,
+                'total_cents' => $generation * 100,
+            ])->save();
+        }
+
+        $base = route('office.invoices.index');
+        foreach ([
+            ['invoice' => $invoice->invoice_number],
+            ['customer' => $customer->display_name],
+            ['customer' => $customer->legal_name],
+            ['ticket' => $ticket->ticket_number],
+            ['ticket' => $ticket->title],
+            ['status' => 'issued'],
+            ['payment_state' => 'unpaid'],
+            ['balance_state' => 'open'],
+            ['balance_state' => 'overdue'],
+            ['date_from' => now()->subDays(5)->toDateString(), 'date_to' => now()->subDays(3)->toDateString()],
+        ] as $query) {
+            $this->actingAs($admin)->get($base.'?'.http_build_query(['invoice' => $invoice->invoice_number] + $query))->assertOk()->assertSee($invoice->invoice_number);
+        }
+
+        $this->actingAs($admin)->get($base.'?invoice=does-not-exist')->assertOk()->assertDontSee($invoice->invoice_number);
+        $this->actingAs($admin)->get($base.'?sort=invoice&direction=asc')->assertOk()
+            ->assertSeeInOrder([$invoice->invoice_number, 'NDT-INV-2026-6002']);
+        $this->actingAs($admin)->get($base.'?sort=invoice&direction=asc')->assertOk()->assertSee('page=2', false);
+
+        $invoice->paymentTransactions()->create([
+            'organization_id' => $invoice->organization_id, 'type' => 'payment', 'status' => 'succeeded',
+            'provider' => 'manual', 'method' => 'cash', 'amount_cents' => $invoice->total_cents,
+            'idempotency_key' => (string) Str::uuid(), 'received_at' => now(), 'confirmed_at' => now(), 'recorded_by_id' => $admin->id,
+        ]);
+        $this->actingAs($admin)->get($base.'?payment_state=paid&balance_state=paid')->assertOk()->assertSee($invoice->invoice_number);
+        $this->actingAs($admin)->get($base.'?balance_state=overdue')->assertOk()->assertDontSee($invoice->invoice_number);
+
+        [$outsider] = $this->userWithRole('super_admin');
+        $this->actingAs($outsider)->get($base.'?invoice='.urlencode($invoice->invoice_number))->assertOk()->assertSee('No invoices found');
+    }
+
     public function test_invoice_command_bar_tracks_lifecycle_and_payment_state_without_weakening_actions(): void
     {
         [, $admin, $handoff] = $this->billingScenario(false);

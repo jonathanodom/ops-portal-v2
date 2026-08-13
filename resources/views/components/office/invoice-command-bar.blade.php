@@ -8,7 +8,7 @@
 
 <section class="invoice-command-bar" data-invoice-command-bar aria-label="Invoice actions">
     <div class="invoice-command-bar-identity">
-        <a class="invoice-command-back" href="{{ route('office.billing-handoffs.index') }}" aria-label="Back to Billing queue">&larr; Billing</a>
+        <a class="invoice-command-back" href="{{ route('office.invoices.index') }}" aria-label="Back to Invoices">&larr; Invoices</a>
         <div class="min-w-0">
             <div class="flex flex-wrap items-center gap-2">
                 <h1 class="truncate text-lg font-bold text-slate-950 sm:text-xl">{{ $invoice->invoice_number }}</h1>

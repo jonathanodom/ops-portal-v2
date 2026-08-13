@@ -142,6 +142,18 @@
         @apply transition-colors hover:bg-blue-50/45 focus-within:bg-blue-50/60;
     }
 
+    .invoice-index-table {
+        @apply text-sm;
+    }
+
+    .invoice-index-table th {
+        @apply whitespace-nowrap px-3 py-2.5;
+    }
+
+    .invoice-index-table td {
+        @apply px-3 py-2.5;
+    }
+
     .office-mobile-list {
         @apply mt-5 space-y-3 lg:hidden;
     }
