@@ -31,6 +31,7 @@ use App\Http\Controllers\Office\PaymentSettingsController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\SquareConnectionController;
+use App\Http\Controllers\Office\StripeConnectionController;
 use App\Http\Controllers\Office\TicketCustomerController;
 use App\Http\Controllers\Office\UnitOfMeasureController;
 use App\Http\Controllers\Office\VisitArchiveController;
@@ -155,6 +156,10 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/settings/billing/payments/square/refresh', [SquareConnectionController::class, 'refresh'])->name('settings.billing.square.refresh');
             Route::put('/settings/billing/payments/square/location', [SquareConnectionController::class, 'location'])->name('settings.billing.square.location');
             Route::delete('/settings/billing/payments/square/disconnect', [SquareConnectionController::class, 'disconnect'])->name('settings.billing.square.disconnect');
+            Route::post('/settings/billing/payments/stripe/connect', [StripeConnectionController::class, 'start'])->name('settings.billing.stripe.connect');
+            Route::get('/settings/billing/payments/stripe/callback', [StripeConnectionController::class, 'callback'])->name('settings.billing.stripe.callback');
+            Route::post('/settings/billing/payments/stripe/refresh', [StripeConnectionController::class, 'refresh'])->name('settings.billing.stripe.refresh');
+            Route::delete('/settings/billing/payments/stripe/disconnect', [StripeConnectionController::class, 'disconnect'])->name('settings.billing.stripe.disconnect');
             Route::put('/settings/billing/payments/default', [PaymentSettingsController::class, 'defaultProvider'])->name('settings.billing.payments.default');
             Route::put('/settings/billing/payments/{provider}', [PaymentSettingsController::class, 'update'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.update');
             Route::post('/settings/billing/payments/{provider}/test', [PaymentSettingsController::class, 'test'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.test');

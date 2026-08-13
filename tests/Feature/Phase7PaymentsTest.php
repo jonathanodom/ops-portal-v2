@@ -38,18 +38,18 @@ class Phase7PaymentsTest extends TestCase
         config(['payments.fake' => true]);
     }
 
-    public function test_provider_credentials_are_encrypted_hidden_and_super_admin_only(): void
+    public function test_legacy_provider_credentials_remain_encrypted_hidden_and_normal_secret_entry_is_closed(): void
     {
-        [$invoice, $admin] = $this->invoiceScenario();
+        [$invoice, $admin, $configuration] = $this->invoiceScenario();
         $secret = 'sk_test_secret_that_must_not_render';
-        $this->actingAs($admin)->put('/office/settings/billing/payments/stripe', ['environment' => 'test', 'api_secret' => $secret, 'webhook_secret' => 'whsec_test_secret'])->assertRedirect();
-        $configuration = PaymentProviderConfiguration::query()->firstOrFail();
+        $configuration->update(['api_secret' => $secret, 'credential_fingerprint' => strtoupper(substr(hash('sha256', $secret), 0, 12))]);
         $this->assertSame($secret, $configuration->api_secret);
-        $this->assertStringNotContainsString($secret, (string) DB::table('payment_provider_configurations')->value('api_secret'));
+        $this->assertStringNotContainsString($secret, (string) DB::table('payment_provider_configurations')->where('id', $configuration->id)->value('api_secret'));
         $this->actingAs($admin)->get('/office/settings/billing')->assertOk()->assertDontSee($secret)->assertSee($configuration->credential_fingerprint);
+        $this->actingAs($admin)->put('/office/settings/billing/payments/stripe', ['environment' => 'test', 'api_secret' => 'forged-secret'])->assertNotFound();
 
         [$billing] = $this->userWithRole('billing', $invoice->organization);
-        $this->actingAs($billing)->get('/office/settings/billing')->assertOk()->assertSee('You can view readiness')->assertDontSee('Save Stripe credentials');
+        $this->actingAs($billing)->get('/office/settings/billing')->assertOk()->assertSee('You can view readiness')->assertDontSee('Secret key');
         $this->actingAs($billing)->put('/office/settings/billing/payments/stripe', ['environment' => 'test', 'api_secret' => 'forged-secret'])->assertForbidden();
     }
 
