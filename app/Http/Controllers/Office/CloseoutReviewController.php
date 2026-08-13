@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Office;
 
 use App\Domain\CloseoutReviewWorkflow;
+use App\Domain\TripChargeRecommender;
 use App\Http\Controllers\Controller;
 use App\Models\AuditEvent;
 use App\Models\Closeout;
@@ -36,7 +37,7 @@ class CloseoutReviewController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $closeout): View
+    public function show(Request $request, string $closeout, TripChargeRecommender $tripCharges): View
     {
         $closeout = $this->closeout($request, $closeout);
         $closeout->load('returnVisit.returnOfVisit');
@@ -54,8 +55,9 @@ class CloseoutReviewController extends Controller
                 $query->where(fn ($q) => $q->where('subject_type', $visit->getMorphClass())->where('subject_id', $visit->id))
                     ->orWhere(fn ($q) => $q->where('subject_type', $visit->serviceTicket->getMorphClass())->where('subject_id', $visit->service_ticket_id));
             })->with('actor')->latest('occurred_at')->limit(50)->get();
+        $tripChargeRecommendation = $tripCharges->recommend($visit);
 
-        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'events', 'completionBlockingVisits'));
+        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'events', 'completionBlockingVisits', 'tripChargeRecommendation'));
     }
 
     public function approve(Request $request, string $closeout, CloseoutReviewWorkflow $workflow, AuditRecorder $audit): RedirectResponse
@@ -77,11 +79,12 @@ class CloseoutReviewController extends Controller
             'part_adjustments.*.approved_billing_treatment' => ['nullable', Rule::in(array_keys(config('field_execution.billing_treatments')))],
             'part_adjustments.*.excluded' => ['nullable', 'boolean'],
             'part_adjustments.*.reason' => ['nullable', 'string', 'max:2000'],
+            'trip_charge_selected' => ['nullable', 'boolean'],
         ]);
         $timeAdjustments = collect($data['time_adjustments'] ?? [])->filter(fn ($values) => (bool) ($values['enabled'] ?? false))->all();
         $partAdjustments = collect($data['part_adjustments'] ?? [])->filter(fn ($values) => (bool) ($values['enabled'] ?? false))->all();
         try {
-            $workflow->approve($closeout, $request->user(), $data['decision_token'], $data['disposition'] ?? null, $data['disposition_reason'] ?? null, $timeAdjustments, $partAdjustments);
+            $workflow->approve($closeout, $request->user(), $data['decision_token'], $data['disposition'] ?? null, $data['disposition_reason'] ?? null, $timeAdjustments, $partAdjustments, (bool) ($data['trip_charge_selected'] ?? false));
         } catch (ValidationException $exception) {
             $audit->record($request->attributes->get('organization'), $request->user(), 'closeout.review_rejected', $closeout, ['decision' => 'approved', 'invalid_fields' => array_keys($exception->errors())]);
             throw $exception;
