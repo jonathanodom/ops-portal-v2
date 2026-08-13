@@ -50,7 +50,7 @@ test.describe('desktop beta', () => {
         await page.getByRole('link', { name: 'Open invoice' }).first().click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         await expectAccessible(page);
-        await page.getByRole('link', { name: 'Customer presentation' }).click();
+        await page.getByRole('link', { name: 'Customer view' }).click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
         await expectAccessible(page);
@@ -262,10 +262,11 @@ test.describe('desktop beta', () => {
             }
 
             await page.goto('/office/invoices/1');
-            await expect(page.locator('[data-office-width="detail"]')).toBeVisible();
+            await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
-            const columns = await page.locator('[data-office-detail-grid]').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
-            expect(columns).toBe(viewport.width >= 1280 ? 2 : 1);
+            await expect(page.locator('[data-invoice-command-bar]')).toBeVisible();
+            const columns = await page.locator('[data-invoice-workspace]').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
+            expect(columns).toBe(viewport.width >= 1536 ? 2 : 1);
         }
 
         await page.setViewportSize({ width: 390, height: 844 });
@@ -277,11 +278,17 @@ test.describe('desktop beta', () => {
         expect(shortControls).toEqual([]);
         await expectAccessible(page);
 
-        await page.goto('/office/invoices/1');
-        const invoiceNav = page.getByRole('navigation', { name: 'On this page' });
-        await expect(invoiceNav.getByRole('link', { name: 'Approved work' })).toHaveAttribute('href', '#approved-work');
-        await expect(invoiceNav.getByRole('link', { name: 'Invoice lines' })).toHaveAttribute('href', '#invoice-lines');
-        await expect(invoiceNav.getByRole('link', { name: 'Payments' })).toHaveAttribute('href', '#payments');
+        await page.goto('/office/billing-handoffs');
+        await page.getByRole('link', { name: 'Open invoice' }).nth(1).click();
+        await expect(page.getByRole('region', { name: 'Invoice actions' })).toBeVisible();
+        const billingLauncher = page.locator('[data-invoice-command-bar]').getByRole('button', { name: 'Billing details' });
+        await billingLauncher.click();
+        const billingDialog = page.getByRole('dialog', { name: 'Edit billing details' });
+        await expect(billingDialog).toBeVisible();
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
+        await expect(billingDialog).toBeHidden();
+        await expect(billingLauncher).toBeFocused();
     });
 
     test('catalog services, products, packages, recipes, categories, and units follow the responsive workspace system', async ({ page }) => {
@@ -443,7 +450,7 @@ test.describe('mobile beta', () => {
         expect(settingsShortControls).toEqual([]);
         await page.goto('/office/billing-handoffs');
         await page.getByRole('link', { name: 'Open invoice' }).first().click();
-        await page.getByRole('link', { name: 'Customer presentation' }).click();
+        await page.getByRole('link', { name: 'Customer view' }).click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         await expect(page.getByText('Invoice acknowledgment')).toBeVisible();
         await expect(page.getByText('Internal billing note')).toHaveCount(0);

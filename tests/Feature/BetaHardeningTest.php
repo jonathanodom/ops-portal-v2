@@ -151,6 +151,8 @@ class BetaHardeningTest extends TestCase
         }
         $this->assertSame(3, DB::table('service_tickets')->where('title', 'like', 'BETA %:%')->count());
         $this->assertSame(5, DB::table('organization_membership_role')->count());
+        $this->assertSame(1, DB::table('invoices')->where('status', 'issued')->count());
+        $this->assertSame(1, DB::table('invoices')->where('status', 'draft')->count());
         $this->assertContains('visits_dispatch_queue', array_column(Schema::getIndexes('visits'), 'name'));
         $this->assertContains('visit_assignments_queue', array_column(Schema::getIndexes('visit_assignments'), 'name'));
         $this->assertContains('incidents_health_queue', array_column(Schema::getIndexes('operational_incidents'), 'name'));

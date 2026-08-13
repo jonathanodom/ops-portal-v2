@@ -123,5 +123,15 @@ class BetaScenarioSeeder extends Seeder
         $workflow->addLine($invoice, $memberships['super_admin']->user, ['line_type' => 'service_charge', 'description' => 'Beta invoice presentation fixture', 'quantity_millis' => 1000, 'unit' => 'service', 'unit_price_cents' => 10000, 'included' => true, 'taxable' => true, 'override_reason' => 'Synthetic beta fixture']);
         $workflow->markReady($invoice->fresh(), $memberships['super_admin']->user);
         $workflow->issue($invoice->fresh(), $memberships['super_admin']->user, (string) Str::uuid());
+
+        $draftCloseout = Closeout::query()->where('organization_id', $organization->id)->whereKeyNot($closeout->id)
+            ->whereDoesntHave('visit.serviceTicket.billingHandoff')->firstOrFail();
+        $draftVisit = $draftCloseout->visit;
+        $draftTicket = $draftVisit->serviceTicket;
+        $draftVisit->update(['status' => 'approved']);
+        $draftTicket->update(['status' => 'completed']);
+        CloseoutReview::query()->create(['organization_id' => $organization->id, 'closeout_id' => $draftCloseout->id, 'reviewer_id' => $memberships['super_admin']->user_id, 'decision' => 'approved', 'self_review_override' => true, 'decision_token' => (string) Str::uuid(), 'decided_at' => now()]);
+        $draftHandoff = BillingHandoff::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $draftTicket->id, 'visit_id' => $draftVisit->id, 'closeout_id' => $draftCloseout->id, 'status' => 'ready', 'created_by_id' => $memberships['super_admin']->user_id]);
+        $workflow->createFromHandoff($draftHandoff, $memberships['super_admin']->user, (string) Str::uuid());
     }
 }

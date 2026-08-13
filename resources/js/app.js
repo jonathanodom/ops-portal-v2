@@ -204,6 +204,28 @@ document.querySelectorAll('[data-copy-target]').forEach((button) => button.addEv
     button.textContent = 'Copied';
 }));
 
+const invoiceBillingDialog = document.querySelector('[data-invoice-billing-dialog]');
+if (invoiceBillingDialog) {
+    let launcher;
+    const firstInvalid = () => invoiceBillingDialog.querySelector('[aria-invalid="true"]');
+    const open = (button) => {
+        launcher = button ?? launcher;
+        invoiceBillingDialog.showModal();
+        requestAnimationFrame(() => (firstInvalid() ?? invoiceBillingDialog.querySelector('input:not([type="hidden"]), select, textarea'))?.focus());
+    };
+    const close = () => {
+        invoiceBillingDialog.close();
+        launcher?.focus();
+    };
+    document.querySelectorAll('[data-invoice-billing-open]').forEach((button) => button.addEventListener('click', () => open(button)));
+    invoiceBillingDialog.querySelectorAll('[data-invoice-billing-close]').forEach((button) => button.addEventListener('click', close));
+    invoiceBillingDialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+    if (invoiceBillingDialog.dataset.autoOpen === 'true') open(document.querySelector('[data-invoice-billing-open]'));
+}
+
 document.querySelectorAll('[data-catalog-picker]').forEach((picker) => {
     const dialog = picker.querySelector('[data-catalog-dialog]');
     const launcher = picker.querySelector('[data-catalog-dialog-open]');

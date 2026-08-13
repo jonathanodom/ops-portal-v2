@@ -61,6 +61,7 @@ class InvoiceController extends Controller
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('manage', $invoice);
         $rules = [
+            'form_context' => ['nullable', Rule::in(['billing'])],
             'payment_terms' => ['required', Rule::in(['due_on_receipt', 'custom'])], 'due_on' => ['nullable', 'date'],
             'billing_name' => ['required', 'string', 'max:255'], 'billing_legal_name' => ['nullable', 'string', 'max:255'],
             'billing_contact_name' => ['nullable', 'string', 'max:255'], 'billing_email' => ['nullable', 'email', 'max:255'], 'billing_phone' => ['nullable', 'string', 'max:50'],
@@ -73,6 +74,7 @@ class InvoiceController extends Controller
             $rules += ['discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_value_input' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'discount_reason' => ['nullable', 'string', 'max:2000']];
         }
         $data = $request->validate($rules);
+        unset($data['form_context']);
         $data['tax_rate_basis_points'] = $this->decimalToScaled($data['tax_rate_percent'], 100);
         unset($data['tax_rate_percent']);
         if (array_key_exists('discount_type', $data)) {
