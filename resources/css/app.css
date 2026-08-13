@@ -272,7 +272,15 @@
     }
 
     .invoice-workspace {
-        @apply mt-6 grid gap-6 2xl:grid-cols-[minmax(0,1fr)_minmax(320px,420px)];
+        @apply mt-6 space-y-6;
+    }
+
+    .invoice-lower-section {
+        @apply grid gap-6 lg:grid-cols-[minmax(0,1fr)_minmax(320px,420px)];
+    }
+
+    .invoice-detail-summary {
+        @apply flex min-h-14 cursor-pointer items-center px-5 py-3 font-bold text-slate-900 hover:bg-slate-50 focus-visible:outline-2 focus-visible:outline-offset-[-3px] focus-visible:outline-brand-blue;
     }
 
     .invoice-billing-dialog {
@@ -297,6 +305,31 @@
     }
 
     .invoice-billing-dialog-body {
+        @apply overflow-y-auto px-4 py-5 sm:px-6;
+    }
+
+    .invoice-line-dialog {
+        @apply m-auto h-dvh max-h-none w-full max-w-none border-0 bg-white p-0 shadow-2xl sm:h-[92vh] sm:w-[96vw] sm:max-w-3xl sm:rounded-xl;
+    }
+
+    .invoice-line-dialog-panel {
+        @apply grid h-full grid-rows-[auto_minmax(0,1fr)_auto];
+    }
+
+    .invoice-line-dialog-header,
+    .invoice-line-dialog-footer {
+        @apply flex items-center justify-between gap-3 border-slate-200 bg-white px-4 py-3 sm:px-6;
+    }
+
+    .invoice-line-dialog-header {
+        @apply border-b;
+    }
+
+    .invoice-line-dialog-footer {
+        @apply flex-wrap justify-end border-t pb-[max(0.75rem,env(safe-area-inset-bottom))];
+    }
+
+    .invoice-line-dialog-body {
         @apply overflow-y-auto px-4 py-5 sm:px-6;
     }
 }
@@ -331,7 +364,12 @@ dialog[data-invoice-billing-dialog]::backdrop {
     background: rgb(15 23 42 / 65%);
 }
 
+dialog[data-invoice-item-dialog]::backdrop {
+    background: rgb(15 23 42 / 65%);
+}
+
 body:has(dialog[data-execution-dialog][open]),
-body:has(dialog[data-invoice-billing-dialog][open]) {
+body:has(dialog[data-invoice-billing-dialog][open]),
+body:has(dialog[data-invoice-item-dialog][open]) {
     overflow: hidden;
 }

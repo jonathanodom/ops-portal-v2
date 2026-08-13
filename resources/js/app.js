@@ -226,6 +226,27 @@ if (invoiceBillingDialog) {
     if (invoiceBillingDialog.dataset.autoOpen === 'true') open(document.querySelector('[data-invoice-billing-open]'));
 }
 
+document.querySelectorAll('[data-invoice-item-dialog]').forEach((dialog) => {
+    let launcher;
+    const firstInvalid = () => dialog.querySelector('[aria-invalid="true"]');
+    const open = (button) => {
+        launcher = button ?? launcher;
+        dialog.showModal();
+        requestAnimationFrame(() => (firstInvalid() ?? dialog.querySelector('input:not([type="hidden"]), select, textarea'))?.focus());
+    };
+    const close = () => {
+        dialog.close();
+        launcher?.focus();
+    };
+    document.querySelectorAll(`[data-invoice-item-open="${CSS.escape(dialog.id)}"]`).forEach((button) => button.addEventListener('click', () => open(button)));
+    dialog.querySelectorAll('[data-invoice-item-close]').forEach((button) => button.addEventListener('click', close));
+    dialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+    if (dialog.dataset.autoOpen === 'true') open(document.querySelector(`[data-invoice-item-open="${CSS.escape(dialog.id)}"]`));
+});
+
 document.querySelectorAll('[data-catalog-picker]').forEach((picker) => {
     const dialog = picker.querySelector('[data-catalog-dialog]');
     const launcher = picker.querySelector('[data-catalog-dialog-open]');

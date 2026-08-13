@@ -7,6 +7,7 @@ use App\Domain\InvoiceWorkflow;
 use App\Domain\UnissuedInvoiceDeletionWorkflow;
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderInvoicePdf;
+use App\Models\AuditEvent;
 use App\Models\BillingLaborRate;
 use App\Models\CatalogPackage;
 use App\Models\CatalogProduct;
@@ -31,7 +32,7 @@ class InvoiceController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
-        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
+        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
         if (! $request->attributes->get('membership')->hasCapability('invoices.manage')) {
             return view('office.invoices.summary', compact('invoice'));
         }
@@ -52,8 +53,23 @@ class InvoiceController extends Controller
         $catalogPackages = $canUseCatalog ? CatalogPackage::query()->forOrganization($invoice->organization_id)->where('active', true)->with('salesUom')->orderBy('name')->get() : collect();
 
         $canDeleteDraft = Gate::allows('deleteDraft', $invoice) && $deletion->canDelete($invoice);
+        $auditEvents = AuditEvent::query()
+            ->where('organization_id', $invoice->organization_id)
+            ->where(function ($query) use ($invoice): void {
+                $query->where(function ($subject) use ($invoice): void {
+                    $subject->where('subject_type', Invoice::class)->where('subject_id', $invoice->id);
+                });
+                if ($invoice->lines->isNotEmpty()) {
+                    $query->orWhere(function ($subject) use ($invoice): void {
+                        $subject->where('subject_type', InvoiceLine::class)->whereIn('subject_id', $invoice->lines->modelKeys());
+                    });
+                }
+            })
+            ->with('actor')
+            ->latest('occurred_at')
+            ->get();
 
-        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'canDeleteDraft'));
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'canDeleteDraft', 'auditEvents'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
@@ -217,6 +233,7 @@ class InvoiceController extends Controller
     private function lineRules(bool $editing = false): array
     {
         return [
+            'line_form_context' => ['nullable', 'string', 'regex:/^(manual|\d+)$/'],
             'line_type' => ['required', Rule::in(['labor', 'travel', 'service_charge', 'part', 'equipment', 'other'])],
             'description' => ['required', 'string', 'max:1000'], 'quantity' => ['required', 'regex:/^\d{1,7}(\.\d{1,3})?$/'],
             'unit' => ['nullable', 'string', 'max:40'], 'unit_price' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'],

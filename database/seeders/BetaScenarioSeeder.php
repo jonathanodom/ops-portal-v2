@@ -132,6 +132,7 @@ class BetaScenarioSeeder extends Seeder
         $draftTicket->update(['status' => 'completed']);
         CloseoutReview::query()->create(['organization_id' => $organization->id, 'closeout_id' => $draftCloseout->id, 'reviewer_id' => $memberships['super_admin']->user_id, 'decision' => 'approved', 'self_review_override' => true, 'decision_token' => (string) Str::uuid(), 'decided_at' => now()]);
         $draftHandoff = BillingHandoff::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $draftTicket->id, 'visit_id' => $draftVisit->id, 'closeout_id' => $draftCloseout->id, 'status' => 'ready', 'created_by_id' => $memberships['super_admin']->user_id]);
-        $workflow->createFromHandoff($draftHandoff, $memberships['super_admin']->user, (string) Str::uuid());
+        $draftInvoice = $workflow->createFromHandoff($draftHandoff, $memberships['super_admin']->user, (string) Str::uuid());
+        $workflow->addLine($draftInvoice, $memberships['super_admin']->user, ['line_type' => 'service_charge', 'description' => 'Draft invoice workspace fixture', 'quantity_millis' => 1000, 'unit' => 'service', 'unit_price_cents' => 8500, 'included' => true, 'taxable' => true, 'override_reason' => 'Synthetic beta fixture']);
     }
 }

@@ -46,6 +46,7 @@ test.describe('desktop beta', () => {
         await expect(page.getByLabel('Upload full logo')).toBeVisible();
         await expectAccessible(page);
 
+        await page.setViewportSize({ width: 1440, height: 900 });
         await page.goto('/office/billing-handoffs');
         await page.getByRole('link', { name: 'Open invoice' }).first().click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
@@ -266,7 +267,7 @@ test.describe('desktop beta', () => {
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             await expect(page.locator('[data-invoice-command-bar]')).toBeVisible();
             const columns = await page.locator('[data-invoice-workspace]').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
-            expect(columns).toBe(viewport.width >= 1536 ? 2 : 1);
+            expect(columns).toBe(1);
         }
 
         await page.setViewportSize({ width: 390, height: 844 });
@@ -278,9 +279,27 @@ test.describe('desktop beta', () => {
         expect(shortControls).toEqual([]);
         await expectAccessible(page);
 
+        await page.setViewportSize({ width: 1440, height: 900 });
         await page.goto('/office/billing-handoffs');
         await page.getByRole('link', { name: 'Open invoice' }).nth(1).click();
         await expect(page.getByRole('region', { name: 'Invoice actions' })).toBeVisible();
+        await expect(page.locator('[data-invoice-item-workspace]')).toBeVisible();
+        await expect(page.locator('[data-invoice-item-table]')).toBeVisible();
+        await expect(page.locator('[data-invoice-item-cards]')).toBeHidden();
+        const firstItemEditorLauncher = page.locator('[data-invoice-item-table] [data-invoice-item-open^="invoice-line-editor-"]').first();
+        await firstItemEditorLauncher.click();
+        const itemEditor = page.getByRole('dialog', { name: 'Edit invoice item' });
+        await expect(itemEditor).toBeVisible();
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
+        await expect(itemEditor).toBeHidden();
+        await expect(firstItemEditorLauncher).toBeFocused();
+        await page.getByRole('button', { name: '+ Add Manual Line' }).click();
+        const manualLineDialog = page.getByRole('dialog', { name: 'Add manual line' });
+        await expect(manualLineDialog).toBeVisible();
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
+        await expect(manualLineDialog).toBeHidden();
         const billingLauncher = page.locator('[data-invoice-command-bar]').getByRole('button', { name: 'Billing details' });
         await billingLauncher.click();
         const billingDialog = page.getByRole('dialog', { name: 'Edit billing details' });
@@ -289,6 +308,23 @@ test.describe('desktop beta', () => {
         await page.keyboard.press('Escape');
         await expect(billingDialog).toBeHidden();
         await expect(billingLauncher).toBeFocused();
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await expect(page.locator('[data-invoice-item-table]')).toBeHidden();
+        await expect(page.locator('[data-invoice-item-cards]')).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await page.locator('[data-invoice-item-cards] [data-invoice-item-open]').first().click();
+        await expect(itemEditor).toBeVisible();
+        const itemEditorDimensions = await itemEditor.evaluate((element) => ({
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+            viewportWidth: innerWidth,
+            viewportHeight: innerHeight,
+        }));
+        expect(itemEditorDimensions.width).toBe(itemEditorDimensions.viewportWidth);
+        expect(itemEditorDimensions.height).toBe(itemEditorDimensions.viewportHeight);
+        await expectAccessible(page);
+        await page.keyboard.press('Escape');
     });
 
     test('catalog services, products, packages, recipes, categories, and units follow the responsive workspace system', async ({ page }) => {

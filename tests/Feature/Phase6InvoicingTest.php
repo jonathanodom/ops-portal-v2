@@ -368,6 +368,75 @@ class Phase6InvoicingTest extends TestCase
             ->assertOk()->assertSee('Paid')->assertSee('Payments / receipts')->assertDontSee('Pay securely');
     }
 
+    public function test_invoice_items_are_compact_and_open_only_the_selected_editor(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $line = $invoice->lines->firstOrFail();
+
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertSee('data-invoice-item-workspace', false)
+            ->assertSee('data-invoice-item-table', false)
+            ->assertSee('data-invoice-item-cards', false)
+            ->assertSee('Item / description')
+            ->assertSee('+ Add Catalog Item')
+            ->assertSee('+ Add Manual Line')
+            ->assertSee("data-invoice-item-open=\"invoice-line-editor-{$line->id}\"", false)
+            ->assertSee("id=\"invoice-line-editor-{$line->id}\"", false)
+            ->assertSee('Approved Work &amp; Billing Sources', false)
+            ->assertSee('Internal Billing Information')
+            ->assertSee('Audit History');
+
+        $invoice->update(['status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $admin->id]);
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertDontSee('data-invoice-item-dialog', false)
+            ->assertDontSee('+ Add Manual Line');
+    }
+
+    public function test_invoice_item_validation_reopens_the_correct_editor_and_preserves_input(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $line = $invoice->lines->firstOrFail();
+
+        $response = $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->followingRedirects()->put("/office/invoices/{$invoice->id}/lines/{$line->id}", [
+            'line_form_context' => (string) $line->id,
+            'line_type' => 'labor',
+            'description' => 'Preserved edited description',
+            'quantity' => 'not-a-number',
+            'unit' => 'hour',
+            'unit_price' => '120.00',
+            'included' => '1',
+            'labor_rate_id' => $line->labor_rate_id,
+            'override_reason' => 'Correction',
+        ]);
+
+        $response->assertOk()
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee('value="Preserved edited description"', false)
+            ->assertSee('value="not-a-number"', false)
+            ->assertSee('aria-invalid="true"', false)
+            ->assertSee('This invoice item needs attention');
+
+        $manual = $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->followingRedirects()->post("/office/invoices/{$invoice->id}/lines", [
+            'line_form_context' => 'manual',
+            'line_type' => 'other',
+            'description' => 'Preserved manual line',
+            'quantity' => '1',
+            'unit_price' => '',
+            'included' => '1',
+            'override_reason' => 'One-off work',
+        ]);
+
+        $manual->assertOk()
+            ->assertSee('id="invoice-manual-line-dialog"', false)
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee('value="Preserved manual line"', false)
+            ->assertSee('This manual line needs attention');
+    }
+
     /** @return array{Organization, User, BillingHandoff, Visit, Visit} */
     private function billingScenario(bool $withPart = true): array
     {
