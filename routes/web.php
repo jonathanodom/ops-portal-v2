@@ -175,6 +175,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             });
             Route::middleware('capability:billing.settings.manage')->group(function (): void {
                 Route::put('/settings/billing', [BillingSettingsController::class, 'update'])->name('settings.billing.update');
+                Route::put('/settings/billing/labor-policy', [BillingSettingsController::class, 'laborPolicyUpdate'])->name('settings.billing.labor-policy.update');
                 Route::post('/settings/billing/labor-rates', [BillingSettingsController::class, 'storeRate'])->name('settings.billing.rates.store');
                 Route::put('/settings/billing/labor-rates/{rate}', [BillingSettingsController::class, 'updateRate'])->whereNumber('rate')->name('settings.billing.rates.update');
                 Route::get('/settings/invoices', [BillingSettingsController::class, 'invoiceEdit'])->name('settings.invoices.edit');
