@@ -38,18 +38,18 @@ class Phase7PaymentsTest extends TestCase
         config(['payments.fake' => true]);
     }
 
-    public function test_provider_credentials_are_encrypted_hidden_and_super_admin_only(): void
+    public function test_legacy_provider_credentials_remain_encrypted_hidden_and_normal_secret_entry_is_closed(): void
     {
-        [$invoice, $admin] = $this->invoiceScenario();
+        [$invoice, $admin, $configuration] = $this->invoiceScenario();
         $secret = 'sk_test_secret_that_must_not_render';
-        $this->actingAs($admin)->put('/office/settings/billing/payments/stripe', ['environment' => 'test', 'api_secret' => $secret, 'webhook_secret' => 'whsec_test_secret'])->assertRedirect();
-        $configuration = PaymentProviderConfiguration::query()->firstOrFail();
+        $configuration->update(['api_secret' => $secret, 'credential_fingerprint' => strtoupper(substr(hash('sha256', $secret), 0, 12))]);
         $this->assertSame($secret, $configuration->api_secret);
-        $this->assertStringNotContainsString($secret, (string) DB::table('payment_provider_configurations')->value('api_secret'));
+        $this->assertStringNotContainsString($secret, (string) DB::table('payment_provider_configurations')->where('id', $configuration->id)->value('api_secret'));
         $this->actingAs($admin)->get('/office/settings/billing')->assertOk()->assertDontSee($secret)->assertSee($configuration->credential_fingerprint);
+        $this->actingAs($admin)->put('/office/settings/billing/payments/stripe', ['environment' => 'test', 'api_secret' => 'forged-secret'])->assertNotFound();
 
         [$billing] = $this->userWithRole('billing', $invoice->organization);
-        $this->actingAs($billing)->get('/office/settings/billing')->assertOk()->assertSee('You can view readiness')->assertDontSee('Save Stripe credentials');
+        $this->actingAs($billing)->get('/office/settings/billing')->assertOk()->assertSee('You can view readiness')->assertDontSee('Secret key');
         $this->actingAs($billing)->put('/office/settings/billing/payments/stripe', ['environment' => 'test', 'api_secret' => 'forged-secret'])->assertForbidden();
     }
 
@@ -86,7 +86,7 @@ class Phase7PaymentsTest extends TestCase
         app(StripePaymentProviderAdapter::class)->parseWebhook($configuration, $stripeBody.' ', ['stripe-signature' => $stripeSignature], '');
     }
 
-    public function test_checkout_is_idempotent_locks_provider_and_only_authoritative_result_creates_payment(): void
+    public function test_checkout_is_idempotent_and_only_authoritative_result_locks_provider_and_creates_payment(): void
     {
         Queue::fake();
         [$invoice, $admin, $configuration] = $this->invoiceScenario();
@@ -95,7 +95,7 @@ class Phase7PaymentsTest extends TestCase
         $result = $workflow->createCheckout($invoice, $admin, 4000, $token);
         $retry = $workflow->createCheckout($invoice->fresh(), $admin, 4000, $token);
         $this->assertSame($result['attempt']->id, $retry['attempt']->id);
-        $this->assertSame('stripe', $invoice->fresh()->electronic_payment_provider);
+        $this->assertNull($invoice->fresh()->electronic_payment_provider);
         $this->assertDatabaseCount('payment_transactions', 0);
         $this->expectException(ValidationException::class);
         $workflow->recordManual($invoice->fresh(), $admin, 'cash', 1000, now(), null, (string) Str::uuid());
@@ -146,19 +146,16 @@ class Phase7PaymentsTest extends TestCase
         $this->actingAs($outsider)->post("/office/invoices/{$invoice->id}/payments/manual", ['method' => 'cash', 'amount' => '1.00', 'received_at' => now()->format('Y-m-d H:i'), 'idempotency_key' => (string) Str::uuid()])->assertNotFound();
     }
 
-    public function test_issued_invoice_without_provider_accepts_cash_and_check_but_rejects_checkout(): void
+    public function test_issued_invoice_without_selection_uses_sole_ready_provider_and_accepts_cash_and_check(): void
     {
         Queue::fake();
         [$invoice, $admin] = $this->invoiceScenario();
         $invoice->forceFill(['preferred_payment_provider' => null])->save();
         $workflow = app(PaymentWorkflow::class);
 
-        try {
-            $workflow->createCheckout($invoice, $admin, 1000, (string) Str::uuid());
-            $this->fail('Checkout should require an electronic provider.');
-        } catch (ValidationException $exception) {
-            $this->assertArrayHasKey('provider', $exception->errors());
-        }
+        $attempt = $workflow->createCheckout($invoice, $admin, 1000, (string) Str::uuid())['attempt'];
+        $this->assertSame('stripe', $attempt->provider);
+        $workflow->expire($attempt, $admin);
 
         $cash = $workflow->recordManual($invoice->fresh(), $admin, 'cash', 1000, now(), null, (string) Str::uuid());
         $check = $workflow->recordManual($invoice->fresh(), $admin, 'check', 1000, now(), 'CHK-8501', (string) Str::uuid());
@@ -169,7 +166,7 @@ class Phase7PaymentsTest extends TestCase
         $workflow->recordManual($invoice->fresh(), $admin, 'check', 1000, now(), null, (string) Str::uuid());
     }
 
-    public function test_ready_square_or_stripe_can_be_selected_after_issue_and_locks_on_checkout(): void
+    public function test_authorized_override_can_select_ready_provider_but_active_attempt_only_temporarily_blocks_switching(): void
     {
         Queue::fake();
         [$invoice, $admin, $stripe] = $this->invoiceScenario();
@@ -191,10 +188,130 @@ class Phase7PaymentsTest extends TestCase
         $workflow->setPreferredProvider($invoice, $admin, 'square');
         $result = $workflow->createCheckout($invoice->fresh(), $admin, 1000, (string) Str::uuid());
         $this->assertSame($square->id, $result['attempt']->payment_provider_configuration_id);
-        $this->assertSame('square', $invoice->fresh()->electronic_payment_provider);
+        $this->assertNull($invoice->fresh()->electronic_payment_provider);
 
-        $this->expectException(ValidationException::class);
-        $workflow->setPreferredProvider($invoice->fresh(), $admin, $stripe->provider);
+        try {
+            $workflow->setPreferredProvider($invoice->fresh(), $admin, $stripe->provider);
+            $this->fail('Active checkout should temporarily block switching.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('preferred_payment_provider', $exception->errors());
+        }
+        $workflow->expire($result['attempt'], $admin);
+        $this->assertSame('stripe', $workflow->setPreferredProvider($invoice->fresh(), $admin, 'stripe')->preferred_payment_provider);
+    }
+
+    public function test_issued_invoice_uses_payment_overlays_and_only_admin_sees_provider_override(): void
+    {
+        [$invoice, $admin] = $this->invoiceScenario();
+        PaymentProviderConfiguration::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'public_id' => (string) Str::uuid(),
+            'provider' => 'square',
+            'environment' => 'sandbox',
+            'api_secret' => 'square_fake',
+            'webhook_secret' => 'square_webhook',
+            'location_id' => 'LOCATION',
+            'credential_fingerprint' => 'SQUARE860000',
+            'enabled' => true,
+            'connection_status' => 'connected',
+        ]);
+
+        $this->actingAs($admin)->get(route('office.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('id="record-payment-dialog"', false)
+            ->assertSee('id="secure-payment-dialog"', false)
+            ->assertSee('id="payment-history-dialog"', false)
+            ->assertSee('Use Square instead')
+            ->assertDontSee('<select name="preferred_payment_provider"', false);
+
+        [$billing] = $this->userWithRole('billing', $invoice->organization);
+        $this->actingAs($billing)->get(route('office.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('id="record-payment-dialog"', false)
+            ->assertSee('id="secure-payment-dialog"', false)
+            ->assertDontSee('Use Square instead');
+    }
+
+    public function test_office_secure_payment_creation_reopens_workspace_and_provider_override_obeys_locking(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $square = PaymentProviderConfiguration::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'public_id' => (string) Str::uuid(),
+            'provider' => 'square',
+            'environment' => 'sandbox',
+            'api_secret' => 'square_fake',
+            'webhook_secret' => 'square_webhook',
+            'location_id' => 'LOCATION',
+            'credential_fingerprint' => 'SQUARE860001',
+            'enabled' => true,
+            'connection_status' => 'connected',
+        ]);
+
+        $this->actingAs($admin)->put(route('office.invoices.payments.provider', $invoice), [
+            'payment_form_context' => 'secure',
+            'preferred_payment_provider' => 'square',
+        ])->assertRedirect()->assertSessionHas('payment_overlay', 'secure');
+        $this->assertSame('square', $invoice->fresh()->preferred_payment_provider);
+
+        $response = $this->actingAs($admin)->from(route('office.invoices.show', $invoice))->post(route('office.invoices.payments.checkout', $invoice), [
+            'payment_form_context' => 'secure',
+            'amount' => '25.00',
+            'idempotency_key' => (string) Str::uuid(),
+        ]);
+        $response->assertRedirect(route('office.invoices.show', $invoice))->assertSessionHas('payment_overlay', 'secure');
+        $attempt = $invoice->paymentAttempts()->firstOrFail();
+        $this->assertSame($square->id, $attempt->payment_provider_configuration_id);
+
+        $this->actingAs($admin)->get(route('office.invoices.show', $invoice))
+            ->assertOk()
+            ->assertSee('Payment link ready')
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee(route('office.invoices.payments.qr', [$invoice, $attempt]), false);
+
+        $this->actingAs($admin)->put(route('office.invoices.payments.provider', $invoice), [
+            'payment_form_context' => 'secure',
+            'preferred_payment_provider' => 'stripe',
+        ])->assertSessionHasErrors('preferred_payment_provider');
+    }
+
+    public function test_manual_payment_validation_reopens_modal_and_optional_note_remains_internal(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $url = route('office.invoices.show', $invoice);
+
+        $this->actingAs($admin)->from($url)->post(route('office.invoices.payments.manual', $invoice), [
+            'payment_form_context' => 'manual',
+            'method' => 'check',
+            'amount' => '15.00',
+            'received_at' => now($invoice->organization->timezone)->format('Y-m-d\TH:i'),
+            'reference' => '',
+            'note' => 'Customer paid after the service appointment.',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertRedirect($url)->assertSessionHasErrors('reference');
+
+        $this->get($url)->assertOk()
+            ->assertSee('Payment details need attention')
+            ->assertSee('id="record-payment-dialog"', false)
+            ->assertSee('data-auto-open="true"', false);
+
+        $this->actingAs($admin)->from($url)->post(route('office.invoices.payments.manual', $invoice), [
+            'payment_form_context' => 'manual',
+            'method' => 'cash',
+            'amount' => '15.00',
+            'received_at' => now($invoice->organization->timezone)->format('Y-m-d\TH:i'),
+            'reference' => '',
+            'note' => 'Internal collection note.',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertRedirect($url)->assertSessionHas('payment_overlay', 'history');
+
+        $transaction = $invoice->paymentTransactions()->firstOrFail();
+        $this->assertSame('Internal collection note.', $transaction->reason);
+        $this->get(route('payments.receipts.show', ['receipt' => $transaction->receipt, 'token' => 'invalid']))
+            ->assertNotFound()
+            ->assertDontSee('Internal collection note.');
     }
 
     /** @return array{Invoice,User,PaymentProviderConfiguration} */

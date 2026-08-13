@@ -72,4 +72,23 @@ class BrandFoundationTest extends TestCase
         $this->assertStringContainsString('Couldn’t obtain acknowledgment?', $field);
         $this->assertStringNotContainsString('Representative name', $field);
     }
+
+    public function test_field_workspace_exposes_clear_connectivity_navigation_and_outcome_contracts(): void
+    {
+        $layout = file_get_contents(resource_path('views/components/layouts/field.blade.php'));
+        $field = file_get_contents(resource_path('views/field/visits/show.blade.php'));
+        $script = file_get_contents(resource_path('js/app.js'));
+
+        $this->assertStringContainsString('data-connectivity-status', $layout);
+        $this->assertStringContainsString('data-connectivity-label', $layout);
+        $this->assertStringContainsString('Writes and uploads are disabled', $layout);
+        $this->assertStringContainsString('aria-label="Visit workspace sections"', $field);
+        foreach (['#visit-time', '#visit-closeout', '#visit-photos', '#visit-parts'] as $anchor) {
+            $this->assertStringContainsString($anchor, $field);
+        }
+        $this->assertStringContainsString('data-outcome-selector', $field);
+        $this->assertStringContainsString('data-selected-outcome', $field);
+        $this->assertStringContainsString('Saved successfully', $field);
+        $this->assertStringContainsString("navigator.onLine ? 'Online' : 'Offline'", $script);
+    }
 }

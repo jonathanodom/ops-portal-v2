@@ -66,7 +66,7 @@ class CatalogInvoiceIntegrationTest extends TestCase
         $this->actingAs($billing)->get("/office/invoices/{$invoice->id}")
             ->assertOk()->assertSee('Add Catalog item')->assertSee('Search Catalog')
             ->assertSee('h-[100dvh]', false)->assertSee('sm:h-[92vh]', false)
-            ->assertSee('Add custom manual line');
+            ->assertSee('+ Add Manual Line');
 
         $this->actingAs($billing)->post("/office/invoices/{$invoice->id}/catalog-lines", [
             'catalog_item' => "service:{$service->id}", 'catalog_service_variant_id' => $variant->id, 'catalog_quantity' => '1',

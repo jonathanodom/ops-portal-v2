@@ -322,11 +322,208 @@ class Phase6InvoicingTest extends TestCase
 
         $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
             ->assertOk()
-            ->assertSee('data-office-width="detail"', false)
-            ->assertSee('aria-label="On this page"', false)
-            ->assertSee('href="#approved-work"', false)
-            ->assertSee('href="#invoice-lines"', false)
-            ->assertSee('data-office-detail-grid', false);
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('data-invoice-command-bar', false)
+            ->assertSee('aria-label="Invoice actions"', false)
+            ->assertSee('data-invoice-workspace', false)
+            ->assertSee('data-invoice-billing-dialog', false)
+            ->assertSee('data-invoice-billing-open', false)
+            ->assertSee('Ready for review')
+            ->assertSee('Delete unissued invoice')
+            ->assertDontSee('data-office-detail-grid', false);
+
+        $invalidBilling = $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->followingRedirects()->put("/office/invoices/{$invoice->id}", [
+            'form_context' => 'billing', 'billing_name' => '', 'payment_terms' => 'custom',
+            'tax_rate_percent' => 'not-a-rate',
+        ]);
+        $invalidBilling
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee('aria-invalid="true"', false)
+            ->assertSee('value="not-a-rate"', false);
+    }
+
+    public function test_billing_queue_and_invoice_ledger_are_separate_capability_aware_workspaces(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+
+        $this->actingAs($admin)->get(route('office.billing-handoffs.index'))
+            ->assertOk()
+            ->assertSee('aria-label="Billing workspace"', false)
+            ->assertSee('>Queue<', false)
+            ->assertSee('>Invoices<', false)
+            ->assertSee('Ready to invoice');
+        $this->actingAs($admin)->get(route('office.invoices.index'))
+            ->assertOk()
+            ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('aria-label="Invoice filters"', false)
+            ->assertSee('data-office-table', false)
+            ->assertSee('data-office-mobile-list', false)
+            ->assertSee('Ticket / Project')
+            ->assertSee($invoice->invoice_number)
+            ->assertDontSee('Create invoice');
+
+        [$reviewer] = $this->userWithRole('reviewer', $invoice->organization);
+        $this->actingAs($reviewer)->get(route('office.invoices.index'))
+            ->assertOk()
+            ->assertSee($invoice->invoice_number)
+            ->assertSee('href="'.route('office.invoices.index').'"', false)
+            ->assertDontSee('href="'.route('office.billing-handoffs.index').'"', false);
+        $this->actingAs($reviewer)->get(route('office.billing-handoffs.index'))->assertForbidden();
+
+        [$technician] = $this->userWithRole('technician', $invoice->organization);
+        $this->actingAs($technician)->get(route('office.invoices.index'))->assertForbidden();
+    }
+
+    public function test_invoice_ledger_search_filters_sorting_pagination_and_organization_scope(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $invoice->forceFill(['status' => 'issued', 'issued_at' => now()->subDays(4), 'due_on' => today()->subDay(), 'total_cents' => 21000])->save();
+        $ticket = $invoice->serviceTicket;
+        $customer = $invoice->customer;
+
+        foreach (range(2, 27) as $generation) {
+            $copy = $invoice->replicate();
+            $copy->forceFill([
+                'generation' => $generation,
+                'invoice_number' => sprintf('NDT-INV-2026-%04d', 6000 + $generation),
+                'status' => $generation === 2 ? 'void' : 'draft',
+                'creation_token' => (string) Str::uuid(),
+                'issue_token' => null,
+                'issued_at' => null,
+                'issued_by_id' => null,
+                'due_on' => null,
+                'total_cents' => $generation * 100,
+            ])->save();
+        }
+
+        $base = route('office.invoices.index');
+        foreach ([
+            ['invoice' => $invoice->invoice_number],
+            ['customer' => $customer->display_name],
+            ['customer' => $customer->legal_name],
+            ['ticket' => $ticket->ticket_number],
+            ['ticket' => $ticket->title],
+            ['status' => 'issued'],
+            ['payment_state' => 'unpaid'],
+            ['balance_state' => 'open'],
+            ['balance_state' => 'overdue'],
+            ['date_from' => now()->subDays(5)->toDateString(), 'date_to' => now()->subDays(3)->toDateString()],
+        ] as $query) {
+            $this->actingAs($admin)->get($base.'?'.http_build_query(['invoice' => $invoice->invoice_number] + $query))->assertOk()->assertSee($invoice->invoice_number);
+        }
+
+        $this->actingAs($admin)->get($base.'?invoice=does-not-exist')->assertOk()->assertDontSee($invoice->invoice_number);
+        $this->actingAs($admin)->get($base.'?sort=invoice&direction=asc')->assertOk()
+            ->assertSeeInOrder([$invoice->invoice_number, 'NDT-INV-2026-6002']);
+        $this->actingAs($admin)->get($base.'?sort=invoice&direction=asc')->assertOk()->assertSee('page=2', false);
+
+        $invoice->paymentTransactions()->create([
+            'organization_id' => $invoice->organization_id, 'type' => 'payment', 'status' => 'succeeded',
+            'provider' => 'manual', 'method' => 'cash', 'amount_cents' => $invoice->total_cents,
+            'idempotency_key' => (string) Str::uuid(), 'received_at' => now(), 'confirmed_at' => now(), 'recorded_by_id' => $admin->id,
+        ]);
+        $this->actingAs($admin)->get($base.'?payment_state=paid&balance_state=paid')->assertOk()->assertSee($invoice->invoice_number);
+        $this->actingAs($admin)->get($base.'?balance_state=overdue')->assertOk()->assertDontSee($invoice->invoice_number);
+
+        [$outsider] = $this->userWithRole('super_admin');
+        $this->actingAs($outsider)->get($base.'?invoice='.urlencode($invoice->invoice_number))->assertOk()->assertSee('No invoices found');
+    }
+
+    public function test_invoice_command_bar_tracks_lifecycle_and_payment_state_without_weakening_actions(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()->assertSee('Ready for review')->assertSee('Billing details')->assertSee('Delete unissued invoice');
+
+        $invoice->update(['status' => 'ready_for_review']);
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()->assertSee('Issue invoice')->assertSee('Confirm totals')->assertSee('href="#invoice-lines"', false);
+
+        $invoice->update(['status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $admin->id]);
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()->assertSee('Balance due')->assertSee('Customer view')->assertSee('Record payment')
+            ->assertDontSee('data-invoice-billing-dialog', false)->assertDontSee('Delete unissued invoice');
+
+        $invoice->paymentTransactions()->create([
+            'organization_id' => $invoice->organization_id, 'type' => 'payment', 'status' => 'succeeded',
+            'provider' => 'manual', 'method' => 'cash', 'amount_cents' => $invoice->total_cents,
+            'idempotency_key' => (string) Str::uuid(), 'received_at' => now(), 'confirmed_at' => now(), 'recorded_by_id' => $admin->id,
+        ]);
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()->assertSee('Paid')->assertSee('Payments / receipts')->assertDontSee('Pay securely');
+    }
+
+    public function test_invoice_items_are_compact_and_open_only_the_selected_editor(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $line = $invoice->lines->firstOrFail();
+
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertSee('data-invoice-item-workspace', false)
+            ->assertSee('data-invoice-item-table', false)
+            ->assertSee('data-invoice-item-cards', false)
+            ->assertSee('Item / description')
+            ->assertSee('+ Add Catalog Item')
+            ->assertSee('+ Add Manual Line')
+            ->assertSee("data-invoice-item-open=\"invoice-line-editor-{$line->id}\"", false)
+            ->assertSee("id=\"invoice-line-editor-{$line->id}\"", false)
+            ->assertSee('Approved Work &amp; Billing Sources', false)
+            ->assertSee('Internal Billing Information')
+            ->assertSee('Audit History');
+
+        $invoice->update(['status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $admin->id]);
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertDontSee('data-invoice-item-dialog', false)
+            ->assertDontSee('+ Add Manual Line');
+    }
+
+    public function test_invoice_item_validation_reopens_the_correct_editor_and_preserves_input(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $line = $invoice->lines->firstOrFail();
+
+        $response = $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->followingRedirects()->put("/office/invoices/{$invoice->id}/lines/{$line->id}", [
+            'line_form_context' => (string) $line->id,
+            'line_type' => 'labor',
+            'description' => 'Preserved edited description',
+            'quantity' => 'not-a-number',
+            'unit' => 'hour',
+            'unit_price' => '120.00',
+            'included' => '1',
+            'labor_rate_id' => $line->labor_rate_id,
+            'override_reason' => 'Correction',
+        ]);
+
+        $response->assertOk()
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee('value="Preserved edited description"', false)
+            ->assertSee('value="not-a-number"', false)
+            ->assertSee('aria-invalid="true"', false)
+            ->assertSee('This invoice item needs attention');
+
+        $manual = $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->followingRedirects()->post("/office/invoices/{$invoice->id}/lines", [
+            'line_form_context' => 'manual',
+            'line_type' => 'other',
+            'description' => 'Preserved manual line',
+            'quantity' => '1',
+            'unit_price' => '',
+            'included' => '1',
+            'override_reason' => 'One-off work',
+        ]);
+
+        $manual->assertOk()
+            ->assertSee('id="invoice-manual-line-dialog"', false)
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee('value="Preserved manual line"', false)
+            ->assertSee('This manual line needs attention');
     }
 
     /** @return array{Organization, User, BillingHandoff, Visit, Visit} */

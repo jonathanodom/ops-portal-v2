@@ -138,6 +138,8 @@ Organization identity, timezone, private branding, Billing defaults, and Invoice
 
 Phase 7 payment architecture, encrypted Square/Stripe configuration, provider locking, hosted checkout, immutable ledger rules, reconciliation, and customer-safe receipts are documented in [Phase 7 Payments](docs/PHASE_7_PAYMENTS.md).
 
+Phase 8.6 provider-hosted Square/Stripe connection, canonical webhooks, default-processor resolution, Billing workspace refinements, final validation results, and Sandbox/test-account acceptance steps are documented in [Connected Payments & Billing Workspace](docs/PHASE_8_6_CONNECTED_PAYMENTS_BILLING_WORKSPACE.md).
+
 ## Phase 8 Products & Services Catalog
 
 Checkpoints 1 through 5 add organization-scoped Categories, reusable Units of Measure, Services, explicit Service Variants, optional related-Service add-ons, Products, base/sales units, Product-specific purchase conversions, Packages, standard Product/Service recipes, explainable pull-count allowances, optional waste, deterministic demand calculation, field/Invoice Catalog selection, immutable transaction snapshots, and recurring Customer Service enrollment tracking. Inventory quantities and recurring billing automation remain future work.

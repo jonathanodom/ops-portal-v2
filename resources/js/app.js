@@ -1,14 +1,27 @@
 import './bootstrap';
 
 const connectivityBanner = document.querySelector('[data-connectivity-banner]');
+const connectivityStatus = document.querySelector('[data-connectivity-status]');
+const connectivityLabel = document.querySelector('[data-connectivity-label]');
 
 function updateConnectivity() {
     if (connectivityBanner) {
         connectivityBanner.hidden = navigator.onLine;
     }
+    if (connectivityStatus && connectivityLabel) {
+        connectivityLabel.textContent = navigator.onLine ? 'Online' : 'Offline';
+        connectivityStatus.classList.toggle('border-emerald-300', navigator.onLine);
+        connectivityStatus.classList.toggle('bg-emerald-50', navigator.onLine);
+        connectivityStatus.classList.toggle('text-emerald-800', navigator.onLine);
+        connectivityStatus.classList.toggle('border-amber-400', !navigator.onLine);
+        connectivityStatus.classList.toggle('bg-amber-100', !navigator.onLine);
+        connectivityStatus.classList.toggle('text-amber-950', !navigator.onLine);
+        connectivityStatus.querySelector('[aria-hidden="true"]')?.classList.toggle('bg-emerald-600', navigator.onLine);
+        connectivityStatus.querySelector('[aria-hidden="true"]')?.classList.toggle('bg-amber-600', !navigator.onLine);
+    }
 
     document.querySelectorAll('form').forEach((form) => {
-        if ((form.method || 'get').toLowerCase() !== 'get') {
+        if ((form.getAttribute('method') || 'get').toLowerCase() !== 'get') {
             form.querySelectorAll('button, input[type="submit"]').forEach((control) => {
                 control.disabled = !navigator.onLine;
             });
@@ -17,7 +30,7 @@ function updateConnectivity() {
 }
 
 document.addEventListener('submit', (event) => {
-    if ((event.target.method || 'get').toLowerCase() !== 'get' && !navigator.onLine) {
+    if ((event.target.getAttribute('method') || 'get').toLowerCase() !== 'get' && !navigator.onLine) {
         event.preventDefault();
         if (connectivityBanner) connectivityBanner.hidden = false;
     }
@@ -26,6 +39,18 @@ document.addEventListener('submit', (event) => {
 window.addEventListener('online', updateConnectivity);
 window.addEventListener('offline', updateConnectivity);
 updateConnectivity();
+
+document.querySelectorAll('[data-outcome-selector]').forEach((selector) => {
+    const summary = document.querySelector('[data-selected-outcome]');
+    const updateOutcome = () => {
+        const selected = selector.querySelector('input[name="outcome"]:checked');
+        if (!summary) return;
+        summary.textContent = selected ? selected.dataset.outcomeLabel : 'Not selected';
+        summary.dataset.outcome = selected?.value || '';
+    };
+    selector.addEventListener('change', updateOutcome);
+    updateOutcome();
+});
 
 document.querySelectorAll('[data-dirty-form]').forEach((form) => {
     let dirty = false;
@@ -203,6 +228,84 @@ document.querySelectorAll('[data-copy-target]').forEach((button) => button.addEv
     await navigator.clipboard.writeText(input.value);
     button.textContent = 'Copied';
 }));
+
+const invoiceBillingDialog = document.querySelector('[data-invoice-billing-dialog]');
+if (invoiceBillingDialog) {
+    let launcher;
+    const firstInvalid = () => invoiceBillingDialog.querySelector('[aria-invalid="true"]');
+    const open = (button) => {
+        launcher = button ?? launcher;
+        invoiceBillingDialog.showModal();
+        requestAnimationFrame(() => (firstInvalid() ?? invoiceBillingDialog.querySelector('input:not([type="hidden"]), select, textarea'))?.focus());
+    };
+    const close = () => {
+        invoiceBillingDialog.close();
+        launcher?.focus();
+    };
+    document.querySelectorAll('[data-invoice-billing-open]').forEach((button) => button.addEventListener('click', () => open(button)));
+    invoiceBillingDialog.querySelectorAll('[data-invoice-billing-close]').forEach((button) => button.addEventListener('click', close));
+    invoiceBillingDialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+    if (invoiceBillingDialog.dataset.autoOpen === 'true') open(document.querySelector('[data-invoice-billing-open]'));
+}
+
+document.querySelectorAll('[data-invoice-item-dialog]').forEach((dialog) => {
+    let launcher;
+    const firstInvalid = () => dialog.querySelector('[aria-invalid="true"]');
+    const open = (button) => {
+        launcher = button ?? launcher;
+        dialog.showModal();
+        requestAnimationFrame(() => (firstInvalid() ?? dialog.querySelector('input:not([type="hidden"]), select, textarea'))?.focus());
+    };
+    const close = () => {
+        dialog.close();
+        launcher?.focus();
+    };
+    document.querySelectorAll(`[data-invoice-item-open="${CSS.escape(dialog.id)}"]`).forEach((button) => button.addEventListener('click', () => open(button)));
+    dialog.querySelectorAll('[data-invoice-item-close]').forEach((button) => button.addEventListener('click', close));
+    dialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+    if (dialog.dataset.autoOpen === 'true') open(document.querySelector(`[data-invoice-item-open="${CSS.escape(dialog.id)}"]`));
+});
+
+const paymentOverlays = new Map();
+document.querySelectorAll('[data-payment-overlay]').forEach((dialog) => {
+    let launcher;
+    const firstFocusable = () => dialog.querySelector('[aria-invalid="true"], input:not([type="hidden"]):not([disabled]), select:not([disabled]), textarea:not([disabled]), button:not([disabled]), a[href]');
+    const open = (button) => {
+        launcher = button ?? launcher;
+        if (!dialog.open) dialog.showModal();
+        requestAnimationFrame(() => firstFocusable()?.focus());
+    };
+    const close = (restoreFocus = true) => {
+        if (dialog.open) dialog.close();
+        if (restoreFocus) launcher?.focus();
+    };
+    paymentOverlays.set(dialog.id, { dialog, open, close });
+    dialog.querySelectorAll('[data-payment-overlay-close]').forEach((button) => button.addEventListener('click', () => close()));
+    dialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+});
+
+document.querySelectorAll('[data-payment-overlay-open]').forEach((button) => button.addEventListener('click', () => {
+    paymentOverlays.get(button.dataset.paymentOverlayOpen)?.open(button);
+}));
+
+document.querySelectorAll('[data-payment-overlay-switch]').forEach((button) => button.addEventListener('click', () => {
+    const current = button.closest('[data-payment-overlay]');
+    if (current) paymentOverlays.get(current.id)?.close(false);
+    paymentOverlays.get(button.dataset.paymentOverlaySwitch)?.open(button);
+}));
+
+document.querySelectorAll('[data-payment-overlay][data-auto-open="true"]').forEach((dialog) => {
+    paymentOverlays.get(dialog.id)?.open(document.querySelector(`[data-payment-overlay-open="${CSS.escape(dialog.id)}"]`));
+});
 
 document.querySelectorAll('[data-catalog-picker]').forEach((picker) => {
     const dialog = picker.querySelector('[data-catalog-dialog]');

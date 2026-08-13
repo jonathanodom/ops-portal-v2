@@ -83,17 +83,14 @@ class SquarePaymentProviderAdapter implements PaymentProviderAdapter
         if (! WebhooksHelper::verifySignature($rawBody, (string) ($headers['x-square-hmacsha256-signature'] ?? ''), (string) $configuration->webhook_secret, $notificationUrl)) {
             abort(400, 'Invalid signature.');
         }
-        $event = json_decode($rawBody, true, flags: JSON_THROW_ON_ERROR);
-        $payment = data_get($event, 'data.object.payment', []);
-        $refund = data_get($event, 'data.object.refund', []);
-        $type = (string) ($event['type'] ?? 'unknown');
-        $status = str_contains($type, 'refund') ? (strtoupper((string) ($refund['status'] ?? '')) === 'COMPLETED' ? 'refunded' : 'processing') : (strtoupper((string) ($payment['status'] ?? '')) === 'COMPLETED' ? 'succeeded' : (strtoupper((string) ($payment['status'] ?? '')) === 'FAILED' ? 'failed' : 'processing'));
 
-        return ['event_id' => (string) ($event['event_id'] ?? ''), 'type' => $type, 'status' => $status, 'session_id' => null, 'order_id' => $payment['order_id'] ?? null, 'payment_id' => $payment['id'] ?? null, 'transaction_id' => $refund['id'] ?? ($payment['id'] ?? null), 'amount_cents' => data_get($refund ?: $payment, 'amount_money.amount'), 'method' => 'card', 'attempt_id' => null];
+        return PaymentWebhookNormalizer::square(json_decode($rawBody, true, flags: JSON_THROW_ON_ERROR));
     }
 
     private function client(PaymentProviderConfiguration $configuration): SquareClient
     {
-        return new SquareClient((string) $configuration->api_secret, options: ['baseUrl' => $configuration->environment === 'production' ? Environments::Production->value : Environments::Sandbox->value]);
+        $token = $configuration->connection_method === 'oauth' ? $configuration->oauth_access_token : $configuration->api_secret;
+
+        return new SquareClient((string) $token, options: ['baseUrl' => $configuration->environment === 'production' ? Environments::Production->value : Environments::Sandbox->value]);
     }
 }

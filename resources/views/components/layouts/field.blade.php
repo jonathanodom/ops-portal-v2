@@ -8,8 +8,8 @@
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
 <body class="bg-canvas pb-24">
-    <div data-connectivity-banner hidden class="bg-amber-100 px-4 py-2 text-center text-sm font-bold text-amber-900" role="status">
-        You’re offline. No changes will be marked saved.
+    <div data-connectivity-banner hidden class="sticky top-0 z-30 border-b border-amber-300 bg-amber-100 px-4 py-3 text-center text-sm font-bold text-amber-950" role="alert">
+        You’re offline. Writes and uploads are disabled; reconnect, then retry.
     </div>
     <header class="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
         <div class="mx-auto flex max-w-2xl items-center justify-between gap-3">
@@ -17,7 +17,13 @@
                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-brand-blue">Field workspace</p>
                 <p class="mt-0.5 text-sm font-bold text-slate-950">{{ auth()->user()->name }}</p>
             </div>
-            <x-organization-logo variant="mark" class="h-11 w-11 object-contain" />
+            <div class="flex items-center gap-3">
+                <p data-connectivity-status class="inline-flex min-h-11 items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800" role="status" aria-live="polite">
+                    <span class="h-2.5 w-2.5 rounded-full bg-emerald-600" aria-hidden="true"></span>
+                    <span data-connectivity-label>Online</span>
+                </p>
+                <x-organization-logo variant="mark" class="h-11 w-11 object-contain" />
+            </div>
         </div>
     </header>
     <main id="main-content" class="mx-auto max-w-2xl p-4 sm:p-6">{{ $slot }}</main>

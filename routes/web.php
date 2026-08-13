@@ -30,6 +30,8 @@ use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
+use App\Http\Controllers\Office\SquareConnectionController;
+use App\Http\Controllers\Office\StripeConnectionController;
 use App\Http\Controllers\Office\TicketCustomerController;
 use App\Http\Controllers\Office\UnitOfMeasureController;
 use App\Http\Controllers\Office\VisitArchiveController;
@@ -50,6 +52,7 @@ Route::middleware('guest')->group(function (): void {
     Route::post('/reset-password', [NewPasswordController::class, 'store'])->name('password.update');
 });
 
+Route::post('/webhooks/payments/{provider}', [PaymentWebhookController::class, 'canonical'])->whereIn('provider', ['square', 'stripe'])->name('payments.webhook.canonical');
 Route::post('/webhooks/payments/{provider}/{configuration}', PaymentWebhookController::class)->whereIn('provider', ['square', 'stripe'])->name('payments.webhook');
 Route::get('/payments/return/{attempt}', PaymentReturnController::class)->whereNumber('attempt')->name('payments.return');
 Route::get('/receipts/{receipt}/{token}', [PaymentReceiptController::class, 'show'])->whereNumber('receipt')->name('payments.receipts.show');
@@ -124,6 +127,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/billing-handoffs/{handoff}/invoice', [BillingHandoffController::class, 'createInvoice'])
                 ->whereNumber('handoff')->middleware('capability:invoices.manage')->name('billing-handoffs.invoice.store');
             Route::middleware('capability:invoices.view')->group(function (): void {
+                Route::get('/invoices', [InvoiceController::class, 'index'])->name('invoices.index');
                 Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->whereNumber('invoice')->name('invoices.show');
             });
             Route::middleware('capability:invoices.manage')->group(function (): void {
@@ -139,7 +143,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::delete('/invoices/{invoice}', [InvoiceController::class, 'destroy'])->whereNumber('invoice')->middleware('capability:invoices.delete_draft')->name('invoices.destroy');
             Route::post('/invoices/{invoice}/pdf/retry', [InvoiceController::class, 'retryPdf'])->whereNumber('invoice')->middleware('capability:invoices.issue')->name('invoices.pdf.retry');
             Route::post('/invoices/{invoice}/payments/checkout', [PaymentController::class, 'checkout'])->whereNumber('invoice')->name('invoices.payments.checkout');
-            Route::put('/invoices/{invoice}/payments/provider', [PaymentController::class, 'provider'])->whereNumber('invoice')->name('invoices.payments.provider');
+            Route::put('/invoices/{invoice}/payments/provider', [PaymentController::class, 'provider'])->whereNumber('invoice')->middleware('capability:payments.settings.manage')->name('invoices.payments.provider');
             Route::post('/invoices/{invoice}/payments/manual', [PaymentController::class, 'manual'])->whereNumber('invoice')->name('invoices.payments.manual');
             Route::post('/invoices/{invoice}/payments/{attempt}/expire', [PaymentController::class, 'expire'])->whereNumber(['invoice', 'attempt'])->name('invoices.payments.expire');
             Route::post('/invoices/{invoice}/payments/{attempt}/reconcile', [PaymentController::class, 'reconcile'])->whereNumber(['invoice', 'attempt'])->name('invoices.payments.reconcile');
@@ -149,6 +153,16 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/invoices/{invoice}/receipts/{receipt}/retry', [PaymentController::class, 'retryReceipt'])->whereNumber(['invoice', 'receipt'])->name('invoices.receipts.retry');
             Route::get('/settings', [OrganizationSettingsController::class, 'index'])->name('settings.index');
             Route::get('/settings/billing', [BillingSettingsController::class, 'edit'])->name('settings.billing.edit');
+            Route::post('/settings/billing/payments/square/connect', [SquareConnectionController::class, 'start'])->name('settings.billing.square.connect');
+            Route::get('/settings/billing/payments/square/callback', [SquareConnectionController::class, 'callback'])->name('settings.billing.square.callback');
+            Route::post('/settings/billing/payments/square/refresh', [SquareConnectionController::class, 'refresh'])->name('settings.billing.square.refresh');
+            Route::put('/settings/billing/payments/square/location', [SquareConnectionController::class, 'location'])->name('settings.billing.square.location');
+            Route::delete('/settings/billing/payments/square/disconnect', [SquareConnectionController::class, 'disconnect'])->name('settings.billing.square.disconnect');
+            Route::post('/settings/billing/payments/stripe/connect', [StripeConnectionController::class, 'start'])->name('settings.billing.stripe.connect');
+            Route::get('/settings/billing/payments/stripe/callback', [StripeConnectionController::class, 'callback'])->name('settings.billing.stripe.callback');
+            Route::post('/settings/billing/payments/stripe/refresh', [StripeConnectionController::class, 'refresh'])->name('settings.billing.stripe.refresh');
+            Route::delete('/settings/billing/payments/stripe/disconnect', [StripeConnectionController::class, 'disconnect'])->name('settings.billing.stripe.disconnect');
+            Route::put('/settings/billing/payments/default', [PaymentSettingsController::class, 'defaultProvider'])->name('settings.billing.payments.default');
             Route::put('/settings/billing/payments/{provider}', [PaymentSettingsController::class, 'update'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.update');
             Route::post('/settings/billing/payments/{provider}/test', [PaymentSettingsController::class, 'test'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.test');
             Route::post('/settings/billing/payments/{provider}/toggle', [PaymentSettingsController::class, 'toggle'])->whereIn('provider', ['square', 'stripe'])->name('settings.billing.payments.toggle');
@@ -286,7 +300,6 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
     Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'download'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.pdf');
     Route::post('/invoices/{invoice}/acknowledge', [InvoicePresentationController::class, 'acknowledge'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.acknowledge');
     Route::post('/invoices/{invoice}/payments/checkout', [PaymentController::class, 'checkout'])->whereNumber('invoice')->name('invoices.payments.checkout');
-    Route::put('/invoices/{invoice}/payments/provider', [PaymentController::class, 'provider'])->whereNumber('invoice')->name('invoices.payments.provider');
     Route::post('/invoices/{invoice}/payments/{attempt}/expire', [PaymentController::class, 'expire'])->whereNumber(['invoice', 'attempt'])->name('invoices.payments.expire');
     Route::post('/invoices/{invoice}/payments/{attempt}/reconcile', [PaymentController::class, 'reconcile'])->whereNumber(['invoice', 'attempt'])->name('invoices.payments.reconcile');
     Route::get('/invoices/{invoice}/payments/{attempt}/qr', [PaymentController::class, 'qr'])->whereNumber(['invoice', 'attempt'])->name('invoices.payments.qr');

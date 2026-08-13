@@ -6,11 +6,12 @@
     'packages' => collect(),
     'showPrices' => false,
     'fieldMode' => false,
+    'buttonLabel' => 'Add Catalog item',
 ])
 
 @php($hasItems = $services->isNotEmpty() || $products->isNotEmpty() || $packages->isNotEmpty())
 <div data-catalog-picker>
-    <button type="button" class="button-primary" data-catalog-dialog-open="{{ $id }}" @disabled(!$hasItems)>Add Catalog item</button>
+    <button type="button" class="button-primary" data-catalog-dialog-open="{{ $id }}" @disabled(!$hasItems)>{{ $buttonLabel }}</button>
     @unless($hasItems)<p class="mt-2 text-sm text-slate-500">No active Catalog items are available.</p>@endunless
 
     <dialog id="{{ $id }}" aria-labelledby="{{ $id }}-title" class="m-auto h-[100dvh] max-h-none w-screen max-w-none bg-white p-0 text-slate-950 backdrop:bg-slate-950/60 sm:h-[92vh] sm:w-[96vw] sm:max-w-[1200px] sm:rounded-xl" data-catalog-dialog>

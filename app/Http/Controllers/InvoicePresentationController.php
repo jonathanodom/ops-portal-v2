@@ -4,6 +4,7 @@ namespace App\Http\Controllers;
 
 use App\Domain\InvoiceWorkflow;
 use App\Models\Invoice;
+use App\Models\OrganizationBillingSetting;
 use App\Models\PaymentProviderConfiguration;
 use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
@@ -26,8 +27,17 @@ class InvoicePresentationController extends Controller
             ->whereIn('provider', ['square', 'stripe'])
             ->get()
             ->keyBy('provider');
+        $defaultPaymentProvider = OrganizationBillingSetting::query()->where('organization_id', $invoice->organization_id)->value('default_payment_provider');
+        $readyPaymentProviders = $paymentProviders->filter->isReady();
+        $checkoutPaymentProvider = $invoice->electronic_payment_provider ?: $invoice->preferred_payment_provider;
+        if (! $checkoutPaymentProvider && $defaultPaymentProvider && $paymentProviders->get($defaultPaymentProvider)?->isReady()) {
+            $checkoutPaymentProvider = $defaultPaymentProvider;
+        }
+        if (! $checkoutPaymentProvider && $readyPaymentProviders->count() === 1) {
+            $checkoutPaymentProvider = $readyPaymentProviders->keys()->first();
+        }
 
-        return view('invoices.present', compact('invoice', 'paymentProviders'));
+        return view('invoices.present', compact('invoice', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider'));
     }
 
     public function brand(Request $request, string $invoice): StreamedResponse

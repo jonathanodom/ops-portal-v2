@@ -4,6 +4,8 @@ namespace App\Domain;
 
 use App\Jobs\RenderPaymentReceiptPdf;
 use App\Models\Invoice;
+use App\Models\OrganizationBillingSetting;
+use App\Models\OrganizationMembership;
 use App\Models\PaymentAttempt;
 use App\Models\PaymentProviderConfiguration;
 use App\Models\PaymentReceipt;
@@ -24,13 +26,19 @@ class PaymentWorkflow
 
     public function setPreferredProvider(Invoice $invoice, User $actor, ?string $provider): Invoice
     {
+        $membership = OrganizationMembership::query()->where('organization_id', $invoice->organization_id)->where('user_id', $actor->id)->where('status', 'active')->first();
+        abort_unless($membership?->hasCapability('payments.settings.manage'), 403);
+
         return DB::transaction(function () use ($invoice, $actor, $provider): Invoice {
             $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
             if (! in_array($invoice->status, ['draft', 'ready_for_review', 'issued'], true)) {
                 throw ValidationException::withMessages(['invoice' => 'The payment provider cannot be changed for this invoice.']);
             }
-            if (! $invoice->isEditable() && $invoice->paymentAttempts()->exists()) {
-                throw ValidationException::withMessages(['preferred_payment_provider' => 'The electronic provider is locked after the first attempt.']);
+            if ($invoice->electronic_payment_provider) {
+                throw ValidationException::withMessages(['preferred_payment_provider' => 'The electronic provider is locked after the first successful electronic payment.']);
+            }
+            if ($invoice->paymentAttempts()->whereIn('status', ['open', 'processing', 'unknown'])->exists()) {
+                throw ValidationException::withMessages(['preferred_payment_provider' => 'Expire or reconcile the active checkout before changing its provider.']);
             }
             if ($provider !== null) {
                 $this->readyConfiguration($invoice, $provider);
@@ -63,14 +71,8 @@ class PaymentWorkflow
             if ($invoice->paymentAttempts()->whereIn('status', ['open', 'processing', 'unknown'])->exists()) {
                 throw ValidationException::withMessages(['payment' => 'Expire or reconcile the existing checkout before creating another.']);
             }
-            $provider = $invoice->electronic_payment_provider ?: $invoice->preferred_payment_provider;
-            if (! $provider) {
-                throw ValidationException::withMessages(['provider' => 'Select a ready payment provider first.']);
-            }
+            $provider = $this->resolveCheckoutProvider($invoice);
             $configuration = $this->readyConfiguration($invoice, $provider);
-            if (! $invoice->electronic_payment_provider) {
-                $invoice->forceFill(['electronic_payment_provider' => $provider, 'payment_provider_locked_at' => now()])->save();
-            }
 
             return PaymentAttempt::query()->create([
                 'organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id, 'payment_provider_configuration_id' => $configuration->id,
@@ -117,9 +119,9 @@ class PaymentWorkflow
         return $this->applyAuthoritativeResult($attempt, $result, $actor);
     }
 
-    public function recordManual(Invoice $invoice, User $actor, string $method, int $amountCents, \DateTimeInterface $receivedAt, ?string $reference, string $idempotencyKey): PaymentTransaction
+    public function recordManual(Invoice $invoice, User $actor, string $method, int $amountCents, \DateTimeInterface $receivedAt, ?string $reference, string $idempotencyKey, ?string $note = null): PaymentTransaction
     {
-        return DB::transaction(function () use ($invoice, $actor, $method, $amountCents, $receivedAt, $reference, $idempotencyKey): PaymentTransaction {
+        return DB::transaction(function () use ($invoice, $actor, $method, $amountCents, $receivedAt, $reference, $idempotencyKey, $note): PaymentTransaction {
             if ($existing = PaymentTransaction::query()->where('idempotency_key', $idempotencyKey)->first()) {
                 abort_unless((int) $existing->invoice_id === (int) $invoice->id, 422);
 
@@ -138,7 +140,7 @@ class PaymentWorkflow
             if ($method === 'check' && blank($reference)) {
                 throw ValidationException::withMessages(['reference' => 'A check reference is required.']);
             }
-            $transaction = PaymentTransaction::query()->create(['organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $method, 'amount_cents' => $amountCents, 'manual_reference' => $reference, 'idempotency_key' => $idempotencyKey, 'received_at' => $receivedAt, 'confirmed_at' => now(), 'recorded_by_id' => $actor->id]);
+            $transaction = PaymentTransaction::query()->create(['organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $method, 'amount_cents' => $amountCents, 'manual_reference' => $reference, 'reason' => $note, 'idempotency_key' => $idempotencyKey, 'received_at' => $receivedAt, 'confirmed_at' => now(), 'recorded_by_id' => $actor->id]);
             $this->createReceipt($transaction);
             $this->audit->record($invoice->organization, $actor, 'payment.manual_recorded', $transaction, ['invoice_id' => $invoice->id, 'transaction_id' => $transaction->id, 'method' => $method, 'amount_cents' => $amountCents]);
 
@@ -234,6 +236,10 @@ class PaymentWorkflow
                 }
                 $transaction = PaymentTransaction::query()->firstOrCreate(['provider' => $attempt->provider, 'provider_transaction_id' => $result['payment_id']], ['organization_id' => $attempt->organization_id, 'invoice_id' => $attempt->invoice_id, 'payment_attempt_id' => $attempt->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $result['method'] ?: 'card', 'amount_cents' => $amount, 'safe_processor_reference' => $result['payment_id'] ? substr((string) $result['payment_id'], -12) : null, 'idempotency_key' => (string) Str::uuid(), 'received_at' => now(), 'confirmed_at' => now()]);
                 $attempt->update(['status' => 'succeeded', 'provider_payment_id' => $result['payment_id'], 'completed_at' => now(), 'safe_failure_code' => null]);
+                $invoice = Invoice::query()->lockForUpdate()->findOrFail($attempt->invoice_id);
+                if (! $invoice->electronic_payment_provider) {
+                    $invoice->forceFill(['electronic_payment_provider' => $attempt->provider, 'payment_provider_locked_at' => now()])->save();
+                }
                 $this->createReceipt($transaction);
                 if ($attempt->invoice->balanceCents() < 0) {
                     $this->incidents->record($attempt->invoice->organization, $actor, 'payment_overpayment', 'error', $attempt->invoice, ['reason_code' => 'negative_balance']);
@@ -289,5 +295,27 @@ class PaymentWorkflow
         }
 
         return $configuration;
+    }
+
+    private function resolveCheckoutProvider(Invoice $invoice): string
+    {
+        if ($invoice->electronic_payment_provider) {
+            return $invoice->electronic_payment_provider;
+        }
+        if ($invoice->preferred_payment_provider) {
+            return $invoice->preferred_payment_provider;
+        }
+        $default = OrganizationBillingSetting::query()->where('organization_id', $invoice->organization_id)->value('default_payment_provider');
+        if ($default && PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->where('provider', $default)->get()->contains->isReady()) {
+            return $default;
+        }
+        $ready = PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->whereIn('provider', ['square', 'stripe'])->get()->filter->isReady();
+        if ($ready->count() === 1) {
+            return (string) $ready->first()->provider;
+        }
+
+        throw ValidationException::withMessages(['provider' => $ready->isEmpty()
+            ? 'Connect and enable an electronic payment provider in Billing Settings before creating a hosted checkout.'
+            : 'Choose an organization default payment provider in Billing Settings before creating a hosted checkout.']);
     }
 }

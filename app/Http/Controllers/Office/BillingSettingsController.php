@@ -27,7 +27,7 @@ class BillingSettingsController extends Controller
         $providers = collect(['square', 'stripe'])->mapWithKeys(function (string $provider) use ($organization): array {
             $configuration = PaymentProviderConfiguration::query()->firstOrCreate(
                 ['organization_id' => $organization->id, 'provider' => $provider],
-                ['public_id' => (string) Str::uuid(), 'environment' => $provider === 'square' ? 'sandbox' : 'test'],
+                ['public_id' => (string) Str::uuid(), 'environment' => $provider === 'square' ? 'sandbox' : 'test', 'connection_method' => 'legacy_credentials'],
             );
 
             return [$provider => $configuration];

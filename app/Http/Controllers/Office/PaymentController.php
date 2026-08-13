@@ -19,24 +19,31 @@ use Symfony\Component\HttpFoundation\Response;
 
 class PaymentController extends Controller
 {
-    public function provider(Request $request, Invoice $invoice, PaymentWorkflow $workflow): RedirectResponse
-    {
-        $invoice = $this->invoice($request, $invoice);
-        $this->capability($request, 'payments.collect');
-        $data = $request->validate(['preferred_payment_provider' => ['nullable', Rule::in(['square', 'stripe'])]]);
-        $workflow->setPreferredProvider($invoice, $request->user(), $data['preferred_payment_provider'] ?? null);
-
-        return back()->with('status', 'Electronic payment provider updated.');
-    }
-
     public function checkout(Request $request, Invoice $invoice, PaymentWorkflow $workflow): RedirectResponse
     {
         $invoice = $this->invoice($request, $invoice);
         $this->capability($request, 'payments.collect');
-        $data = $request->validate(['amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'idempotency_key' => ['required', 'uuid']]);
+        $data = $request->validate(['payment_form_context' => ['nullable', Rule::in(['secure'])], 'amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'idempotency_key' => ['required', 'uuid']]);
         $result = $workflow->createCheckout($invoice, $request->user(), $this->cents($data['amount']), $data['idempotency_key']);
 
+        if ($request->routeIs('office.*')) {
+            return back()->with('status', 'Secure payment link created.')->with('payment_overlay', 'secure');
+        }
+
         return redirect()->away($result['attempt']->hosted_url);
+    }
+
+    public function provider(Request $request, Invoice $invoice, PaymentWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        $this->capability($request, 'payments.settings.manage');
+        $data = $request->validate([
+            'payment_form_context' => ['nullable', Rule::in(['secure'])],
+            'preferred_payment_provider' => ['required', Rule::in(['square', 'stripe'])],
+        ]);
+        $workflow->setPreferredProvider($invoice, $request->user(), $data['preferred_payment_provider']);
+
+        return back()->with('status', ucfirst($data['preferred_payment_provider']).' selected for this invoice.')->with('payment_overlay', 'secure');
     }
 
     public function expire(Request $request, Invoice $invoice, PaymentAttempt $attempt, PaymentWorkflow $workflow): RedirectResponse
@@ -46,7 +53,7 @@ class PaymentController extends Controller
         $attempt = $this->attempt($invoice, $attempt);
         $workflow->expire($attempt, $request->user());
 
-        return back()->with('status', 'Hosted checkout expired.');
+        return back()->with('status', 'Hosted checkout expired.')->with('payment_overlay', 'secure');
     }
 
     public function reconcile(Request $request, Invoice $invoice, PaymentAttempt $attempt, PaymentWorkflow $workflow): RedirectResponse
@@ -56,18 +63,18 @@ class PaymentController extends Controller
         $attempt = $this->attempt($invoice, $attempt);
         $workflow->reconcile($attempt, $request->user());
 
-        return back()->with('status', 'Payment status reconciled with the provider.');
+        return back()->with('status', 'Payment status reconciled with the provider.')->with('payment_overlay', 'secure');
     }
 
     public function manual(Request $request, Invoice $invoice, PaymentWorkflow $workflow): RedirectResponse
     {
         $invoice = $this->invoice($request, $invoice);
         $this->capability($request, 'payments.record_manual');
-        $data = $request->validate(['method' => ['required', Rule::in(['cash', 'check'])], 'amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'received_at' => ['required', 'date'], 'reference' => ['nullable', 'string', 'max:120'], 'idempotency_key' => ['required', 'uuid']]);
+        $data = $request->validate(['payment_form_context' => ['nullable', Rule::in(['manual'])], 'method' => ['required', Rule::in(['cash', 'check'])], 'amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'received_at' => ['required', 'date'], 'reference' => ['nullable', 'string', 'max:120'], 'note' => ['nullable', 'string', 'max:2000'], 'idempotency_key' => ['required', 'uuid']]);
         $receivedAt = Carbon::parse($data['received_at'], $invoice->organization->timezone)->utc();
-        $workflow->recordManual($invoice, $request->user(), $data['method'], $this->cents($data['amount']), $receivedAt, $data['reference'] ?? null, $data['idempotency_key']);
+        $workflow->recordManual($invoice, $request->user(), $data['method'], $this->cents($data['amount']), $receivedAt, $data['reference'] ?? null, $data['idempotency_key'], $data['note'] ?? null);
 
-        return back()->with('status', ucfirst($data['method']).' payment recorded.');
+        return back()->with('status', ucfirst($data['method']).' payment recorded.')->with('payment_overlay', 'history');
     }
 
     public function refund(Request $request, Invoice $invoice, PaymentTransaction $transaction, PaymentWorkflow $workflow): RedirectResponse
@@ -82,7 +89,7 @@ class PaymentController extends Controller
             $workflow->refund($transaction, $request->user(), $this->cents($data['amount']), $data['reason'], $data['idempotency_key']);
         }
 
-        return back()->with('status', in_array($transaction->method, ['cash', 'check'], true) ? 'Manual reversal recorded.' : 'Refund requested.');
+        return back()->with('status', in_array($transaction->method, ['cash', 'check'], true) ? 'Manual reversal recorded.' : 'Refund requested.')->with('payment_overlay', 'history');
     }
 
     public function receiptLink(Request $request, Invoice $invoice, PaymentReceipt $receipt, PaymentWorkflow $workflow): RedirectResponse
@@ -92,7 +99,7 @@ class PaymentController extends Controller
         $receipt = PaymentReceipt::query()->where('invoice_id', $invoice->id)->findOrFail($receipt->id);
         $result = $workflow->rotateReceiptToken($receipt, $request->user());
 
-        return back()->with('status', 'Receipt link created.')->with('receipt_url', route('payments.receipts.show', ['receipt' => $receipt, 'token' => $result['token']]));
+        return back()->with('status', 'Receipt link created.')->with('receipt_url', route('payments.receipts.show', ['receipt' => $receipt, 'token' => $result['token']]))->with('payment_overlay', 'history');
     }
 
     public function retryReceipt(Request $request, Invoice $invoice, PaymentReceipt $receipt): RedirectResponse
@@ -103,7 +110,7 @@ class PaymentController extends Controller
         $receipt->update(['pdf_status' => 'pending', 'pdf_failure_code' => null]);
         RenderPaymentReceiptPdf::dispatch($receipt->id);
 
-        return back()->with('status', 'Receipt PDF queued again.');
+        return back()->with('status', 'Receipt PDF queued again.')->with('payment_overlay', 'history');
     }
 
     public function qr(Request $request, Invoice $invoice, PaymentAttempt $attempt): Response
