@@ -41,8 +41,28 @@ class CustomerDirectoryController extends Controller
             abort(404);
         }
         Gate::authorize('view', $customer);
+        $membership = $request->attributes->get('membership');
+        $authorizedVisits = fn ($query) => $query
+            ->where('organization_id', $customer->organization_id)
+            ->where('status', '!=', 'canceled')
+            ->when(
+                ! $membership->hasCapability('visits.inspect_all') && ! $membership->hasCapability('visits.execute_any'),
+                fn ($visits) => $visits->whereHas('assignments', fn ($assignment) => $assignment->where('organization_membership_id', $membership->id)),
+            )
+            ->with(['serviceLocation', 'assignments.membership.user', 'currentCloseout'])
+            ->orderByDesc('scheduled_start_at')->orderByDesc('id');
+        $customer->setRelation('serviceTickets', $customer->serviceTickets()
+            ->whereHas('visits', $authorizedVisits)
+            ->with([
+                'serviceLocation',
+                'visits' => $authorizedVisits,
+            ])
+            ->withCount(['visits' => $authorizedVisits])
+            ->latest('updated_at')->latest('id')->get());
 
-        return view('field.customers.show', compact('customer'));
+        return view('field.customers.show', compact('customer') + [
+            'purposes' => config('service_tickets.purposes'),
+        ]);
     }
 
     public function showLocation(Request $request, string $location): View

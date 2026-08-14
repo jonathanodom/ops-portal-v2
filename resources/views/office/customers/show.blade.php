@@ -16,10 +16,56 @@
         @endif
     </x-office.record-header>
 
-    <x-office.detail-nav :items="['overview' => 'Overview', 'locations' => 'Locations', 'contacts' => 'Contacts'] + ($activeMembership->hasCapability('subscriptions.view') ? ['customer-services' => 'Customer Services'] : [])" />
+    <x-office.detail-nav :items="['overview' => 'Overview', 'history' => 'Service & invoice history', 'locations' => 'Locations', 'contacts' => 'Contacts'] + ($activeMembership->hasCapability('subscriptions.view') ? ['customer-services' => 'Customer Services'] : [])" />
 
     <div class="office-detail-grid" data-office-detail-grid>
         <div class="office-detail-main xl:order-first" data-office-detail-main>
+            <section id="history" class="office-detail-section" aria-labelledby="history-heading">
+                <div class="office-detail-section-header">
+                    <div>
+                        <h2 id="history-heading" class="office-detail-section-title">Service ticket history</h2>
+                        <p class="mt-1 text-sm text-slate-500">Operational history across this customer’s service locations.</p>
+                    </div>
+                </div>
+                <div class="office-detail-list">
+                    @forelse($customer->serviceTickets as $ticket)
+                        <a href="{{ route('office.service-tickets.show', $ticket) }}" class="office-detail-row grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+                            <div>
+                                <div class="flex flex-wrap items-center gap-2"><strong class="text-slate-950">{{ $ticket->ticket_number }}</strong><span class="{{ $ticket->status === 'completed' ? 'status-active' : ($ticket->status === 'canceled' ? 'status-inactive' : 'status-hold') }}">{{ Str::headline($ticket->status) }}</span></div>
+                                <p class="mt-1 font-semibold text-slate-800">{{ $ticket->title }}</p>
+                                <p class="mt-1 text-sm text-slate-500">{{ $ticket->serviceLocation?->name ?: 'Location unavailable' }} · {{ $purposes[$ticket->purpose] ?? Str::headline($ticket->purpose ?: 'service_call') }}</p>
+                            </div>
+                            <div class="text-sm"><p class="font-semibold text-slate-500">Visits</p><p class="mt-1 text-slate-800">{{ $ticket->visits_count }}</p><p class="mt-1 text-xs text-slate-500">{{ $billingDispositions[$ticket->billing_disposition] ?? Str::headline($ticket->billing_disposition ?: 'billable') }}</p></div>
+                            <span class="text-sm font-bold text-brand-blue">Open<span class="sr-only"> {{ $ticket->ticket_number }}</span> →</span>
+                        </a>
+                    @empty
+                        <p class="office-detail-empty">No service tickets have been recorded for this customer.</p>
+                    @endforelse
+                </div>
+            </section>
+
+            @if($activeMembership->hasCapability('invoices.view'))
+                <section id="invoice-history" class="office-detail-section" aria-labelledby="invoice-history-heading">
+                    <div class="office-detail-section-header">
+                        <div>
+                            <h2 id="invoice-history-heading" class="office-detail-section-title">Invoice history</h2>
+                            <p class="mt-1 text-sm text-slate-500">Draft, issued, void, and payment status for this customer.</p>
+                        </div>
+                    </div>
+                    <div class="office-detail-list">
+                        @forelse($invoices as $invoice)
+                            <a href="{{ route('office.invoices.show', $invoice) }}" class="office-detail-row grid gap-3 sm:grid-cols-[minmax(0,1.2fr)_minmax(0,1fr)_auto] sm:items-center">
+                                <div><strong class="text-slate-950">{{ $invoice->invoice_number }}</strong><p class="mt-1 text-sm text-slate-500">{{ $invoice->serviceTicket?->ticket_number ?: 'Service ticket unavailable' }} · {{ $invoice->serviceLocation?->name ?: 'Location unavailable' }}</p></div>
+                                <div class="text-sm"><p><span class="{{ $invoice->status === 'issued' ? 'status-active' : ($invoice->status === 'void' ? 'status-inactive' : 'status-hold') }}">{{ Str::headline($invoice->status) }}</span></p><p class="mt-1 text-slate-700">{{ Str::headline($invoice->paymentState()) }} · ${{ number_format($invoice->total_cents / 100, 2) }}</p></div>
+                                <span class="text-sm font-bold text-brand-blue">Open<span class="sr-only"> {{ $invoice->invoice_number }}</span> →</span>
+                            </a>
+                        @empty
+                            <p class="office-detail-empty">No invoices have been recorded for this customer.</p>
+                        @endforelse
+                    </div>
+                </section>
+            @endif
+
             <section id="locations" class="office-detail-section" aria-labelledby="locations-heading">
                 <div class="office-detail-section-header">
                     <div>

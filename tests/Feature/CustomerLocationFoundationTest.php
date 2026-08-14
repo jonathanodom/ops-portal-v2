@@ -3,14 +3,20 @@
 namespace Tests\Feature;
 
 use App\Models\AuditEvent;
+use App\Models\BillingHandoff;
 use App\Models\Capability;
+use App\Models\Closeout;
 use App\Models\Contact;
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Role;
 use App\Models\ServiceLocation;
+use App\Models\ServiceTicket;
 use App\Models\User;
+use App\Models\Visit;
+use App\Models\VisitAssignment;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
@@ -107,6 +113,120 @@ class CustomerLocationFoundationTest extends TestCase
         $view = Capability::query()->where('key', 'customers.view')->firstOrFail();
         $membership->capabilityOverrides()->attach($view, ['effect' => 'deny']);
         $this->actingAs($reviewer)->get('/office/customers')->assertForbidden();
+    }
+
+    public function test_office_customer_page_shows_service_ticket_and_invoice_history(): void
+    {
+        [$billing, $organization] = $this->userWithRole('billing');
+        [$customer, , $location] = $this->customerGraph($organization);
+        $ticket = ServiceTicket::query()->create([
+            'organization_id' => $organization->id,
+            'customer_id' => $customer->id,
+            'service_location_id' => $location->id,
+            'ticket_number' => 'NDT-ST-2026-9001',
+            'title' => 'Site survey history',
+            'priority' => 'normal',
+            'source' => 'internal',
+            'purpose' => 'site_survey',
+            'billing_disposition' => 'non_billable',
+            'status' => 'completed',
+        ]);
+        $visit = Visit::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $ticket->id,
+            'service_location_id' => $location->id,
+            'status' => 'approved',
+            'timezone' => 'America/Chicago',
+        ]);
+        $closeout = Closeout::query()->create([
+            'organization_id' => $organization->id,
+            'visit_id' => $visit->id,
+            'status' => 'submitted',
+            'outcome' => 'resolved',
+            'submitted_token' => (string) \Illuminate\Support\Str::uuid(),
+        ]);
+        $handoff = BillingHandoff::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $ticket->id,
+            'visit_id' => $visit->id,
+            'closeout_id' => $closeout->id,
+            'status' => 'ready',
+        ]);
+        Invoice::query()->create([
+            'organization_id' => $organization->id,
+            'customer_id' => $customer->id,
+            'service_location_id' => $location->id,
+            'service_ticket_id' => $ticket->id,
+            'billing_handoff_id' => $handoff->id,
+            'invoice_number' => 'NDT-INV-2026-9001',
+            'status' => 'draft',
+            'currency' => 'USD',
+            'payment_terms' => 'due_on_receipt',
+            'billing_name' => $customer->display_name,
+            'creation_token' => (string) \Illuminate\Support\Str::uuid(),
+        ]);
+
+        $this->actingAs($billing)->get("/office/customers/{$customer->id}")
+            ->assertOk()
+            ->assertSee('Service ticket history')
+            ->assertSee($ticket->ticket_number)
+            ->assertSee('Site survey / sales visit')
+            ->assertSee('Invoice history')
+            ->assertSee('NDT-INV-2026-9001');
+    }
+
+    public function test_field_customer_page_shows_only_assigned_operational_history_and_no_invoice_history(): void
+    {
+        [$technician, $organization, $membership] = $this->userWithRole('technician');
+        [$customer, , $location] = $this->customerGraph($organization);
+        $assignedTicket = ServiceTicket::query()->create([
+            'organization_id' => $organization->id,
+            'customer_id' => $customer->id,
+            'service_location_id' => $location->id,
+            'ticket_number' => 'NDT-ST-2026-9002',
+            'title' => 'Assigned service history',
+            'priority' => 'normal',
+            'source' => 'internal',
+            'status' => 'open',
+        ]);
+        $assignedVisit = Visit::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $assignedTicket->id,
+            'service_location_id' => $location->id,
+            'status' => 'assigned',
+            'timezone' => 'America/Chicago',
+        ]);
+        VisitAssignment::query()->create([
+            'organization_id' => $organization->id,
+            'visit_id' => $assignedVisit->id,
+            'organization_membership_id' => $membership->id,
+            'is_lead' => true,
+        ]);
+        $hiddenTicket = ServiceTicket::query()->create([
+            'organization_id' => $organization->id,
+            'customer_id' => $customer->id,
+            'service_location_id' => $location->id,
+            'ticket_number' => 'NDT-ST-2026-9003',
+            'title' => 'Unassigned service history',
+            'priority' => 'normal',
+            'source' => 'internal',
+            'status' => 'open',
+        ]);
+        Visit::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $hiddenTicket->id,
+            'service_location_id' => $location->id,
+            'status' => 'planned',
+            'timezone' => 'America/Chicago',
+        ]);
+
+        $this->actingAs($technician)->get("/field/customers/{$customer->id}")
+            ->assertOk()
+            ->assertSee('Service ticket history')
+            ->assertSee($assignedTicket->ticket_number)
+            ->assertDontSee($hiddenTicket->ticket_number)
+            ->assertDontSee('Invoice history')
+            ->assertDontSee('NDT-INV-');
     }
 
     public function test_cross_organization_urls_and_forged_ids_cannot_change_scope(): void
