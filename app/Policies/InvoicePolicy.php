@@ -16,6 +16,11 @@ class InvoicePolicy
         return $this->hasCapability($user, $organization->id, 'invoices.view');
     }
 
+    public function create(User $user, Organization $organization): bool
+    {
+        return $this->hasCapability($user, $organization->id, 'invoices.manage');
+    }
+
     public function view(User $user, Invoice $invoice): bool
     {
         return $this->hasCapability($user, $invoice->organization_id, 'invoices.view');

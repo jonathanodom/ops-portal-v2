@@ -393,7 +393,7 @@ if (subscriptionService && subscriptionVariant) {
     filterSubscriptionVariants();
 }
 
-const customerPicker = document.querySelector('[data-ticket-customer-picker]');
+const customerPicker = document.querySelector('[data-customer-picker]');
 if (customerPicker) {
     const searchInput = customerPicker.querySelector('#customer_search');
     const customerId = customerPicker.querySelector('#customer_id');

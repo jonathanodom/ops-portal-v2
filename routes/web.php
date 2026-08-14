@@ -132,6 +132,9 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->whereNumber('invoice')->name('invoices.show');
             });
             Route::middleware('capability:invoices.manage')->group(function (): void {
+                Route::get('/invoices/create', [InvoiceController::class, 'create'])->name('invoices.create');
+                Route::get('/invoices/customer-options', [InvoiceController::class, 'customerOptions'])->name('invoices.customer-options');
+                Route::post('/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
                 Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->whereNumber('invoice')->name('invoices.update');
                 Route::post('/invoices/{invoice}/lines', [InvoiceController::class, 'storeLine'])->whereNumber('invoice')->name('invoices.lines.store');
                 Route::post('/invoices/{invoice}/catalog-lines', [InvoiceController::class, 'storeCatalogLine'])->whereNumber('invoice')->middleware('capability:catalog.use')->name('invoices.catalog-lines.store');

@@ -20,6 +20,9 @@ use App\Models\PaymentProviderConfiguration;
 use App\Models\ServiceTicket;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
+use App\Support\CustomerDirectorySearch;
+use App\Support\CustomerSelection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -30,6 +33,57 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InvoiceController extends Controller
 {
+    public function create(Request $request): View
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [Invoice::class, $organization]);
+        $selectedCustomer = null;
+        if ($request->old('customer_id')) {
+            $selectedCustomer = Customer::query()->forOrganization($organization->id)
+                ->where('status', 'active')
+                ->with([
+                    'serviceLocations' => fn ($query) => $query->where('active', true)->orderByDesc('is_primary')->orderBy('name'),
+                    'contacts' => fn ($query) => $query->where('active', true)->orderByDesc('is_preferred')->orderBy('name'),
+                ])
+                ->find($request->old('customer_id'));
+        }
+
+        return view('office.invoices.create', compact('selectedCustomer'));
+    }
+
+    public function customerOptions(Request $request, CustomerDirectorySearch $directory, CustomerSelection $selection): JsonResponse
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [Invoice::class, $organization]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:255']]);
+        $customers = $directory->ticketOptions($organization, $data['q'] ?? '')
+            ->map(fn (Customer $customer): array => $selection->present($customer));
+
+        return response()->json(['customers' => $customers])->header('Cache-Control', 'no-store');
+    }
+
+    public function store(Request $request, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [Invoice::class, $organization]);
+        $data = $request->validate([
+            'customer_id' => ['required', 'integer'],
+            'service_location_id' => ['required', 'integer'],
+            'contact_id' => ['nullable', 'integer'],
+            'creation_token' => ['required', 'uuid'],
+        ]);
+        $invoice = $workflow->createDirect(
+            $organization,
+            (int) $data['customer_id'],
+            (int) $data['service_location_id'],
+            isset($data['contact_id']) ? (int) $data['contact_id'] : null,
+            $request->user(),
+            $data['creation_token'],
+        );
+
+        return redirect()->route('office.invoices.show', $invoice)->with('status', 'Direct invoice draft created. Add invoice items, then review billing details.');
+    }
+
     public function index(Request $request): View
     {
         $organization = $request->attributes->get('organization');

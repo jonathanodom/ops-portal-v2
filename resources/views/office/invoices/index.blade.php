@@ -1,12 +1,15 @@
 <x-layouts.office title="Invoices" width="workspace">
     <x-office.page-header title="Billing" description="Move approved work into invoicing, then manage the resulting invoice ledger.">
-        @if($activeMembership->hasCapability('billing.settings.manage'))
-            <x-slot:actions><a class="button-secondary" href="{{ route('office.settings.billing.edit') }}">Billing settings</a></x-slot:actions>
+        @if($activeMembership->hasCapability('invoices.manage') || $activeMembership->hasCapability('billing.settings.manage'))
+            <x-slot:actions>
+                @if($activeMembership->hasCapability('invoices.manage'))<a class="button-primary" href="{{ route('office.invoices.create') }}">New invoice</a>@endif
+                @if($activeMembership->hasCapability('billing.settings.manage'))<a class="button-secondary" href="{{ route('office.settings.billing.edit') }}">Billing settings</a>@endif
+            </x-slot:actions>
         @endif
     </x-office.page-header>
     <x-office.billing-workspace-tabs />
 
-    <div class="mt-5"><h2 class="text-xl font-bold text-slate-950">Invoices</h2><p class="mt-1 text-sm text-slate-600">Search issued history, open balances, drafts, and void documents. New invoices continue to originate from the Queue.</p></div>
+    <div class="mt-5"><h2 class="text-xl font-bold text-slate-950">Invoices</h2><p class="mt-1 text-sm text-slate-600">Search issued history, open balances, drafts, and void documents. Create a direct invoice or invoice approved work from the Queue.</p></div>
 
     <form method="GET" class="office-filter-toolbar lg:grid-cols-3 xl:grid-cols-[minmax(180px,0.7fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto]" aria-label="Invoice filters">
         <div><label class="form-label" for="invoice">Invoice number</label><input class="form-input" id="invoice" name="invoice" value="{{ request('invoice') }}" placeholder="NDT-INV-"></div>
