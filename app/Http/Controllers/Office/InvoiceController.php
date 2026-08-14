@@ -9,6 +9,7 @@ use App\Domain\UnissuedInvoiceDeletionWorkflow;
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\AuditEvent;
+use App\Models\BillingHandoff;
 use App\Models\BillingLaborRate;
 use App\Models\CatalogPackage;
 use App\Models\CatalogProduct;
@@ -101,6 +102,7 @@ class InvoiceController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'sort' => ['nullable', Rule::in(['date', 'invoice', 'customer', 'ticket', 'status', 'due', 'total', 'balance'])],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
+            'workspace' => ['nullable', Rule::in(['all', 'ready_to_invoice', 'draft', 'ready_for_review', 'issued', 'paid', 'void', 'overdue'])],
         ]);
         $paid = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type = 'payment' AND status = 'succeeded'), 0)";
         $refunded = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type IN ('refund', 'reversal') AND status = 'succeeded'), 0)";
@@ -109,6 +111,14 @@ class InvoiceController extends Controller
 
         $query = Invoice::query()->forOrganization($organization->id)
             ->with(['customer', 'serviceTicket', 'serviceLocation', 'paymentTransactions']);
+
+        match ($filters['workspace'] ?? 'all') {
+            'ready_to_invoice' => $query->whereRaw('1 = 0'),
+            'draft', 'ready_for_review', 'issued', 'void' => $query->where('status', $filters['workspace']),
+            'paid' => $query->whereRaw("{$balance} <= 0")->where('status', 'issued'),
+            'overdue' => $query->where('status', 'issued')->whereNotNull('due_on')->whereDate('due_on', '<', now($organization->timezone)->toDateString())->whereRaw("{$balance} > 0"),
+            default => null,
+        };
 
         $query->when(filled($filters['invoice'] ?? null), fn ($query) => $query->where('invoice_number', 'like', '%'.$filters['invoice'].'%'))
             ->when(filled($filters['customer'] ?? null), fn ($query) => $query->whereHas('customer', fn ($customer) => $customer->where(fn ($names) => $names->where('display_name', 'like', '%'.$filters['customer'].'%')->orWhere('legal_name', 'like', '%'.$filters['customer'].'%'))))
@@ -147,7 +157,33 @@ class InvoiceController extends Controller
         };
         $invoices = $query->orderBy('id', 'desc')->paginate(25)->withQueryString();
 
-        return view('office.invoices.index', compact('invoices'));
+        $membership = $request->attributes->get('membership');
+        $showReadyHandoffs = $membership->hasCapability('billing_handoffs.view')
+            && in_array($filters['workspace'] ?? 'all', ['all', 'ready_to_invoice'], true)
+            && blank($filters['invoice'] ?? null)
+            && blank($filters['status'] ?? null)
+            && blank($filters['payment_state'] ?? null)
+            && blank($filters['balance_state'] ?? null);
+        $readyHandoffs = collect();
+        if ($showReadyHandoffs) {
+            $readyHandoffs = BillingHandoff::query()
+                ->forOrganization($organization->id)
+                ->where('status', 'ready')
+                ->whereNull('current_invoice_id')
+                ->with(['serviceTicket.customer', 'serviceTicket.serviceLocation', 'closeout'])
+                ->when(filled($filters['customer'] ?? null), fn ($query) => $query->whereHas('serviceTicket.customer', fn ($customer) => $customer->where(fn ($names) => $names->where('display_name', 'like', '%'.$filters['customer'].'%')->orWhere('legal_name', 'like', '%'.$filters['customer'].'%'))))
+                ->when(filled($filters['ticket'] ?? null), fn ($query) => $query->whereHas('serviceTicket', fn ($ticket) => $ticket->where(fn ($identity) => $identity->where('ticket_number', 'like', '%'.$filters['ticket'].'%')->orWhere('title', 'like', '%'.$filters['ticket'].'%'))))
+                ->when(filled($filters['date_from'] ?? null), fn ($query) => $query->whereDate('created_at', '>=', $filters['date_from']))
+                ->when(filled($filters['date_to'] ?? null), fn ($query) => $query->whereDate('created_at', '<=', $filters['date_to']))
+                ->latest()
+                ->limit(25)
+                ->get();
+        }
+        $readyHandoffCount = $membership->hasCapability('billing_handoffs.view')
+            ? BillingHandoff::query()->forOrganization($organization->id)->where('status', 'ready')->whereNull('current_invoice_id')->count()
+            : 0;
+
+        return view('office.invoices.index', compact('invoices', 'readyHandoffs', 'readyHandoffCount'));
     }
 
     public function show(

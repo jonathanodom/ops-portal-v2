@@ -381,9 +381,12 @@ class Phase6InvoicingTest extends TestCase
         $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
 
         $this->actingAs($admin)->get('/office/billing-handoffs')
+            ->assertRedirect(route('office.invoices.index', ['workspace' => 'ready_to_invoice']));
+
+        $this->actingAs($admin)->get('/office/invoices')
             ->assertOk()
             ->assertSee('data-office-width="workspace"', false)
-            ->assertSee('aria-label="Billing queue filters"', false)
+            ->assertSee('aria-label="Billing and invoice status"', false)
             ->assertSee('data-office-table', false)
             ->assertSee('data-office-mobile-list', false)
             ->assertSee($invoice->invoice_number)
@@ -411,26 +414,24 @@ class Phase6InvoicingTest extends TestCase
             ->assertSee('value="not-a-rate"', false);
     }
 
-    public function test_billing_queue_and_invoice_ledger_are_separate_capability_aware_workspaces(): void
+    public function test_invoice_ledger_is_the_primary_capability_aware_billing_workspace(): void
     {
         [, $admin, $handoff] = $this->billingScenario(false);
         $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
 
         $this->actingAs($admin)->get(route('office.billing-handoffs.index'))
-            ->assertOk()
-            ->assertSee('aria-label="Billing workspace"', false)
-            ->assertSee('>Queue<', false)
-            ->assertSee('>Invoices<', false)
-            ->assertSee('Ready to invoice');
+            ->assertRedirect(route('office.invoices.index', ['workspace' => 'ready_to_invoice']));
         $this->actingAs($admin)->get(route('office.invoices.index'))
             ->assertOk()
             ->assertSee('data-office-width="workspace"', false)
+            ->assertSee('Billing / Invoices')
+            ->assertSee('Ready to Invoice')
+            ->assertDontSee('>Queue<', false)
             ->assertSee('aria-label="Invoice filters"', false)
             ->assertSee('data-office-table', false)
             ->assertSee('data-office-mobile-list', false)
             ->assertSee('Ticket / Project')
-            ->assertSee($invoice->invoice_number)
-            ->assertDontSee('Create invoice');
+            ->assertSee($invoice->invoice_number);
 
         [$reviewer] = $this->userWithRole('reviewer', $invoice->organization);
         $this->actingAs($reviewer)->get(route('office.invoices.index'))
@@ -442,6 +443,30 @@ class Phase6InvoicingTest extends TestCase
 
         [$technician] = $this->userWithRole('technician', $invoice->organization);
         $this->actingAs($technician)->get(route('office.invoices.index'))->assertForbidden();
+    }
+
+    public function test_ready_handoff_appears_in_unified_invoice_workspace_and_creates_draft(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+
+        $this->actingAs($admin)->get(route('office.invoices.index'))
+            ->assertOk()
+            ->assertSee('data-ready-handoff-row', false)
+            ->assertSee('data-ready-handoff-card', false)
+            ->assertSee('Ready to Invoice')
+            ->assertSee($handoff->serviceTicket->ticket_number)
+            ->assertSee('Create invoice')
+            ->assertSee('action="'.route('office.billing-handoffs.invoice.store', $handoff).'"', false);
+
+        $this->actingAs($admin)->post(route('office.billing-handoffs.invoice.store', $handoff), [
+            'creation_token' => (string) Str::uuid(),
+        ])->assertRedirect();
+
+        $this->assertNotNull($handoff->fresh()->current_invoice_id);
+        $this->actingAs($admin)->get(route('office.invoices.index', ['workspace' => 'ready_to_invoice']))
+            ->assertOk()
+            ->assertDontSee('data-ready-handoff-row', false)
+            ->assertDontSee($handoff->serviceTicket->ticket_number);
     }
 
     public function test_invoice_ledger_search_filters_sorting_pagination_and_organization_scope(): void
@@ -497,7 +522,7 @@ class Phase6InvoicingTest extends TestCase
         $this->actingAs($admin)->get($base.'?balance_state=overdue')->assertOk()->assertDontSee($invoice->invoice_number);
 
         [$outsider] = $this->userWithRole('super_admin');
-        $this->actingAs($outsider)->get($base.'?invoice='.urlencode($invoice->invoice_number))->assertOk()->assertSee('No invoices found');
+        $this->actingAs($outsider)->get($base.'?invoice='.urlencode($invoice->invoice_number))->assertOk()->assertSee('No billing activity found');
     }
 
     public function test_invoice_command_bar_tracks_lifecycle_and_payment_state_without_weakening_actions(): void
