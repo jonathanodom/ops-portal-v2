@@ -215,6 +215,55 @@ class MobileFieldExecutionTest extends TestCase
         Queue::assertPushed(DeleteRemovedVisitMedia::class, fn ($job) => $job->mediaId === $media->id);
     }
 
+    public function test_field_photo_upload_offers_separate_camera_and_gallery_file_sources(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+
+        $response = $this->actingAs($lead)->get(route('field.visits.show', $visit));
+        $response->assertOk()
+            ->assertSee('Take photo')
+            ->assertSee('Choose from gallery or files')
+            ->assertSee('data-upload-photo-source', false)
+            ->assertSee('data-upload-selection', false);
+
+        $html = $response->getContent();
+        $this->assertSame(1, substr_count($html, 'capture="environment"'));
+        $this->assertSame(2, substr_count($html, 'accept="image/jpeg,image/png,image/webp,image/heic,image/heif"'));
+        $this->assertMatchesRegularExpression('/<input[^>]+id="photo_camera"[^>]+capture="environment"[^>]*>/', $html);
+        $this->assertMatchesRegularExpression('/<input[^>]+id="photo_library"[^>]+name="photo"[^>]*>/', $html);
+        preg_match('/<input[^>]+id="photo_library"[^>]*>/', $html, $libraryInput);
+        $this->assertStringNotContainsString('capture=', $libraryInput[0]);
+
+        $visit->update(['status' => 'returned_for_correction']);
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('Take photo')
+            ->assertSee('Choose from gallery or files');
+    }
+
+    public function test_field_photo_upload_rejects_missing_invalid_and_oversized_files(): void
+    {
+        Storage::fake('local');
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $endpoint = route('field.visits.media.store', $visit);
+
+        $this->actingAs($lead)->postJson($endpoint, ['category' => 'before'])
+            ->assertUnprocessable()
+            ->assertJsonValidationErrors('photo');
+
+        $this->actingAs($lead)->postJson($endpoint, [
+            'category' => 'before',
+            'photo' => UploadedFile::fake()->create('not-an-image.txt', 10, 'text/plain'),
+        ])->assertUnprocessable()->assertJsonValidationErrors('photo');
+
+        $this->actingAs($lead)->postJson($endpoint, [
+            'category' => 'before',
+            'photo' => UploadedFile::fake()->image('too-large.jpg')->size(config('field_execution.max_photo_kb') + 1),
+        ])->assertUnprocessable()->assertJsonValidationErrors('photo');
+
+        $this->assertDatabaseCount('visit_media', 0);
+    }
+
     public function test_office_draft_projection_hides_narrative_and_submitted_evidence_respects_inspection_capability(): void
     {
         [, $visit, $lead] = $this->executionGraph('on_site');
