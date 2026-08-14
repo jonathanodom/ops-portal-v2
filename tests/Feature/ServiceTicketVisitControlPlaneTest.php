@@ -72,7 +72,7 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
         $this->assertDatabaseCount('document_sequences', 0);
     }
 
-    public function test_scheduling_assigns_one_lead_and_assigned_technician_can_execute(): void
+    public function test_scheduling_automatically_assigns_single_crew_member_as_lead_and_they_can_execute(): void
     {
         CarbonImmutable::setTestNow('2026-07-30 12:00:00');
         [$dispatcher, $organization] = $this->userWithRole('dispatcher');
@@ -85,16 +85,115 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
             'scheduled_start' => '2026-07-30T14:00',
             'scheduled_end' => '2026-07-30T16:00',
             'assignees' => [$techMembership->id],
-            'lead_membership_id' => $techMembership->id,
         ])->assertRedirect();
 
         $this->assertSame('assigned', $visit->fresh()->status);
         $this->assertDatabaseHas('visit_assignments', ['visit_id' => $visit->id, 'organization_membership_id' => $techMembership->id, 'is_lead' => true]);
+        $audit = AuditEvent::query()->where('event_type', 'visit.scheduled')->where('subject_id', $visit->id)->latest('id')->firstOrFail();
+        $this->assertSame($techMembership->id, $audit->metadata['lead_membership_id']);
+        $this->assertSame('automatic', $audit->metadata['lead_assignment_mode']);
         $this->actingAs($technician)->get('/field')->assertOk()->assertSee($ticket->title);
         $this->actingAs($technician)->post("/field/visits/{$visit->id}/transition", ['status' => 'en_route'])->assertRedirect();
         $this->assertNotNull($visit->fresh()->en_route_at);
         $this->actingAs($technician)->post("/field/visits/{$visit->id}/transition", ['status' => 'on_site'])->assertRedirect();
         $this->assertSame('on_site', $visit->fresh()->status);
+    }
+
+    public function test_initial_visit_automatically_assigns_its_only_crew_member_as_lead(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [, , $membership] = $this->userWithRole('technician', $organization);
+        [$customer, , $location] = $this->customerGraph($organization);
+
+        $this->actingAs($dispatcher)->post('/office/service-tickets', $this->ticketPayload($customer, $location, [
+            'create_visit' => '1',
+            'scheduled_start' => '2026-08-20T09:00',
+            'scheduled_end' => '2026-08-20T10:00',
+            'assignees' => [$membership->id],
+        ]))->assertRedirect();
+
+        $visit = Visit::query()->firstOrFail();
+        $this->assertSame('assigned', $visit->status);
+        $this->assertDatabaseHas('visit_assignments', [
+            'visit_id' => $visit->id,
+            'organization_membership_id' => $membership->id,
+            'is_lead' => true,
+        ]);
+    }
+
+    public function test_zero_assignees_results_in_no_lead_even_when_a_lead_value_is_submitted(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [, , $membership] = $this->userWithRole('technician', $organization);
+        [$customer, , $location] = $this->customerGraph($organization);
+        $visit = $this->visit($this->ticket($organization, $customer, $location));
+
+        $this->actingAs($dispatcher)->put("/office/visits/{$visit->id}", [
+            'scheduled_start' => '2026-08-20T09:00',
+            'scheduled_end' => '2026-08-20T10:00',
+            'lead_membership_id' => $membership->id,
+        ])->assertRedirect();
+
+        $this->assertSame('scheduled', $visit->fresh()->status);
+        $this->assertDatabaseMissing('visit_assignments', ['visit_id' => $visit->id]);
+        $audit = AuditEvent::query()->where('event_type', 'visit.scheduled')->where('subject_id', $visit->id)->latest('id')->firstOrFail();
+        $this->assertNull($audit->metadata['lead_membership_id']);
+        $this->assertSame('none', $audit->metadata['lead_assignment_mode']);
+    }
+
+    public function test_multiple_assignees_still_require_one_explicit_assigned_lead(): void
+    {
+        [$dispatcher, $organization, $dispatcherMembership] = $this->userWithRole('dispatcher');
+        [, , $firstMembership] = $this->userWithRole('technician', $organization);
+        [, , $secondMembership] = $this->userWithRole('technician', $organization);
+        [$customer, , $location] = $this->customerGraph($organization);
+        $visit = $this->visit($this->ticket($organization, $customer, $location));
+        $payload = [
+            'scheduled_start' => '2026-08-20T09:00',
+            'scheduled_end' => '2026-08-20T10:00',
+            'assignees' => [$firstMembership->id, $secondMembership->id],
+        ];
+
+        $this->actingAs($dispatcher)->put("/office/visits/{$visit->id}", $payload)
+            ->assertSessionHasErrors('lead_membership_id');
+        $this->assertSame('planned', $visit->fresh()->status);
+        $this->assertDatabaseMissing('visit_assignments', ['visit_id' => $visit->id]);
+
+        $this->actingAs($dispatcher)->put("/office/visits/{$visit->id}", $payload + [
+            'lead_membership_id' => $dispatcherMembership->id,
+        ])->assertSessionHasErrors('lead_membership_id');
+        $this->assertDatabaseMissing('visit_assignments', ['visit_id' => $visit->id]);
+
+        $this->actingAs($dispatcher)->put("/office/visits/{$visit->id}", $payload + [
+            'lead_membership_id' => $secondMembership->id,
+        ])->assertRedirect();
+
+        $this->assertSame(2, $visit->assignments()->count());
+        $this->assertSame(1, $visit->assignments()->where('is_lead', true)->count());
+        $this->assertDatabaseHas('visit_assignments', [
+            'visit_id' => $visit->id,
+            'organization_membership_id' => $secondMembership->id,
+            'is_lead' => true,
+        ]);
+        $audit = AuditEvent::query()->where('event_type', 'visit.scheduled')->where('subject_id', $visit->id)->latest('id')->firstOrFail();
+        $this->assertSame('explicit', $audit->metadata['lead_assignment_mode']);
+    }
+
+    public function test_single_assignee_must_still_be_an_active_field_member_of_the_visit_organization(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [, , $foreignMembership] = $this->userWithRole('technician');
+        [$customer, , $location] = $this->customerGraph($organization);
+        $visit = $this->visit($this->ticket($organization, $customer, $location));
+
+        $this->actingAs($dispatcher)->put("/office/visits/{$visit->id}", [
+            'scheduled_start' => '2026-08-20T09:00',
+            'scheduled_end' => '2026-08-20T10:00',
+            'assignees' => [$foreignMembership->id],
+        ])->assertSessionHasErrors('assignees');
+
+        $this->assertSame('planned', $visit->fresh()->status);
+        $this->assertDatabaseMissing('visit_assignments', ['visit_id' => $visit->id]);
     }
 
     public function test_unassigned_technician_is_denied_and_inspect_all_does_not_grant_execution(): void
@@ -155,10 +254,15 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
         VisitAssignment::query()->create(['organization_id' => $organization->id, 'visit_id' => $existing->id, 'organization_membership_id' => $membership->id, 'is_lead' => true]);
         $next = $this->visit($ticket);
 
-        $payload = ['scheduled_start' => '2026-08-01T10:30', 'scheduled_end' => '2026-08-01T11:30', 'assignees' => [$membership->id], 'lead_membership_id' => $membership->id];
+        $payload = ['scheduled_start' => '2026-08-01T10:30', 'scheduled_end' => '2026-08-01T11:30', 'assignees' => [$membership->id]];
         $this->actingAs($dispatcher)->put("/office/visits/{$next->id}", $payload)->assertSessionHasErrors('schedule_conflict');
         $this->actingAs($dispatcher)->put("/office/visits/{$next->id}", $payload + ['confirm_conflicts' => '1'])->assertRedirect();
         $this->assertDatabaseHas('audit_events', ['event_type' => 'visit.schedule_conflict_overridden', 'subject_id' => $next->id]);
+        $this->assertDatabaseHas('visit_assignments', [
+            'visit_id' => $next->id,
+            'organization_membership_id' => $membership->id,
+            'is_lead' => true,
+        ]);
     }
 
     public function test_office_role_matrix_cross_organization_scope_and_explicit_override(): void
@@ -239,6 +343,24 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
             ->assertSee($ticket->ticket_number)
             ->assertSee('Customer and location')
             ->assertSee('All assignees');
+    }
+
+    public function test_visit_assignment_forms_explain_the_automatic_single_crew_lead_rule(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        $this->userWithRole('technician', $organization);
+        [$customer, , $location] = $this->customerGraph($organization);
+        $visit = $this->visit($this->ticket($organization, $customer, $location));
+
+        $this->actingAs($dispatcher)->get('/office/service-tickets/create')
+            ->assertOk()
+            ->assertSee('aria-describedby="initial-lead-membership-help"', false)
+            ->assertSee('A single crew member becomes lead automatically.');
+
+        $this->actingAs($dispatcher)->get("/office/visits/{$visit->id}/edit")
+            ->assertOk()
+            ->assertSee('aria-describedby="lead-membership-help"', false)
+            ->assertSee('A single crew member becomes lead automatically.');
     }
 
     public function test_visits_use_ticket_relative_numbers_and_never_reuse_them(): void
