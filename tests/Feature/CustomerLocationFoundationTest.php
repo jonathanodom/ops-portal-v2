@@ -19,6 +19,7 @@ use App\Models\Visit;
 use App\Models\VisitAssignment;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Str;
 use Tests\TestCase;
 
 class CustomerLocationFoundationTest extends TestCase
@@ -143,7 +144,7 @@ class CustomerLocationFoundationTest extends TestCase
             'visit_id' => $visit->id,
             'status' => 'submitted',
             'outcome' => 'resolved',
-            'submitted_token' => (string) \Illuminate\Support\Str::uuid(),
+            'submitted_token' => (string) Str::uuid(),
         ]);
         $handoff = BillingHandoff::query()->create([
             'organization_id' => $organization->id,
@@ -163,7 +164,7 @@ class CustomerLocationFoundationTest extends TestCase
             'currency' => 'USD',
             'payment_terms' => 'due_on_receipt',
             'billing_name' => $customer->display_name,
-            'creation_token' => (string) \Illuminate\Support\Str::uuid(),
+            'creation_token' => (string) Str::uuid(),
         ]);
 
         $this->actingAs($billing)->get("/office/customers/{$customer->id}")
