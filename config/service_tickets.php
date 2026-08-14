@@ -14,6 +14,21 @@ return [
         'internal' => 'Internal',
         'other' => 'Other',
     ],
+    'purposes' => [
+        'service_call' => 'Service call',
+        'site_survey' => 'Site survey / sales visit',
+        'installation_project' => 'Installation / project',
+        'callback' => 'Callback / return visit',
+        'warranty' => 'Warranty',
+        'internal_test' => 'Internal / test',
+    ],
+    'billing_dispositions' => [
+        'billable' => 'Billable',
+        'non_billable' => 'Non-billable',
+        'warranty' => 'Warranty',
+        'included' => 'Included',
+        'no_charge' => 'No charge',
+    ],
     'statuses' => [
         'open' => 'Open',
         'on_hold' => 'On hold',

@@ -51,6 +51,21 @@
     </div>
 </div>
 @endif
+<div class="mt-5 grid gap-5 md:grid-cols-2">
+    <div>
+        <label class="form-label" for="purpose">Ticket purpose</label>
+        <select class="form-input" id="purpose" name="purpose" required>
+            @foreach($purposes as $value => $label)<option value="{{ $value }}" @selected(old('purpose', $ticket->purpose ?? 'service_call') === $value)>{{ $label }}</option>@endforeach
+        </select>
+    </div>
+    <div>
+        <label class="form-label" for="billing_disposition">Billing disposition</label>
+        <select class="form-input" id="billing_disposition" name="billing_disposition" required>
+            @foreach($billingDispositions as $value => $label)<option value="{{ $value }}" @selected(old('billing_disposition', $ticket->billing_disposition ?? 'billable') === $value)>{{ $label }}</option>@endforeach
+        </select>
+        <p class="mt-1 text-xs text-slate-500">Non-billable tickets complete operationally without creating a Billing Handoff or invoice.</p>
+    </div>
+</div>
 <div class="mt-5">
     <label class="form-label" for="description">Work scope</label>
     <textarea class="form-textarea" id="description" name="description" maxlength="10000">{{ old('description', $ticket->description ?? '') }}</textarea>

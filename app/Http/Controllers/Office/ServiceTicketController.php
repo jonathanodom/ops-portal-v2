@@ -48,6 +48,8 @@ class ServiceTicketController extends Controller
             ->when($request->filled('status'), fn ($query) => $query->where('status', $request->string('status')))
             ->when($request->filled('priority'), fn ($query) => $query->where('priority', $request->string('priority')))
             ->when($request->filled('source'), fn ($query) => $query->where('source', $request->string('source')))
+            ->when($request->filled('purpose'), fn ($query) => $query->where('purpose', $request->string('purpose')))
+            ->when($request->filled('billing_disposition'), fn ($query) => $query->where('billing_disposition', $request->string('billing_disposition')))
             ->when($request->filled('assignee'), fn ($query) => $query->whereHas(
                 'visits.assignments',
                 fn ($assignment) => $assignment->where('organization_membership_id', $request->integer('assignee'))
@@ -114,6 +116,8 @@ class ServiceTicketController extends Controller
                 'customer_visible_summary' => $data['customer_visible_summary'] ?? null,
                 'priority' => $data['priority'],
                 'source' => $data['source'],
+                'purpose' => $data['purpose'],
+                'billing_disposition' => $data['billing_disposition'],
                 'status' => 'open',
                 'created_by_id' => $request->user()->id,
                 'updated_by_id' => $request->user()->id,
@@ -124,6 +128,8 @@ class ServiceTicketController extends Controller
                 'contact_id' => $ticket->contact_id,
                 'priority' => $ticket->priority,
                 'source' => $ticket->source,
+                'purpose' => $ticket->purpose,
+                'billing_disposition' => $ticket->billing_disposition,
             ]);
 
             if ($request->boolean('create_visit')) {
@@ -192,7 +198,7 @@ class ServiceTicketController extends Controller
             ? $ticket->visits->filter(fn (Visit $visit): bool => $manualCloseout->canStart($visit))->pluck('id')->all()
             : [];
 
-        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds'));
+        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds') + $this->options());
     }
 
     public function edit(Request $request, string $serviceTicket): View
@@ -225,6 +231,8 @@ class ServiceTicketController extends Controller
             'customer_visible_summary' => $data['customer_visible_summary'] ?? null,
             'priority' => $data['priority'],
             'source' => $data['source'],
+            'purpose' => $data['purpose'],
+            'billing_disposition' => $data['billing_disposition'],
             'updated_by_id' => $request->user()->id,
         ]);
         $changed = array_values(array_diff(array_keys(array_diff_assoc($ticket->getAttributes(), $before)), ['updated_at']));
@@ -287,6 +295,8 @@ class ServiceTicketController extends Controller
             'customer_visible_summary' => ['nullable', 'string', 'max:5000'],
             'priority' => ['required', Rule::in(array_keys(config('service_tickets.priorities')))],
             'source' => ['required', Rule::in(array_keys(config('service_tickets.sources')))],
+            'purpose' => ['sometimes', Rule::in(array_keys(config('service_tickets.purposes')))],
+            'billing_disposition' => ['sometimes', Rule::in(array_keys(config('service_tickets.billing_dispositions')))],
         ];
         if (! $ticket) {
             $rules += [
@@ -307,7 +317,10 @@ class ServiceTicketController extends Controller
             throw ValidationException::withMessages(['contact_id' => 'The contact must belong to the selected customer.']);
         }
 
-        return $data;
+        return $data + [
+            'purpose' => $data['purpose'] ?? $ticket?->purpose ?? 'service_call',
+            'billing_disposition' => $data['billing_disposition'] ?? $ticket?->billing_disposition ?? 'billable',
+        ];
     }
 
     private function defaultContactId(int $locationId, int $customerId): ?int
@@ -352,6 +365,8 @@ class ServiceTicketController extends Controller
             'priorities' => config('service_tickets.priorities'),
             'sources' => config('service_tickets.sources'),
             'statuses' => config('service_tickets.statuses'),
+            'purposes' => config('service_tickets.purposes'),
+            'billingDispositions' => config('service_tickets.billing_dispositions'),
         ];
     }
 }

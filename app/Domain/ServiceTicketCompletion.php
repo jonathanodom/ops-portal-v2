@@ -49,6 +49,17 @@ class ServiceTicketCompletion
                 'status_changed_by_id' => $actor->id,
                 'updated_by_id' => $actor->id,
             ]);
+            if ($ticket->billing_disposition !== 'billable') {
+                $this->audit->record($ticket->organization, $actor, 'service_ticket.completed_non_billable', $ticket, [
+                    'ticket_id' => $ticket->id,
+                    'visit_id' => $visit->id,
+                    'closeout_id' => $closeout->id,
+                    'purpose' => $ticket->purpose,
+                    'billing_disposition' => $ticket->billing_disposition,
+                ]);
+
+                return null;
+            }
             $handoff = BillingHandoff::query()->firstOrCreate(
                 ['service_ticket_id' => $ticket->id],
                 [

@@ -56,6 +56,25 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
         $this->assertSame('NDT-ST-2026-10000', $number);
     }
 
+    public function test_site_survey_purpose_and_non_billable_disposition_are_saved_and_visible(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [$customer, , $location] = $this->customerGraph($organization);
+
+        $this->actingAs($dispatcher)->post('/office/service-tickets', $this->ticketPayload($customer, $location, [
+            'purpose' => 'site_survey',
+            'billing_disposition' => 'non_billable',
+        ]))->assertRedirect();
+
+        $ticket = ServiceTicket::query()->firstOrFail();
+        $this->assertSame('site_survey', $ticket->purpose);
+        $this->assertSame('non_billable', $ticket->billing_disposition);
+        $this->actingAs($dispatcher)->get("/office/service-tickets/{$ticket->id}")
+            ->assertOk()
+            ->assertSee('Site survey / sales visit')
+            ->assertSee('Non-billable');
+    }
+
     public function test_failed_initial_visit_rolls_back_ticket_and_sequence(): void
     {
         [$dispatcher, $organization] = $this->userWithRole('dispatcher');

@@ -12,7 +12,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'organization_id', 'customer_id', 'service_location_id', 'contact_id', 'ticket_number',
-    'title', 'description', 'customer_visible_summary', 'priority', 'source', 'status', 'next_visit_number',
+    'title', 'description', 'customer_visible_summary', 'priority', 'source', 'purpose', 'billing_disposition', 'status', 'next_visit_number',
     'status_reason', 'status_changed_at', 'status_changed_by_id', 'created_by_id', 'updated_by_id',
 ])]
 class ServiceTicket extends Model
