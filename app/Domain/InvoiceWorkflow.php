@@ -30,6 +30,7 @@ class InvoiceWorkflow
         private readonly BillableLaborCalculator $laborCalculator,
         private readonly LaborServiceResolver $laborServices,
         private readonly CatalogLineSnapshotFactory $catalogSnapshots,
+        private readonly ApprovedVisitLaborMinutes $approvedLaborMinutes,
         private readonly AuditRecorder $audit,
     ) {}
 
@@ -182,7 +183,7 @@ class InvoiceWorkflow
                 throw ValidationException::withMessages(['handoff' => 'No eligible approved closeout versions were found.']);
             }
             $settings = OrganizationBillingSetting::query()->firstOrCreate(['organization_id' => $ticket->organization_id], ['default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt']);
-            $hasLabor = $closeouts->contains(fn (Closeout $closeout) => $this->effectiveMinutes($closeout) > 0);
+            $hasLabor = $closeouts->contains(fn (Closeout $closeout) => $this->approvedLaborMinutes->calculate($closeout) > 0);
             $laborService = $hasLabor ? $this->laborServices->resolve($ticket->organization_id) : null;
             $contact = $ticket->contact?->active ? $ticket->contact : $ticket->customer->preferredContact;
             $invoice = Invoice::query()->create([
@@ -217,7 +218,7 @@ class InvoiceWorkflow
             foreach ($closeouts as $closeout) {
                 $review = $closeout->reviews->firstWhere('decision', 'approved');
                 $invoice->closeoutLinks()->create(['organization_id' => $ticket->organization_id, 'visit_id' => $closeout->visit_id, 'closeout_id' => $closeout->id, 'closeout_review_id' => $review->id]);
-                $minutes = $this->effectiveMinutes($closeout);
+                $minutes = $this->approvedLaborMinutes->calculate($closeout);
                 if ($minutes > 0) {
                     $calculation = $this->laborCalculator->calculate(
                         $minutes,
@@ -597,21 +598,6 @@ class InvoiceWorkflow
             $this->audit->record($invoice->organization, $actor, 'invoice.reissued', $replacement, ['invoice_id' => $replacement->id, 'reissue_of_invoice_id' => $invoice->id]);
 
             return $replacement;
-        });
-    }
-
-    private function effectiveMinutes(Closeout $closeout): int
-    {
-        $review = $closeout->reviews->firstWhere('decision', 'approved');
-        $adjustments = $review->adjustments->where('type', 'time')->keyBy('visit_time_entry_id');
-
-        return (int) $closeout->visit->timeEntries->whereIn('category', ['on_site', 'other'])->sum(function ($entry) use ($adjustments): int {
-            $adjustment = $adjustments->get($entry->id);
-            if ($adjustment?->excluded || ! $entry->ended_at) {
-                return 0;
-            }
-
-            return $adjustment?->approved_minutes ?? (int) ceil($entry->started_at->diffInSeconds($entry->ended_at) / 60);
         });
     }
 

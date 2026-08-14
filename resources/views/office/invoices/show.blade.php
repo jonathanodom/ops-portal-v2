@@ -25,7 +25,7 @@
                 @if($canDeleteDraft ?? false)
                     <form id="delete-unissued-invoice" method="POST" action="{{ route('office.invoices.destroy', $invoice) }}" class="surface scroll-mt-32 border-red-300 bg-red-50 p-5">@csrf @method('DELETE')
                         <h2 class="font-bold text-red-900">Delete unissued invoice</h2>
-                        <p class="mt-2 text-sm text-red-800">This removes the draft and returns the Billing Handoff to Ready. Issued invoices must use Void and reissue.</p>
+                        <p class="mt-2 text-sm text-red-800">@if($invoice->isDirect()) This removes the direct draft. @else This removes the draft and returns the Billing Handoff to Ready. @endif Issued invoices must use Void and reissue.</p>
                         <label class="form-label mt-3" for="deletion_reason">Deletion reason</label><textarea class="form-textarea" id="deletion_reason" name="deletion_reason" required maxlength="2000"></textarea>
                         <label class="form-label mt-3" for="confirm_invoice_number">Enter {{ $invoice->invoice_number }} to confirm</label><input class="form-input" id="confirm_invoice_number" name="confirm_invoice_number" required autocomplete="off">
                         <label class="mt-3 flex min-h-11 items-center gap-2"><input type="checkbox" name="confirm_delete" value="1" required> I understand this invoice will be removed.</label>

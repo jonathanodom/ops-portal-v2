@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\ApprovedVisitLaborWorkflow;
 use App\Domain\CatalogLineSnapshotFactory;
 use App\Domain\InvoiceWorkflow;
 use App\Domain\UnissuedInvoiceDeletionWorkflow;
@@ -18,6 +19,7 @@ use App\Models\InvoiceLine;
 use App\Models\OrganizationBillingSetting;
 use App\Models\PaymentProviderConfiguration;
 use App\Models\ServiceTicket;
+use App\Models\Visit;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
 use App\Support\CustomerDirectorySearch;
@@ -148,8 +150,12 @@ class InvoiceController extends Controller
         return view('office.invoices.index', compact('invoices'));
     }
 
-    public function show(Request $request, string $invoice, UnissuedInvoiceDeletionWorkflow $deletion): View
-    {
+    public function show(
+        Request $request,
+        string $invoice,
+        UnissuedInvoiceDeletionWorkflow $deletion,
+        ApprovedVisitLaborWorkflow $visitLabor,
+    ): View {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
         $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'lines.catalogSelectedBy', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'closeoutLinks.review.tripCharge.selectedBy', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
@@ -171,6 +177,7 @@ class InvoiceController extends Controller
         $catalogServices = $canUseCatalog ? CatalogService::query()->forOrganization($invoice->organization_id)->where('active', true)->with(['salesUom', 'variants' => fn ($query) => $query->where('active', true)])->orderBy('name')->get() : collect();
         $catalogProducts = $canUseCatalog ? CatalogProduct::query()->forOrganization($invoice->organization_id)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get() : collect();
         $catalogPackages = $canUseCatalog ? CatalogPackage::query()->forOrganization($invoice->organization_id)->where('active', true)->with('salesUom')->orderBy('name')->get() : collect();
+        $visitLaborCandidates = $visitLabor->candidates($invoice);
 
         $canDeleteDraft = Gate::allows('deleteDraft', $invoice) && $deletion->canDelete($invoice);
         $auditEvents = AuditEvent::query()
@@ -189,7 +196,7 @@ class InvoiceController extends Controller
             ->latest('occurred_at')
             ->get();
 
-        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'canDeleteDraft', 'auditEvents'));
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'visitLaborCandidates', 'canDeleteDraft', 'auditEvents'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
@@ -289,6 +296,20 @@ class InvoiceController extends Controller
         $workflow->removeLine($invoice, $line, $request->user(), $data['reason'] ?? null);
 
         return redirect()->route('office.invoices.show', $invoice)->with('status', 'Invoice line removed and totals recalculated.');
+    }
+
+    public function attachVisitLabor(
+        Request $request,
+        string $invoice,
+        string $visit,
+        ApprovedVisitLaborWorkflow $workflow,
+    ): RedirectResponse {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $visit = $this->invoiceVisit($request, $invoice, $visit);
+        $workflow->attach($invoice, $visit, $request->user());
+
+        return redirect()->route('office.invoices.show', $invoice)->with('status', $visit->displayNumber().' approved labor added to the invoice.');
     }
 
     public function includeProposal(Request $request, string $invoice, string $part, InvoiceWorkflow $workflow): RedirectResponse
@@ -430,5 +451,19 @@ class InvoiceController extends Controller
         }
 
         return $line ?? abort(404);
+    }
+
+    private function invoiceVisit(Request $request, Invoice $invoice, string $id): Visit
+    {
+        $visit = Visit::query()->forOrganization($invoice->organization_id)->find($id);
+        if (! $visit && Visit::query()->withTrashed()->whereKey($id)->exists()) {
+            app(AuditRecorder::class)->record($invoice->organization, $request->user(), 'security.cross_organization_record_denied', $invoice->organization, [
+                'record_type' => 'visit',
+                'record_id' => (int) $id,
+                'invoice_id' => $invoice->id,
+            ]);
+        }
+
+        return $visit ?? abort(404);
     }
 }

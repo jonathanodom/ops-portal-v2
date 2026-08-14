@@ -8,6 +8,7 @@
         @if($invoice->isEditable())
             <div class="flex flex-wrap gap-2" aria-label="Add invoice item">
                 @if($canUseCatalog)<x-catalog-picker id="invoice-catalog-picker" :action="route('office.invoices.catalog-lines.store', $invoice)" :services="$catalogServices" :products="$catalogProducts" :packages="$catalogPackages" :show-prices="true" button-label="+ Add Catalog Item" />@endif
+                <button type="button" class="button-secondary" data-invoice-item-open="invoice-visit-labor-dialog">+ Add Approved Visit Labor</button>
                 <button type="button" class="button-secondary" data-invoice-item-open="invoice-manual-line-dialog">+ Add Manual Line</button>
             </div>
         @endif
@@ -67,5 +68,6 @@
 
 @if($invoice->isEditable())
     @foreach($invoice->lines as $line)@include('office.invoices._line-editor', ['line' => $line])@include('office.invoices._line-remove-dialog', ['line' => $line])@endforeach
+    @include('office.invoices._visit-labor-dialog')
     @include('office.invoices._manual-line-dialog')
 @endif
