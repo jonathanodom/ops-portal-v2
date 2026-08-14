@@ -69,6 +69,7 @@ class OpsBackupCommand extends Command
             'ticket_customer' => ['service_tickets', 'customers', 'SELECT COUNT(*) FROM service_tickets child LEFT JOIN customers parent ON parent.id = child.customer_id WHERE parent.id IS NULL'],
             'ticket_location' => ['service_tickets', 'service_locations', 'SELECT COUNT(*) FROM service_tickets child LEFT JOIN service_locations parent ON parent.id = child.service_location_id WHERE parent.id IS NULL'],
             'visit_ticket' => ['visits', 'service_tickets', 'SELECT COUNT(*) FROM visits child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
+            'ticket_reopen' => ['service_ticket_reopens', 'service_tickets', 'SELECT COUNT(*) FROM service_ticket_reopens child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
             'closeout_visit' => ['closeouts', 'visits', 'SELECT COUNT(*) FROM closeouts child LEFT JOIN visits parent ON parent.id = child.visit_id WHERE parent.id IS NULL'],
             'handoff_ticket' => ['billing_handoffs', 'service_tickets', 'SELECT COUNT(*) FROM billing_handoffs child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
             'invoice_ticket' => ['invoices', 'service_tickets', 'SELECT COUNT(*) FROM invoices child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],

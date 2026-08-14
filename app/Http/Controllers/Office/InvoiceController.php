@@ -2,12 +2,14 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\ApprovedVisitLaborWorkflow;
 use App\Domain\CatalogLineSnapshotFactory;
 use App\Domain\InvoiceWorkflow;
 use App\Domain\UnissuedInvoiceDeletionWorkflow;
 use App\Http\Controllers\Controller;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\AuditEvent;
+use App\Models\BillingHandoff;
 use App\Models\BillingLaborRate;
 use App\Models\CatalogPackage;
 use App\Models\CatalogProduct;
@@ -18,8 +20,12 @@ use App\Models\InvoiceLine;
 use App\Models\OrganizationBillingSetting;
 use App\Models\PaymentProviderConfiguration;
 use App\Models\ServiceTicket;
+use App\Models\Visit;
 use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
+use App\Support\CustomerDirectorySearch;
+use App\Support\CustomerSelection;
+use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -30,6 +36,57 @@ use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InvoiceController extends Controller
 {
+    public function create(Request $request): View
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [Invoice::class, $organization]);
+        $selectedCustomer = null;
+        if ($request->old('customer_id')) {
+            $selectedCustomer = Customer::query()->forOrganization($organization->id)
+                ->where('status', 'active')
+                ->with([
+                    'serviceLocations' => fn ($query) => $query->where('active', true)->orderByDesc('is_primary')->orderBy('name'),
+                    'contacts' => fn ($query) => $query->where('active', true)->orderByDesc('is_preferred')->orderBy('name'),
+                ])
+                ->find($request->old('customer_id'));
+        }
+
+        return view('office.invoices.create', compact('selectedCustomer'));
+    }
+
+    public function customerOptions(Request $request, CustomerDirectorySearch $directory, CustomerSelection $selection): JsonResponse
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [Invoice::class, $organization]);
+        $data = $request->validate(['q' => ['nullable', 'string', 'max:255']]);
+        $customers = $directory->ticketOptions($organization, $data['q'] ?? '')
+            ->map(fn (Customer $customer): array => $selection->present($customer));
+
+        return response()->json(['customers' => $customers])->header('Cache-Control', 'no-store');
+    }
+
+    public function store(Request $request, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [Invoice::class, $organization]);
+        $data = $request->validate([
+            'customer_id' => ['required', 'integer'],
+            'service_location_id' => ['required', 'integer'],
+            'contact_id' => ['nullable', 'integer'],
+            'creation_token' => ['required', 'uuid'],
+        ]);
+        $invoice = $workflow->createDirect(
+            $organization,
+            (int) $data['customer_id'],
+            (int) $data['service_location_id'],
+            isset($data['contact_id']) ? (int) $data['contact_id'] : null,
+            $request->user(),
+            $data['creation_token'],
+        );
+
+        return redirect()->route('office.invoices.show', $invoice)->with('status', 'Direct invoice draft created. Add invoice items, then review billing details.');
+    }
+
     public function index(Request $request): View
     {
         $organization = $request->attributes->get('organization');
@@ -45,6 +102,7 @@ class InvoiceController extends Controller
             'date_to' => ['nullable', 'date', 'after_or_equal:date_from'],
             'sort' => ['nullable', Rule::in(['date', 'invoice', 'customer', 'ticket', 'status', 'due', 'total', 'balance'])],
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
+            'workspace' => ['nullable', Rule::in(['all', 'ready_to_invoice', 'draft', 'ready_for_review', 'issued', 'paid', 'void', 'overdue'])],
         ]);
         $paid = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type = 'payment' AND status = 'succeeded'), 0)";
         $refunded = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type IN ('refund', 'reversal') AND status = 'succeeded'), 0)";
@@ -53,6 +111,14 @@ class InvoiceController extends Controller
 
         $query = Invoice::query()->forOrganization($organization->id)
             ->with(['customer', 'serviceTicket', 'serviceLocation', 'paymentTransactions']);
+
+        match ($filters['workspace'] ?? 'all') {
+            'ready_to_invoice' => $query->whereRaw('1 = 0'),
+            'draft', 'ready_for_review', 'issued', 'void' => $query->where('status', $filters['workspace']),
+            'paid' => $query->whereRaw("{$balance} <= 0")->where('status', 'issued'),
+            'overdue' => $query->where('status', 'issued')->whereNotNull('due_on')->whereDate('due_on', '<', now($organization->timezone)->toDateString())->whereRaw("{$balance} > 0"),
+            default => null,
+        };
 
         $query->when(filled($filters['invoice'] ?? null), fn ($query) => $query->where('invoice_number', 'like', '%'.$filters['invoice'].'%'))
             ->when(filled($filters['customer'] ?? null), fn ($query) => $query->whereHas('customer', fn ($customer) => $customer->where(fn ($names) => $names->where('display_name', 'like', '%'.$filters['customer'].'%')->orWhere('legal_name', 'like', '%'.$filters['customer'].'%'))))
@@ -91,11 +157,41 @@ class InvoiceController extends Controller
         };
         $invoices = $query->orderBy('id', 'desc')->paginate(25)->withQueryString();
 
-        return view('office.invoices.index', compact('invoices'));
+        $membership = $request->attributes->get('membership');
+        $showReadyHandoffs = $membership->hasCapability('billing_handoffs.view')
+            && in_array($filters['workspace'] ?? 'all', ['all', 'ready_to_invoice'], true)
+            && blank($filters['invoice'] ?? null)
+            && blank($filters['status'] ?? null)
+            && blank($filters['payment_state'] ?? null)
+            && blank($filters['balance_state'] ?? null);
+        $readyHandoffs = collect();
+        if ($showReadyHandoffs) {
+            $readyHandoffs = BillingHandoff::query()
+                ->forOrganization($organization->id)
+                ->where('status', 'ready')
+                ->whereNull('current_invoice_id')
+                ->with(['serviceTicket.customer', 'serviceTicket.serviceLocation', 'closeout'])
+                ->when(filled($filters['customer'] ?? null), fn ($query) => $query->whereHas('serviceTicket.customer', fn ($customer) => $customer->where(fn ($names) => $names->where('display_name', 'like', '%'.$filters['customer'].'%')->orWhere('legal_name', 'like', '%'.$filters['customer'].'%'))))
+                ->when(filled($filters['ticket'] ?? null), fn ($query) => $query->whereHas('serviceTicket', fn ($ticket) => $ticket->where(fn ($identity) => $identity->where('ticket_number', 'like', '%'.$filters['ticket'].'%')->orWhere('title', 'like', '%'.$filters['ticket'].'%'))))
+                ->when(filled($filters['date_from'] ?? null), fn ($query) => $query->whereDate('created_at', '>=', $filters['date_from']))
+                ->when(filled($filters['date_to'] ?? null), fn ($query) => $query->whereDate('created_at', '<=', $filters['date_to']))
+                ->latest()
+                ->limit(25)
+                ->get();
+        }
+        $readyHandoffCount = $membership->hasCapability('billing_handoffs.view')
+            ? BillingHandoff::query()->forOrganization($organization->id)->where('status', 'ready')->whereNull('current_invoice_id')->count()
+            : 0;
+
+        return view('office.invoices.index', compact('invoices', 'readyHandoffs', 'readyHandoffCount'));
     }
 
-    public function show(Request $request, string $invoice, UnissuedInvoiceDeletionWorkflow $deletion): View
-    {
+    public function show(
+        Request $request,
+        string $invoice,
+        UnissuedInvoiceDeletionWorkflow $deletion,
+        ApprovedVisitLaborWorkflow $visitLabor,
+    ): View {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
         $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'lines.catalogSelectedBy', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'closeoutLinks.review.tripCharge.selectedBy', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
@@ -117,6 +213,7 @@ class InvoiceController extends Controller
         $catalogServices = $canUseCatalog ? CatalogService::query()->forOrganization($invoice->organization_id)->where('active', true)->with(['salesUom', 'variants' => fn ($query) => $query->where('active', true)])->orderBy('name')->get() : collect();
         $catalogProducts = $canUseCatalog ? CatalogProduct::query()->forOrganization($invoice->organization_id)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get() : collect();
         $catalogPackages = $canUseCatalog ? CatalogPackage::query()->forOrganization($invoice->organization_id)->where('active', true)->with('salesUom')->orderBy('name')->get() : collect();
+        $visitLaborCandidates = $visitLabor->candidates($invoice);
 
         $canDeleteDraft = Gate::allows('deleteDraft', $invoice) && $deletion->canDelete($invoice);
         $auditEvents = AuditEvent::query()
@@ -135,7 +232,7 @@ class InvoiceController extends Controller
             ->latest('occurred_at')
             ->get();
 
-        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'canDeleteDraft', 'auditEvents'));
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'visitLaborCandidates', 'canDeleteDraft', 'auditEvents'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse
@@ -202,7 +299,7 @@ class InvoiceController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('manage', $invoice);
-        $line = InvoiceLine::query()->where('organization_id', $invoice->organization_id)->where('invoice_id', $invoice->id)->findOrFail($line);
+        $line = $this->invoiceLine($request, $invoice, $line);
         $data = $request->validate($this->lineRules(true));
         $values = $this->lineValues($data);
         if ($line->catalog_item_type && ! empty($values['labor_rate_id'])) {
@@ -221,6 +318,34 @@ class InvoiceController extends Controller
         $workflow->updateLine($invoice, $line, $request->user(), $values);
 
         return back()->with('status', 'Invoice line updated.');
+    }
+
+    public function destroyLine(Request $request, string $invoice, string $line, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $line = $this->invoiceLine($request, $invoice, $line);
+        $data = $request->validate([
+            'line_remove_context' => ['required', Rule::in([(string) $line->id])],
+            'reason' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $workflow->removeLine($invoice, $line, $request->user(), $data['reason'] ?? null);
+
+        return redirect()->route('office.invoices.show', $invoice)->with('status', 'Invoice line removed and totals recalculated.');
+    }
+
+    public function attachVisitLabor(
+        Request $request,
+        string $invoice,
+        string $visit,
+        ApprovedVisitLaborWorkflow $workflow,
+    ): RedirectResponse {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $visit = $this->invoiceVisit($request, $invoice, $visit);
+        $workflow->attach($invoice, $visit, $request->user());
+
+        return redirect()->route('office.invoices.show', $invoice)->with('status', $visit->displayNumber().' approved labor added to the invoice.');
     }
 
     public function includeProposal(Request $request, string $invoice, string $part, InvoiceWorkflow $workflow): RedirectResponse
@@ -272,9 +397,13 @@ class InvoiceController extends Controller
             'confirm_invoice_number' => ['required', 'string', Rule::in([$invoice->invoice_number])],
             'confirm_delete' => ['accepted'],
         ]);
-        $workflow->delete($invoice, $request->user(), $data['deletion_reason']);
+        $handoff = $workflow->delete($invoice, $request->user(), $data['deletion_reason']);
 
-        return redirect()->route('office.billing-handoffs.index')->with('status', 'Unissued invoice deleted. The billing handoff is ready to create a new invoice.');
+        if ($handoff) {
+            return redirect()->route('office.billing-handoffs.index')->with('status', 'Unissued invoice deleted. The billing handoff is ready to create a new invoice.');
+        }
+
+        return redirect()->route('office.invoices.index')->with('status', 'Unissued direct invoice deleted.');
     }
 
     public function download(Request $request, string $invoice): StreamedResponse
@@ -341,5 +470,36 @@ class InvoiceController extends Controller
         }
 
         return $invoice ?? abort(404);
+    }
+
+    private function invoiceLine(Request $request, Invoice $invoice, string $id): InvoiceLine
+    {
+        $line = InvoiceLine::query()
+            ->where('organization_id', $invoice->organization_id)
+            ->where('invoice_id', $invoice->id)
+            ->find($id);
+        if (! $line && InvoiceLine::query()->whereKey($id)->exists()) {
+            app(AuditRecorder::class)->record($invoice->organization, $request->user(), 'security.cross_organization_record_denied', $invoice->organization, [
+                'record_type' => 'invoice_line',
+                'record_id' => (int) $id,
+                'invoice_id' => $invoice->id,
+            ]);
+        }
+
+        return $line ?? abort(404);
+    }
+
+    private function invoiceVisit(Request $request, Invoice $invoice, string $id): Visit
+    {
+        $visit = Visit::query()->forOrganization($invoice->organization_id)->find($id);
+        if (! $visit && Visit::query()->withTrashed()->whereKey($id)->exists()) {
+            app(AuditRecorder::class)->record($invoice->organization, $request->user(), 'security.cross_organization_record_denied', $invoice->organization, [
+                'record_type' => 'visit',
+                'record_id' => (int) $id,
+                'invoice_id' => $invoice->id,
+            ]);
+        }
+
+        return $visit ?? abort(404);
     }
 }

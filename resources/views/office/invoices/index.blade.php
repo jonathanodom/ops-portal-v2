@@ -1,14 +1,22 @@
-<x-layouts.office title="Invoices" width="workspace">
-    <x-office.page-header title="Billing" description="Move approved work into invoicing, then manage the resulting invoice ledger.">
-        @if($activeMembership->hasCapability('billing.settings.manage'))
-            <x-slot:actions><a class="button-secondary" href="{{ route('office.settings.billing.edit') }}">Billing settings</a></x-slot:actions>
+<x-layouts.office title="Billing / Invoices" width="workspace">
+    <x-office.page-header title="Billing / Invoices" description="Create invoices from approved work, prepare direct invoices, and manage balances in one workspace.">
+        @if($activeMembership->hasCapability('invoices.manage') || $activeMembership->hasCapability('billing.settings.manage'))
+            <x-slot:actions>
+                @if($activeMembership->hasCapability('invoices.manage'))<a class="button-primary" href="{{ route('office.invoices.create') }}">New invoice</a>@endif
+                @if($activeMembership->hasCapability('billing.settings.manage'))<a class="button-secondary" href="{{ route('office.settings.billing.edit') }}">Billing settings</a>@endif
+            </x-slot:actions>
         @endif
     </x-office.page-header>
-    <x-office.billing-workspace-tabs />
+    <nav class="office-workspace-tabs" aria-label="Billing and invoice status">
+        @foreach(['all'=>'All','ready_to_invoice'=>'Ready to Invoice','draft'=>'Draft','ready_for_review'=>'Ready for Review','issued'=>'Issued','paid'=>'Paid'] as $value=>$label)
+            <a href="{{ route('office.invoices.index', array_merge(request()->except(['workspace','page']), ['workspace'=>$value])) }}" @if(request('workspace', 'all') === $value) aria-current="page" @endif class="office-workspace-tab {{ request('workspace', 'all') === $value ? 'office-workspace-tab-active' : '' }}">{{ $label }}@if($value==='ready_to_invoice' && $readyHandoffCount)<span class="ml-1" aria-label="{{ $readyHandoffCount }} ready">({{ $readyHandoffCount }})</span>@endif</a>
+        @endforeach
+    </nav>
 
-    <div class="mt-5"><h2 class="text-xl font-bold text-slate-950">Invoices</h2><p class="mt-1 text-sm text-slate-600">Search issued history, open balances, drafts, and void documents. New invoices continue to originate from the Queue.</p></div>
+    <div class="mt-5"><h2 class="text-xl font-bold text-slate-950">Billing activity</h2><p class="mt-1 text-sm text-slate-600">Ready work and every invoice state share this organization-scoped ledger.</p></div>
 
     <form method="GET" class="office-filter-toolbar lg:grid-cols-3 xl:grid-cols-[minmax(180px,0.7fr)_minmax(220px,1fr)_minmax(220px,1fr)_auto]" aria-label="Invoice filters">
+        <input type="hidden" name="workspace" value="{{ request('workspace', 'all') }}">
         <div><label class="form-label" for="invoice">Invoice number</label><input class="form-input" id="invoice" name="invoice" value="{{ request('invoice') }}" placeholder="NDT-INV-"></div>
         <div><label class="form-label" for="customer">Customer</label><input class="form-input" id="customer" name="customer" value="{{ request('customer') }}" placeholder="Display or legal name"></div>
         <div><label class="form-label" for="ticket">Ticket / Project</label><input class="form-input" id="ticket" name="ticket" value="{{ request('ticket') }}" placeholder="Ticket number or title"></div>
@@ -30,9 +38,20 @@
     <div class="office-table-wrap" data-office-table>
         <table class="office-data-table invoice-index-table">
             <caption class="sr-only">Organization invoice ledger</caption>
-            <thead><tr><th scope="col">Date</th><th scope="col">Invoice #</th><th scope="col">Customer</th><th scope="col">Ticket / Project</th><th scope="col">Status</th><th scope="col">Due date</th><th scope="col" class="text-right">Total</th><th scope="col" class="text-right">Balance</th></tr></thead>
+            <thead><tr><th scope="col">Date</th><th scope="col">Invoice / Work</th><th scope="col">Customer</th><th scope="col">Ticket / Project</th><th scope="col">Status</th><th scope="col">Due date</th><th scope="col" class="text-right">Total</th><th scope="col" class="text-right">Balance / Action</th></tr></thead>
             <tbody>
-                @forelse($invoices as $invoice)
+                @foreach($readyHandoffs as $handoff)
+                    <tr data-ready-handoff-row>
+                        <td><x-local-time :value="$handoff->created_at" :timezone="$activeOrganization->timezone" format="M j, Y" /></td>
+                        <td><p class="font-bold text-slate-950">{{ $handoff->serviceTicket->ticket_number }}</p><p class="mt-0.5 text-xs text-slate-500">Approved work</p></td>
+                        <td><p class="font-semibold text-slate-950">{{ $handoff->serviceTicket->customer->display_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ $handoff->serviceTicket->serviceLocation->name }}</p></td>
+                        <td><a class="font-bold text-slate-900 hover:text-brand-blue" href="{{ route('office.service-tickets.show',$handoff->serviceTicket) }}">{{ $handoff->serviceTicket->title }}</a><p class="mt-0.5 text-xs text-slate-500">{{ $handoff->approved_time_minutes }} approved minutes</p></td>
+                        <td><span class="status-priority">Ready to Invoice</span></td>
+                        <td>&mdash;</td><td class="text-right">&mdash;</td>
+                        <td class="text-right">@if($activeMembership->hasCapability('invoices.manage'))<form method="POST" action="{{ route('office.billing-handoffs.invoice.store',$handoff) }}">@csrf<input type="hidden" name="creation_token" value="{{ Str::uuid() }}"><button class="button-primary">Create invoice</button></form>@else<span class="text-sm text-slate-500">Ready</span>@endif</td>
+                    </tr>
+                @endforeach
+                @foreach($invoices as $invoice)
                     @php
                         $balance = max(0, $invoice->balanceCents());
                         $statusClass = match($invoice->status) {'issued'=>'status-active','void'=>'status-inactive','ready_for_review'=>'status-priority',default=>'status-hold'};
@@ -42,30 +61,40 @@
                         <td><x-local-time :value="$invoice->issued_at ?? $invoice->created_at" :timezone="$activeOrganization->timezone" format="M j, Y" /></td>
                         <td><a class="inline-flex min-h-11 items-center font-bold text-brand-blue hover:text-brand-blue-deep" href="{{ route('office.invoices.show',$invoice) }}">{{ $invoice->invoice_number }}</a></td>
                         <td><p class="font-semibold text-slate-950">{{ $invoice->customer->display_name }}</p><p class="mt-0.5 text-xs text-slate-500">{{ $invoice->serviceLocation->name }}</p></td>
-                        <td><a class="font-bold text-slate-900 hover:text-brand-blue" href="{{ route('office.service-tickets.show',$invoice->serviceTicket) }}">{{ $invoice->serviceTicket->ticket_number }}</a><p class="mt-0.5 max-w-xs truncate text-xs text-slate-500">{{ $invoice->serviceTicket->title }}</p></td>
+                        <td>@if($invoice->serviceTicket)<a class="font-bold text-slate-900 hover:text-brand-blue" href="{{ route('office.service-tickets.show',$invoice->serviceTicket) }}">{{ $invoice->serviceTicket->ticket_number }}</a><p class="mt-0.5 max-w-xs truncate text-xs text-slate-500">{{ $invoice->serviceTicket->title }}</p>@else<span class="font-bold text-slate-900">Direct invoice</span><p class="mt-0.5 text-xs text-slate-500">No Service Ticket</p>@endif</td>
                         <td><span class="{{ $statusClass }}">{{ Str::headline($invoice->status) }}</span><p class="mt-1 text-xs font-semibold text-slate-500">{{ Str::headline($invoice->paymentState()) }}</p></td>
                         <td>@if($isOverdue)<span class="font-bold text-red-700">{{ $invoice->due_on->format('M j, Y') }}</span><span class="mt-1 block text-xs font-bold text-red-700">Overdue</span>@elseif($invoice->due_on){{ $invoice->due_on->format('M j, Y') }}@elseif($invoice->payment_terms==='due_on_receipt')Upon receipt @else&mdash;@endif</td>
                         <td class="text-right font-semibold text-slate-950">${{ number_format($invoice->total_cents/100,2) }}</td>
                         <td class="text-right font-bold text-slate-950">${{ number_format($balance/100,2) }}</td>
                     </tr>
-                @empty
-                    <tr><td colspan="8" class="py-10 text-center"><p class="font-bold text-slate-900">No invoices found</p><p class="mt-1 text-sm text-slate-500">Clear filters or create an invoice from a ready Billing Handoff.</p></td></tr>
-                @endforelse
+                @endforeach
+                @if($readyHandoffs->isEmpty() && $invoices->isEmpty())
+                    <tr><td colspan="8" class="py-10 text-center"><p class="font-bold text-slate-900">No billing activity found</p><p class="mt-1 text-sm text-slate-500">Clear filters or create a direct invoice.</p></td></tr>
+                @endif
             </tbody>
         </table>
     </div>
 
     <div class="office-mobile-list" data-office-mobile-list>
-        @forelse($invoices as $invoice)
+        @foreach($readyHandoffs as $handoff)
+            <article class="office-mobile-card" data-ready-handoff-card>
+                <div class="flex items-start justify-between gap-3"><div><p class="font-bold text-brand-blue">{{ $handoff->serviceTicket->ticket_number }}</p><p class="mt-1 font-semibold text-slate-950">{{ $handoff->serviceTicket->customer->display_name }}</p></div><span class="status-priority">Ready to Invoice</span></div>
+                <p class="mt-2 text-sm font-semibold text-slate-700">{{ $handoff->serviceTicket->title }} &middot; {{ $handoff->serviceTicket->serviceLocation->name }}</p>
+                <p class="mt-2 text-sm text-slate-600">{{ $handoff->approved_time_minutes }} approved minutes &middot; approved work ready for billing</p>
+                @if($activeMembership->hasCapability('invoices.manage'))<form method="POST" action="{{ route('office.billing-handoffs.invoice.store',$handoff) }}" class="mt-4">@csrf<input type="hidden" name="creation_token" value="{{ Str::uuid() }}"><button class="button-primary w-full">Create invoice</button></form>@endif
+            </article>
+        @endforeach
+        @foreach($invoices as $invoice)
             @php($balance=max(0,$invoice->balanceCents()))
             <a class="office-mobile-card" href="{{ route('office.invoices.show',$invoice) }}">
                 <div class="flex items-start justify-between gap-3"><div><p class="font-bold text-brand-blue">{{ $invoice->invoice_number }}</p><p class="mt-1 font-semibold text-slate-950">{{ $invoice->customer->display_name }}</p></div><span class="{{ $invoice->status==='issued' ? 'status-active' : ($invoice->status==='void' ? 'status-inactive' : ($invoice->status==='ready_for_review' ? 'status-priority' : 'status-hold')) }}">{{ Str::headline($invoice->status) }}</span></div>
-                <p class="mt-2 text-sm font-semibold text-slate-700">{{ $invoice->serviceTicket->ticket_number }} &middot; {{ $invoice->serviceTicket->title }}</p>
+                <p class="mt-2 text-sm font-semibold text-slate-700">@if($invoice->serviceTicket){{ $invoice->serviceTicket->ticket_number }} &middot; {{ $invoice->serviceTicket->title }}@else Direct invoice &middot; {{ $invoice->serviceLocation->name }} @endif</p>
                 <dl class="mt-3 grid grid-cols-2 gap-3 text-sm"><div><dt class="font-semibold text-slate-500">Date</dt><dd class="mt-0.5"><x-local-time :value="$invoice->issued_at ?? $invoice->created_at" :timezone="$activeOrganization->timezone" format="M j, Y" /></dd></div><div><dt class="font-semibold text-slate-500">Payment</dt><dd class="mt-0.5">{{ Str::headline($invoice->paymentState()) }}</dd></div><div><dt class="font-semibold text-slate-500">Total</dt><dd class="mt-0.5 font-bold">${{ number_format($invoice->total_cents/100,2) }}</dd></div><div><dt class="font-semibold text-slate-500">Balance</dt><dd class="mt-0.5 font-bold">${{ number_format($balance/100,2) }}</dd></div></dl>
             </a>
-        @empty
-            <div class="surface p-8 text-center"><p class="font-bold text-slate-900">No invoices found</p><p class="mt-1 text-sm text-slate-500">Clear filters or create an invoice from the Queue.</p></div>
-        @endforelse
+        @endforeach
+        @if($readyHandoffs->isEmpty() && $invoices->isEmpty())
+            <div class="surface p-8 text-center"><p class="font-bold text-slate-900">No billing activity found</p><p class="mt-1 text-sm text-slate-500">Clear filters or create a direct invoice.</p></div>
+        @endif
     </div>
     <div class="mt-5">{{ $invoices->links() }}</div>
 </x-layouts.office>

@@ -2,6 +2,7 @@
 
 namespace App\Http\Controllers\Field;
 
+use App\Domain\CloseoutReadiness;
 use App\Domain\FieldExecution;
 use App\Domain\ServiceTicketWorkflow;
 use App\Http\Controllers\Controller;
@@ -36,7 +37,7 @@ class TodayController extends Controller
         ]);
     }
 
-    public function show(Request $request, string $visit): View
+    public function show(Request $request, string $visit, CloseoutReadiness $readiness): View
     {
         $visit = $this->visit($request, $visit);
         Gate::authorize('view', $visit);
@@ -62,7 +63,11 @@ class TodayController extends Controller
             $catalogPackages = CatalogPackage::query()->forOrganization($visit->organization_id)->where('active', true)->with('salesUom')->orderBy('name')->get();
         }
 
-        return view('field.visits.show', compact('visit', 'versions', 'catalogServices', 'catalogProducts', 'catalogPackages'));
+        $closeoutReadinessErrors = $visit->currentCloseout
+            ? $readiness->errors($visit->currentCloseout)
+            : ['outcome' => 'Choose an outcome.'];
+
+        return view('field.visits.show', compact('visit', 'versions', 'catalogServices', 'catalogProducts', 'catalogPackages', 'closeoutReadinessErrors'));
     }
 
     public function transition(Request $request, string $visit, ServiceTicketWorkflow $workflow, FieldExecution $execution): RedirectResponse

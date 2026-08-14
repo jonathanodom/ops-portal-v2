@@ -11,8 +11,11 @@ use Illuminate\View\View;
 
 class BillingHandoffController extends Controller
 {
-    public function index(Request $request): View
+    public function index(Request $request): View|RedirectResponse
     {
+        if ($request->attributes->get('membership')->hasCapability('invoices.view')) {
+            return redirect()->route('office.invoices.index', ['workspace' => 'ready_to_invoice']);
+        }
         $organization = $request->attributes->get('organization');
         $handoffs = BillingHandoff::query()->forOrganization($organization->id)
             ->with(['serviceTicket.customer', 'serviceTicket.serviceLocation', 'visit', 'closeout', 'handedOffBy', 'currentInvoice.paymentTransactions'])

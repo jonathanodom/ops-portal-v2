@@ -88,6 +88,8 @@ class BrandFoundationTest extends TestCase
         }
         $this->assertStringContainsString('data-outcome-selector', $field);
         $this->assertStringContainsString('data-selected-outcome', $field);
+        $this->assertStringContainsString('data-closeout-action-footer', $field);
+        $this->assertStringContainsString('data-closeout-dialog', $field);
         $this->assertStringContainsString('Saved successfully', $field);
         $this->assertStringContainsString("navigator.onLine ? 'Online' : 'Offline'", $script);
     }

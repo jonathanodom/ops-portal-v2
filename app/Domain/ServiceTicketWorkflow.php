@@ -4,6 +4,7 @@ namespace App\Domain;
 
 use App\Models\Organization;
 use App\Models\ServiceTicket;
+use App\Models\ServiceTicketReopen;
 use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitTimeEntry;
@@ -75,6 +76,71 @@ class ServiceTicketWorkflow
         });
     }
 
+    public function reopenForCallback(ServiceTicket $ticket, User $actor, string $reason): ServiceTicket
+    {
+        if (blank($reason)) {
+            $this->audit->record($ticket->organization, $actor, 'service_ticket.reopen_rejected', $ticket, [
+                'from' => $ticket->status,
+                'to' => 'open',
+                'reason_code' => 'reason_required',
+            ]);
+            throw ValidationException::withMessages(['reason' => 'A callback reason is required.']);
+        }
+
+        try {
+            return DB::transaction(function () use ($ticket, $actor, $reason): ServiceTicket {
+                $ticket = ServiceTicket::query()
+                    ->where('organization_id', $ticket->organization_id)
+                    ->lockForUpdate()
+                    ->findOrFail($ticket->id);
+
+                if (! in_array($ticket->status, ['completed', 'canceled'], true)) {
+                    throw ValidationException::withMessages(['status' => 'Only completed or canceled Service Tickets can be reopened for callback work.']);
+                }
+
+                $reopenedAt = now();
+                $from = $ticket->status;
+                $reopen = ServiceTicketReopen::query()->create([
+                    'organization_id' => $ticket->organization_id,
+                    'service_ticket_id' => $ticket->id,
+                    'from_status' => $from,
+                    'reason' => $reason,
+                    'prior_status_reason' => $ticket->status_reason,
+                    'prior_status_changed_at' => $ticket->status_changed_at,
+                    'prior_status_changed_by_id' => $ticket->status_changed_by_id,
+                    'reopened_by_id' => $actor->id,
+                    'reopened_at' => $reopenedAt,
+                ]);
+
+                $ticket->update([
+                    'status' => 'open',
+                    'status_reason' => null,
+                    'status_changed_at' => $reopenedAt,
+                    'status_changed_by_id' => $actor->id,
+                    'updated_by_id' => $actor->id,
+                ]);
+
+                $this->audit->record($ticket->organization, $actor, 'service_ticket.reopened', $ticket, [
+                    'from' => $from,
+                    'to' => 'open',
+                    'reopen_id' => $reopen->id,
+                    'changed_fields' => ['status', 'status_reason', 'status_changed_at', 'status_changed_by_id'],
+                ]);
+
+                return $ticket->refresh();
+            });
+        } catch (ValidationException $exception) {
+            $currentStatus = ServiceTicket::query()->whereKey($ticket->id)->value('status') ?? $ticket->status;
+            $this->audit->record($ticket->organization, $actor, 'service_ticket.reopen_rejected', $ticket, [
+                'from' => $currentStatus,
+                'to' => 'open',
+                'reason_code' => 'invalid_state',
+            ]);
+
+            throw $exception;
+        }
+    }
+
     public function executeVisit(Visit $visit, string $to, User $actor): Visit
     {
         $this->assertVisitExecutionAllowed($visit, $to, $actor);
@@ -111,7 +177,7 @@ class ServiceTicketWorkflow
 
     public function cancelVisit(Visit $visit, User $actor, string $reason, bool $confirmStopActiveTimers = false): Visit
     {
-        if (in_array($visit->status, ['canceled', 'pending_closeout', 'customer_unavailable'], true)) {
+        if (in_array($visit->status, ['canceled', 'pending_closeout', 'customer_unavailable', 'approved'], true)) {
             $this->rejected($visit->serviceTicket->organization, $actor, 'visit.transition_rejected', $visit, 'canceled', 'canceled');
         }
         $this->requireTimerConfirmation($visit->serviceTicket->organization, $actor, collect([$visit->id]), $confirmStopActiveTimers, $visit);

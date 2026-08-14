@@ -49,6 +49,11 @@ class ServiceTicket extends Model
         return $this->hasMany(ServiceTicketNote::class);
     }
 
+    public function reopens(): HasMany
+    {
+        return $this->hasMany(ServiceTicketReopen::class)->latest('reopened_at')->latest('id');
+    }
+
     public function visits(): HasMany
     {
         return $this->hasMany(Visit::class);

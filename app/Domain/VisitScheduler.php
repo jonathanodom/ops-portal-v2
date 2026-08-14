@@ -47,15 +47,24 @@ class VisitScheduler
         bool $confirmConflicts = false,
     ): Visit {
         $membershipIds = array_values(array_unique(array_map('intval', $membershipIds)));
+        $leadAssignmentMode = match (count($membershipIds)) {
+            0 => 'none',
+            1 => 'automatic',
+            default => 'explicit',
+        };
+        $leadMembershipId = match (count($membershipIds)) {
+            0 => null,
+            1 => $membershipIds[0],
+            default => $leadMembershipId,
+        };
+
         if ($window === null && $membershipIds !== []) {
             throw ValidationException::withMessages(['assignees' => 'Schedule the visit before assigning a crew.']);
         }
-        if ($membershipIds !== [] && (! $leadMembershipId || ! in_array($leadMembershipId, $membershipIds, true))) {
+        if (count($membershipIds) > 1 && (! $leadMembershipId || ! in_array($leadMembershipId, $membershipIds, true))) {
             throw ValidationException::withMessages(['lead_membership_id' => 'Choose one assigned user as the lead.']);
         }
-        if (in_array($visit->status, ['en_route', 'on_site', 'canceled'], true)) {
-            throw ValidationException::withMessages(['status' => 'This visit can no longer be rescheduled or reassigned.']);
-        }
+        $this->assertSchedulable($visit);
 
         $memberships = OrganizationMembership::query()
             ->with(['roles.capabilities', 'capabilityOverrides'])
@@ -76,9 +85,10 @@ class VisitScheduler
         }
 
         return DB::transaction(function () use (
-            $visit, $window, $membershipIds, $leadMembershipId, $actor, $confirmConflicts
+            $visit, $window, $membershipIds, $leadMembershipId, $leadAssignmentMode, $actor, $confirmConflicts
         ): Visit {
             $visit = Visit::query()->lockForUpdate()->findOrFail($visit->id);
+            $this->assertSchedulable($visit);
             if ($membershipIds !== []) {
                 OrganizationMembership::query()->whereIn('id', $membershipIds)->lockForUpdate()->get();
             }
@@ -113,6 +123,7 @@ class VisitScheduler
                 'ticket_id' => $visit->service_ticket_id,
                 'assignment_ids' => $membershipIds,
                 'lead_membership_id' => $leadMembershipId,
+                'lead_assignment_mode' => $leadAssignmentMode,
                 'changed_fields' => ['scheduled_start_at', 'scheduled_end_at', 'assignments'],
             ]);
             if ($confirmConflicts && $lockedConflicts->isNotEmpty()) {
@@ -123,5 +134,16 @@ class VisitScheduler
 
             return $visit->refresh();
         });
+    }
+
+    private function assertSchedulable(Visit $visit): void
+    {
+        $visit->loadMissing('serviceTicket');
+        if (! in_array($visit->serviceTicket->status, ['open', 'on_hold'], true)) {
+            throw ValidationException::withMessages(['status' => 'Reopen this Service Ticket before scheduling callback work.']);
+        }
+        if (! in_array($visit->status, ['planned', 'scheduled', 'assigned'], true)) {
+            throw ValidationException::withMessages(['status' => 'Only pre-execution Visits can be rescheduled or reassigned.']);
+        }
     }
 }

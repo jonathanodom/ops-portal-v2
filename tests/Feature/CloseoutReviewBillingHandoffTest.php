@@ -272,7 +272,12 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", ['decision_token' => (string) Str::uuid()]);
         $handoff = $visit->serviceTicket->billingHandoff()->firstOrFail();
 
-        $this->actingAs($billing)->get('/office/billing-handoffs')->assertOk()->assertSee($visit->serviceTicket->ticket_number)->assertDontSee('Sensitive diagnosis');
+        $this->actingAs($billing)->get('/office/billing-handoffs')
+            ->assertRedirect(route('office.invoices.index', ['workspace' => 'ready_to_invoice']));
+        $this->actingAs($billing)->get(route('office.invoices.index', ['workspace' => 'ready_to_invoice']))
+            ->assertOk()
+            ->assertSee($visit->serviceTicket->ticket_number)
+            ->assertDontSee('Sensitive diagnosis');
         $this->actingAs($billing)->get('/office/closeout-reviews')->assertForbidden();
         $this->actingAs($billing)->get('/field-media/'.VisitMedia::query()->value('id'))->assertForbidden();
         $this->actingAs($billing)->post("/office/billing-handoffs/{$handoff->id}/invoice", ['creation_token' => (string) Str::uuid()])->assertRedirect();
@@ -301,7 +306,9 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->actingAs($dispatcher)->post("/office/closeout-reviews/{$closeout->id}/approve", ['decision_token' => (string) Str::uuid()])->assertForbidden();
         $this->actingAs($reviewer)->get('/office/closeout-reviews')->assertOk();
         $this->actingAs($billing)->get('/office/closeout-reviews')->assertForbidden();
-        $this->actingAs($billing)->get('/office/billing-handoffs')->assertOk();
+        $this->actingAs($billing)->get('/office/billing-handoffs')
+            ->assertRedirect(route('office.invoices.index', ['workspace' => 'ready_to_invoice']));
+        $this->actingAs($billing)->get(route('office.invoices.index'))->assertOk();
         $this->actingAs($technician)->get('/office/billing-handoffs')->assertForbidden();
     }
 

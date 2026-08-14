@@ -77,6 +77,54 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertDatabaseHas('visit_time_entries', ['visit_id' => $visit->id, 'user_id' => $lead->id, 'category' => 'on_site', 'active_user_id' => $lead->id]);
     }
 
+    public function test_closeout_action_is_context_aware_compact_and_absent_before_on_site_or_after_submission(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('assigned');
+
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('Start En Route')
+            ->assertDontSee('data-closeout-action-footer', false)
+            ->assertDontSee('data-closeout-dialog', false);
+
+        $visit->update(['status' => 'en_route']);
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('Mark On Site')
+            ->assertDontSee('data-closeout-action-footer', false);
+
+        $visit->update(['status' => 'canceled']);
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertDontSee('data-closeout-action-footer', false);
+
+        $visit->update(['status' => 'on_site']);
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('data-closeout-action-footer', false)
+            ->assertSee('data-closeout-dialog', false)
+            ->assertSee('1 item missing')
+            ->assertSee('>Review<', false);
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $this->resolvedDraft())
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('Resolved - Ready to submit')
+            ->assertSee('>Submit<', false)
+            ->assertSee('Submit closeout')
+            ->assertSee('data-closeout-dialog-close', false);
+
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()
+            ->assertSessionHasNoErrors();
+        $this->actingAs($lead)->get(route('field.visits.show', $visit->fresh()))
+            ->assertOk()
+            ->assertDontSee('data-closeout-action-footer', false)
+            ->assertDontSee('data-closeout-dialog', false);
+    }
+
     public function test_lead_only_submission_validates_evidence_stops_timers_and_is_idempotent(): void
     {
         [, $visit, $lead, $crew] = $this->executionGraph('on_site');

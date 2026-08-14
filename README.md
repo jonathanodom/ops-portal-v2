@@ -156,6 +156,8 @@ See [Phase 8 Checkpoint 5](docs/PHASE_8_CHECKPOINT_5.md) for recurring Customer 
 
 Phase 8.7 makes Catalog authoritative for new labor and trip-charge pricing while Billing Settings owns time-calculation policy. See [Catalog-Aligned Labor Billing](docs/PHASE_8_7_CATALOG_ALIGNED_LABOR_BILLING.md) for Catalog codes, rounding and minimum-time behavior, trip review/provenance, legacy compatibility, production bootstrap commands, preservation evidence, and validation results.
 
+Release Candidate V1.0 validation, data-preservation evidence, lifecycle changes, mobile before/after review, rollback notes, and the manual production acceptance gate are documented in [Release Candidate V1.0](docs/RELEASE_CANDIDATE_V1_0.md).
+
 ## Quality commands
 
 ```powershell

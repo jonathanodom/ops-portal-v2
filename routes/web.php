@@ -96,6 +96,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::put('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'update'])->whereNumber('serviceTicket')->name('service-tickets.update');
                 Route::post('/service-tickets/{serviceTicket}/notes', [ServiceTicketController::class, 'addNote'])->whereNumber('serviceTicket')->name('service-tickets.notes.store');
                 Route::post('/service-tickets/{serviceTicket}/transition', [ServiceTicketController::class, 'transition'])->whereNumber('serviceTicket')->name('service-tickets.transition');
+                Route::post('/service-tickets/{serviceTicket}/reopen', [ServiceTicketController::class, 'reopen'])->whereNumber('serviceTicket')->name('service-tickets.reopen');
                 Route::get('/service-tickets/{serviceTicket}/visits/create', [VisitController::class, 'create'])->whereNumber('serviceTicket')->name('service-tickets.visits.create');
                 Route::post('/service-tickets/{serviceTicket}/visits', [VisitController::class, 'store'])->whereNumber('serviceTicket')->name('service-tickets.visits.store');
                 Route::get('/visits/{visit}/edit', [VisitController::class, 'edit'])->whereNumber('visit')->name('visits.edit');
@@ -131,10 +132,15 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/invoices/{invoice}', [InvoiceController::class, 'show'])->whereNumber('invoice')->name('invoices.show');
             });
             Route::middleware('capability:invoices.manage')->group(function (): void {
+                Route::get('/invoices/create', [InvoiceController::class, 'create'])->name('invoices.create');
+                Route::get('/invoices/customer-options', [InvoiceController::class, 'customerOptions'])->name('invoices.customer-options');
+                Route::post('/invoices', [InvoiceController::class, 'store'])->name('invoices.store');
                 Route::put('/invoices/{invoice}', [InvoiceController::class, 'update'])->whereNumber('invoice')->name('invoices.update');
                 Route::post('/invoices/{invoice}/lines', [InvoiceController::class, 'storeLine'])->whereNumber('invoice')->name('invoices.lines.store');
                 Route::post('/invoices/{invoice}/catalog-lines', [InvoiceController::class, 'storeCatalogLine'])->whereNumber('invoice')->middleware('capability:catalog.use')->name('invoices.catalog-lines.store');
                 Route::put('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'updateLine'])->whereNumber(['invoice', 'line'])->name('invoices.lines.update');
+                Route::delete('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'destroyLine'])->whereNumber(['invoice', 'line'])->name('invoices.lines.destroy');
+                Route::post('/invoices/{invoice}/visit-labor/{visit}', [InvoiceController::class, 'attachVisitLabor'])->whereNumber(['invoice', 'visit'])->name('invoices.visit-labor.store');
                 Route::post('/invoices/{invoice}/proposals/{part}', [InvoiceController::class, 'includeProposal'])->whereNumber(['invoice', 'part'])->name('invoices.proposals.include');
                 Route::post('/invoices/{invoice}/ready', [InvoiceController::class, 'ready'])->whereNumber('invoice')->name('invoices.ready');
             });

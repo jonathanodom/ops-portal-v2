@@ -281,9 +281,10 @@ test.describe('desktop beta', () => {
 
         await page.setViewportSize({ width: 1440, height: 900 });
         await page.goto('/office/billing-handoffs');
-        await expect(page.getByRole('navigation', { name: 'Billing workspace' }).getByRole('link', { name: 'Queue' })).toHaveAttribute('aria-current', 'page');
-        await page.getByRole('navigation', { name: 'Billing workspace' }).getByRole('link', { name: 'Invoices' }).click();
-        await expect(page.getByRole('heading', { name: 'Invoices' })).toBeVisible();
+        await expect(page).toHaveURL(/\/office\/invoices\?workspace=ready_to_invoice/);
+        await expect(page.getByRole('navigation', { name: 'Billing and invoice status' }).getByRole('link', { name: /Ready to Invoice/ })).toHaveAttribute('aria-current', 'page');
+        await page.getByRole('navigation', { name: 'Billing and invoice status' }).getByRole('link', { name: 'All' }).click();
+        await expect(page.getByRole('heading', { name: 'Billing / Invoices' })).toBeVisible();
         await expect(page.locator('[data-office-table]')).toBeVisible();
         await expect(page.locator('[data-office-mobile-list]')).toBeHidden();
         await page.getByLabel('Invoice number').fill('NDT-INV-2026-0001');
@@ -515,6 +516,11 @@ test.describe('mobile beta', () => {
         await expect(workspaceNavigation.getByRole('link', { name: 'Notes & outcome' })).toBeVisible();
         await expect(workspaceNavigation.getByRole('link', { name: 'Photos' })).toBeVisible();
         await expect(workspaceNavigation.getByRole('link', { name: 'Parts' })).toBeVisible();
+        await expect(page.locator('[data-closeout-action-footer]')).toHaveCount(0);
+        await page.getByRole('button', { name: 'Start En Route' }).click();
+        await page.getByRole('button', { name: 'Mark On Site' }).click();
+        await expect(page.locator('[data-closeout-action-footer]')).toBeVisible();
+        expect(await page.locator('[data-closeout-action-footer]').evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(80);
         await page.getByText('Needs return trip', { exact: true }).click();
         await expect(page.locator('[data-selected-outcome]')).toHaveText('Needs return trip');
         await expect(page.locator('[data-selected-outcome]')).toHaveAttribute('data-outcome', 'needs_return_trip');
@@ -553,6 +559,7 @@ test.describe('mobile beta', () => {
         await expect(page.getByText('Internal billing note')).toHaveCount(0);
         expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
         await expectAccessible(page);
+        await expect(page.locator('#contact_name')).toHaveCSS('min-height', '44px');
         const shortControls = await page.locator('button, input, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
             .filter((element) => element.offsetParent !== null)
             .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)

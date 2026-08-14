@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Models\ServiceTicket;
 use App\Support\AuditRecorder;
 use App\Support\CustomerDirectorySearch;
+use App\Support\CustomerSelection;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -16,14 +17,14 @@ use Illuminate\Validation\Rule;
 
 class TicketCustomerController extends Controller
 {
-    public function index(Request $request, CustomerDirectorySearch $directory): JsonResponse
+    public function index(Request $request, CustomerDirectorySearch $directory, CustomerSelection $selection): JsonResponse
     {
         $organization = $this->organization($request);
         Gate::authorize('create', [ServiceTicket::class, $organization]);
         $data = $request->validate(['q' => ['nullable', 'string', 'max:255']]);
 
         $customers = $directory->ticketOptions($organization, $data['q'] ?? '')
-            ->map(fn (Customer $customer): array => $this->selection($customer));
+            ->map(fn (Customer $customer): array => $selection->present($customer));
 
         return response()->json(['customers' => $customers])->header('Cache-Control', 'no-store');
     }
@@ -32,6 +33,7 @@ class TicketCustomerController extends Controller
         Request $request,
         CustomerCreationWorkflow $workflow,
         AuditRecorder $audit,
+        CustomerSelection $selection,
     ): JsonResponse {
         $organization = $this->organization($request);
         Gate::authorize('create', [ServiceTicket::class, $organization]);
@@ -63,34 +65,8 @@ class TicketCustomerController extends Controller
 
         return response()->json([
             'message' => 'Customer and service location created and selected.',
-            'customer' => $this->selection($created['customer']),
+            'customer' => $selection->present($created['customer']),
         ], 201)->header('Cache-Control', 'no-store');
-    }
-
-    private function selection(Customer $customer): array
-    {
-        return [
-            'id' => $customer->id,
-            'display_name' => $customer->display_name,
-            'secondary' => $customer->phone ?: $customer->email,
-            'contacts' => $customer->contacts->map(fn ($contact): array => [
-                'id' => $contact->id,
-                'name' => $contact->name,
-                'is_preferred' => (bool) $contact->is_preferred,
-            ])->values(),
-            'locations' => $customer->serviceLocations->map(fn ($location): array => [
-                'id' => $location->id,
-                'name' => $location->name,
-                'address' => implode(', ', array_filter([
-                    $location->address_line_1,
-                    $location->city,
-                    $location->state.' '.$location->postal_code,
-                ])),
-                'timezone' => $location->timezone,
-                'is_primary' => (bool) $location->is_primary,
-                'primary_contact_id' => $location->primary_contact_id,
-            ])->values(),
-        ];
     }
 
     private function organization(Request $request): Organization

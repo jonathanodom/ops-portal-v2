@@ -4,7 +4,7 @@
     <a href="{{ route('office.service-tickets.index') }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">← Service Tickets</a>
     <div class="mt-2 flex flex-wrap items-start justify-between gap-4">
         <div><p class="font-bold text-brand-blue">{{ $ticket->ticket_number }}</p><h1 class="mt-1 text-3xl font-bold text-slate-950">{{ $ticket->title }}</h1><p class="mt-2 text-sm text-slate-500">{{ ucfirst($ticket->priority) }} priority · {{ ucfirst(str_replace('_',' ',$ticket->status)) }}</p></div>
-        @if($activeMembership->hasCapability('dispatch.manage'))<div class="flex flex-wrap gap-2"><a href="{{ route('office.service-tickets.edit', $ticket) }}" class="button-secondary">Edit ticket</a>@if($ticket->status !== 'canceled')<a href="{{ route('office.service-tickets.visits.create', $ticket) }}" class="button-primary">Add visit</a>@endif</div>@endif
+        @if($activeMembership->hasCapability('dispatch.manage'))<div class="flex flex-wrap gap-2"><a href="{{ route('office.service-tickets.edit', $ticket) }}" class="button-secondary">Edit ticket</a>@if(in_array($ticket->status, ['open', 'on_hold'], true))<a href="{{ route('office.service-tickets.visits.create', $ticket) }}" class="button-primary">Add visit</a>@endif</div>@endif
     </div>
     <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
         <div class="space-y-6">
@@ -20,7 +20,7 @@
                 @endif
                 @forelse($ticket->visits as $visit)
                     <div class="border-b border-slate-200 p-5 last:border-0">
-                        <div class="flex flex-wrap justify-between gap-3"><div><p class="font-bold">{{ $visit->displayLabel() }}</p><p class="mt-1 text-sm text-slate-600">{{ ucfirst(str_replace('_',' ',$visit->status)) }} · {{ $visit->scheduledStartLocal()?->format('M j, Y g:i A T') ?? 'Unscheduled' }}@if($visit->scheduledEndLocal()) – {{ $visit->scheduledEndLocal()->format('g:i A T') }}@endif</p><p class="mt-1 text-sm text-slate-500">{{ $visit->assignments->map(fn($a) => ($a->is_lead ? 'Lead: ' : '').$a->membership->user->name)->join(', ') ?: 'No crew assigned' }}</p></div><div class="flex flex-wrap gap-2">@if(in_array($visit->id, $executableVisitIds, true))<button type="button" class="button-primary" data-dialog-open="execution-visit-{{ $visit->id }}">Open execution</button>@endif @if($activeMembership->hasCapability('dispatch.manage') && !in_array($visit->status,['en_route','on_site','canceled']))<a class="button-secondary" href="{{ route('office.visits.edit', $visit) }}">Schedule / assign</a>@endif</div></div>
+                        <div class="flex flex-wrap justify-between gap-3"><div><p class="font-bold">{{ $visit->displayLabel() }}</p><p class="mt-1 text-sm text-slate-600">{{ ucfirst(str_replace('_',' ',$visit->status)) }} · {{ $visit->scheduledStartLocal()?->format('M j, Y g:i A T') ?? 'Unscheduled' }}@if($visit->scheduledEndLocal()) – {{ $visit->scheduledEndLocal()->format('g:i A T') }}@endif</p><p class="mt-1 text-sm text-slate-500">{{ $visit->assignments->map(fn($a) => ($a->is_lead ? 'Lead: ' : '').$a->membership->user->name)->join(', ') ?: 'No crew assigned' }}</p></div><div class="flex flex-wrap gap-2">@if(in_array($visit->id, $executableVisitIds, true))<button type="button" class="button-primary" data-dialog-open="execution-visit-{{ $visit->id }}">Open execution</button>@endif @if($activeMembership->hasCapability('dispatch.manage') && in_array($ticket->status, ['open', 'on_hold'], true) && in_array($visit->status, ['planned', 'scheduled', 'assigned'], true))<a class="button-secondary" href="{{ route('office.visits.edit', $visit) }}">Schedule / assign</a>@endif</div></div>
                         @if(in_array($visit->id, $manualCloseoutVisitIds, true))
                             <div class="mt-4">
                                 @if($visit->currentCloseout)
@@ -46,7 +46,7 @@
                                 </form>
                             </details>
                         @endif
-                        @if($activeMembership->hasCapability('dispatch.manage') && !in_array($visit->status, ['canceled', 'pending_closeout', 'customer_unavailable'], true))
+                        @if($activeMembership->hasCapability('dispatch.manage') && !in_array($visit->status, ['canceled', 'pending_closeout', 'customer_unavailable', 'approved'], true))
                             <div class="mt-4 grid gap-3 md:grid-cols-2">
                                 <form method="POST" action="{{ route('office.visits.cancel', $visit) }}" class="space-y-2">@csrf<div class="flex gap-2"><input class="form-input" name="reason" required placeholder="Cancellation reason"><button class="button-secondary">Cancel visit</button></div>@if($visit->timeEntries->whereNull('ended_at')->isNotEmpty())<label class="flex min-h-11 items-center gap-3 rounded-lg border border-orange-300 bg-orange-50 px-3"><input type="checkbox" name="confirm_stop_active_timers" value="1"><span class="text-sm font-semibold">Stop {{ $visit->timeEntries->whereNull('ended_at')->count() }} active timer(s) and cancel</span></label>@endif</form>
                                 @if($visit->status === 'on_site')<form method="POST" action="{{ route('office.visits.return', $visit) }}" class="flex gap-2">@csrf<input class="form-input" name="reason" required placeholder="Return reason"><button class="button-secondary">Create return</button></form>@endif
@@ -73,8 +73,25 @@
             @endif
         </div>
         <aside class="space-y-6">
-            @if($activeMembership->hasCapability('dispatch.manage') && $ticket->status !== 'canceled')
-                <section class="surface p-5"><h2 class="font-bold">Ticket status</h2><form method="POST" action="{{ route('office.service-tickets.transition', $ticket) }}" class="mt-4 space-y-3">@csrf<select class="form-input" name="status" aria-label="New ticket status">@if($ticket->status==='open')<option value="on_hold">Put on hold</option>@endif @if($ticket->status==='on_hold')<option value="open">Reopen</option>@endif<option value="canceled">Cancel ticket</option></select><textarea class="form-textarea" name="reason" placeholder="Reason required for hold or cancellation"></textarea>@php($activeTicketTimers = $ticket->visits->flatMap->timeEntries->whereNull('ended_at'))@if($activeTicketTimers->isNotEmpty())<label class="flex min-h-11 items-center gap-3 rounded-lg border border-orange-300 bg-orange-50 px-3"><input type="checkbox" name="confirm_stop_active_timers" value="1"><span class="text-sm font-semibold">Stop {{ $activeTicketTimers->count() }} active timer(s) if canceling</span></label>@endif<button class="button-secondary w-full">Update status</button></form></section>
+            @if($activeMembership->hasCapability('dispatch.manage'))
+                @if(in_array($ticket->status, ['completed', 'canceled'], true))
+                    <section class="surface border-orange-200 p-5">
+                        <h2 class="font-bold">{{ $ticket->status === 'completed' ? 'Reopen for Callback' : 'Reopen Service Ticket' }}</h2>
+                        <p class="mt-2 text-sm text-slate-600">Prior Visits, Closeouts, invoices, payments, and Billing Handoff history remain unchanged. Reopening permits a new callback Visit.</p>
+                        <form method="POST" action="{{ route('office.service-tickets.reopen', $ticket) }}" class="mt-4 space-y-3">
+                            @csrf
+                            <label class="form-label" for="reopen_reason">Callback reason</label>
+                            <textarea class="form-textarea" id="reopen_reason" name="reason" required maxlength="2000" aria-describedby="reopen-help">{{ old('reason') }}</textarea>
+                            <p id="reopen-help" class="text-sm text-slate-500">Required. This reason becomes part of the permanent callback history.</p>
+                            <button class="button-primary w-full">{{ $ticket->status === 'completed' ? 'Reopen for Callback' : 'Reopen Service Ticket' }}</button>
+                        </form>
+                    </section>
+                @else
+                    <section class="surface p-5"><h2 class="font-bold">Ticket status</h2><form method="POST" action="{{ route('office.service-tickets.transition', $ticket) }}" class="mt-4 space-y-3">@csrf<select class="form-input" name="status" aria-label="New ticket status">@if($ticket->status==='open')<option value="on_hold">Put on hold</option>@endif @if($ticket->status==='on_hold')<option value="open">Reopen</option>@endif<option value="canceled">Cancel ticket</option></select><textarea class="form-textarea" name="reason" placeholder="Reason required for hold or cancellation"></textarea>@php($activeTicketTimers = $ticket->visits->flatMap->timeEntries->whereNull('ended_at'))@if($activeTicketTimers->isNotEmpty())<label class="flex min-h-11 items-center gap-3 rounded-lg border border-orange-300 bg-orange-50 px-3"><input type="checkbox" name="confirm_stop_active_timers" value="1"><span class="text-sm font-semibold">Stop {{ $activeTicketTimers->count() }} active timer(s) if canceling</span></label>@endif<button class="button-secondary w-full">Update status</button></form></section>
+                @endif
+            @endif
+            @if($ticket->reopens->isNotEmpty())
+                <section class="surface p-5"><h2 class="font-bold">Callback history</h2><div class="mt-4 space-y-4">@foreach($ticket->reopens as $reopen)<article class="border-l-4 border-orange-300 pl-4"><p class="text-sm font-semibold text-slate-700">Reopened from {{ ucfirst($reopen->from_status) }}</p><p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $reopen->reason }}</p><p class="mt-2 text-xs font-semibold text-slate-500">{{ $reopen->reopenedBy?->name ?? 'Former user' }} · <x-local-time :value="$reopen->reopened_at" :timezone="$activeOrganization->timezone" /></p></article>@endforeach</div></section>
             @endif
             <section id="history" class="surface scroll-mt-6 p-5"><h2 class="font-bold">History</h2><div class="mt-4 space-y-4">@forelse($events as $event)<div><p class="text-sm font-semibold text-slate-700">{{ str_replace(['.','_'],' ',ucfirst($event->event_type)) }}</p><p class="mt-1 text-xs text-slate-500">{{ $event->actor?->name ?? 'System' }} · <x-local-time :value="$event->occurred_at" :timezone="$activeOrganization->timezone" format="M j, g:i A T" /></p></div>@empty<p class="text-sm text-slate-500">No history yet.</p>@endforelse</div></section>
         </aside>

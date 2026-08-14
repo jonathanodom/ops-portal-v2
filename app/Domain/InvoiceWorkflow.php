@@ -5,11 +5,14 @@ namespace App\Domain;
 use App\Jobs\RenderInvoicePdf;
 use App\Models\BillingHandoff;
 use App\Models\Closeout;
+use App\Models\Contact;
+use App\Models\Customer;
 use App\Models\Invoice;
 use App\Models\InvoiceAcknowledgment;
 use App\Models\InvoiceLine;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
+use App\Models\ServiceLocation;
 use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitPartProposal;
@@ -27,8 +30,128 @@ class InvoiceWorkflow
         private readonly BillableLaborCalculator $laborCalculator,
         private readonly LaborServiceResolver $laborServices,
         private readonly CatalogLineSnapshotFactory $catalogSnapshots,
+        private readonly ApprovedVisitLaborMinutes $approvedLaborMinutes,
         private readonly AuditRecorder $audit,
     ) {}
+
+    public function createDirect(
+        Organization $organization,
+        int $customerId,
+        int $serviceLocationId,
+        ?int $contactId,
+        User $actor,
+        string $token,
+    ): Invoice {
+        if ($existing = Invoice::query()->where('creation_token', $token)->first()) {
+            abort_unless(
+                $existing->isDirect()
+                && (int) $existing->organization_id === (int) $organization->id
+                && (int) $existing->customer_id === $customerId
+                && (int) $existing->service_location_id === $serviceLocationId,
+                422,
+            );
+
+            return $existing;
+        }
+
+        return DB::transaction(function () use ($organization, $customerId, $serviceLocationId, $contactId, $actor, $token): Invoice {
+            $organization = Organization::query()->lockForUpdate()->findOrFail($organization->id);
+            if ($existing = Invoice::query()->where('creation_token', $token)->first()) {
+                abort_unless(
+                    $existing->isDirect()
+                    && (int) $existing->organization_id === (int) $organization->id
+                    && (int) $existing->customer_id === $customerId
+                    && (int) $existing->service_location_id === $serviceLocationId,
+                    422,
+                );
+
+                return $existing;
+            }
+            $customer = Customer::query()
+                ->forOrganization($organization->id)
+                ->where('status', 'active')
+                ->lockForUpdate()
+                ->find($customerId);
+            if (! $customer) {
+                throw ValidationException::withMessages(['customer_id' => 'Select an active customer in this organization.']);
+            }
+            $location = ServiceLocation::query()
+                ->where('organization_id', $organization->id)
+                ->where('customer_id', $customer->id)
+                ->where('active', true)
+                ->lockForUpdate()
+                ->find($serviceLocationId);
+            if (! $location) {
+                throw ValidationException::withMessages(['service_location_id' => 'Select an active location belonging to this customer.']);
+            }
+
+            $contact = null;
+            if ($contactId !== null) {
+                $contact = Contact::query()
+                    ->where('organization_id', $organization->id)
+                    ->where('customer_id', $customer->id)
+                    ->where('active', true)
+                    ->lockForUpdate()
+                    ->find($contactId);
+                if (! $contact) {
+                    throw ValidationException::withMessages(['contact_id' => 'Select an active billing contact belonging to this customer.']);
+                }
+            } else {
+                $contact = Contact::query()
+                    ->where('organization_id', $organization->id)
+                    ->where('customer_id', $customer->id)
+                    ->where('active', true)
+                    ->where(function ($query) use ($location): void {
+                        $query->whereKey($location->primary_contact_id)
+                            ->orWhere('is_preferred', true);
+                    })
+                    ->orderByRaw('CASE WHEN id = ? THEN 0 ELSE 1 END', [$location->primary_contact_id ?? 0])
+                    ->lockForUpdate()
+                    ->first();
+            }
+
+            $settings = OrganizationBillingSetting::query()->firstOrCreate(
+                ['organization_id' => $organization->id],
+                ['default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt'],
+            );
+            $invoice = Invoice::query()->create([
+                'organization_id' => $organization->id,
+                'customer_id' => $customer->id,
+                'service_location_id' => $location->id,
+                'service_ticket_id' => null,
+                'billing_handoff_id' => null,
+                'generation' => 1,
+                'invoice_number' => $this->numbers->next($organization),
+                'status' => 'draft',
+                'currency' => $settings->default_currency ?? 'USD',
+                'payment_terms' => $settings->default_payment_terms ?? 'due_on_receipt',
+                'billing_name' => $customer->display_name,
+                'billing_legal_name' => $customer->legal_name,
+                'billing_contact_name' => $contact?->name,
+                'billing_email' => $contact?->email ?? $customer->email,
+                'billing_phone' => $contact?->phone ?? $customer->phone,
+                'billing_address_line_1' => $location->address_line_1,
+                'billing_address_line_2' => $location->address_line_2,
+                'billing_city' => $location->city,
+                'billing_state' => $location->state,
+                'billing_postal_code' => $location->postal_code,
+                ...$this->sellerSnapshot($organization),
+                'tax_rate_basis_points' => $settings->default_tax_rate_basis_points ?? 0,
+                'creation_token' => $token,
+                'created_by_id' => $actor->id,
+                'updated_by_id' => $actor->id,
+            ]);
+            $this->audit->record($organization, $actor, 'invoice.direct_created', $invoice, [
+                'invoice_id' => $invoice->id,
+                'customer_id' => $customer->id,
+                'service_location_id' => $location->id,
+                'contact_id' => $contact?->id,
+                'source_type' => 'direct',
+            ]);
+
+            return $invoice->load(['customer', 'serviceLocation', 'lines']);
+        });
+    }
 
     public function createFromHandoff(BillingHandoff $handoff, User $actor, string $token): Invoice
     {
@@ -60,7 +183,7 @@ class InvoiceWorkflow
                 throw ValidationException::withMessages(['handoff' => 'No eligible approved closeout versions were found.']);
             }
             $settings = OrganizationBillingSetting::query()->firstOrCreate(['organization_id' => $ticket->organization_id], ['default_currency' => 'USD', 'default_payment_terms' => 'due_on_receipt']);
-            $hasLabor = $closeouts->contains(fn (Closeout $closeout) => $this->effectiveMinutes($closeout) > 0);
+            $hasLabor = $closeouts->contains(fn (Closeout $closeout) => $this->approvedLaborMinutes->calculate($closeout) > 0);
             $laborService = $hasLabor ? $this->laborServices->resolve($ticket->organization_id) : null;
             $contact = $ticket->contact?->active ? $ticket->contact : $ticket->customer->preferredContact;
             $invoice = Invoice::query()->create([
@@ -95,7 +218,7 @@ class InvoiceWorkflow
             foreach ($closeouts as $closeout) {
                 $review = $closeout->reviews->firstWhere('decision', 'approved');
                 $invoice->closeoutLinks()->create(['organization_id' => $ticket->organization_id, 'visit_id' => $closeout->visit_id, 'closeout_id' => $closeout->id, 'closeout_review_id' => $review->id]);
-                $minutes = $this->effectiveMinutes($closeout);
+                $minutes = $this->approvedLaborMinutes->calculate($closeout);
                 if ($minutes > 0) {
                     $calculation = $this->laborCalculator->calculate(
                         $minutes,
@@ -286,6 +409,54 @@ class InvoiceWorkflow
         });
     }
 
+    public function removeLine(Invoice $invoice, InvoiceLine $line, User $actor, ?string $reason = null): Invoice
+    {
+        return DB::transaction(function () use ($invoice, $line, $actor, $reason): Invoice {
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            $this->assertEditable($invoice);
+            $line = InvoiceLine::query()
+                ->where('organization_id', $invoice->organization_id)
+                ->where('invoice_id', $invoice->id)
+                ->lockForUpdate()
+                ->findOrFail($line->id);
+
+            $provenance = $this->lineRemovalProvenance($line);
+            $hasOperationalSource = collect($provenance)
+                ->except(['labor_rate_id', 'catalog_item_type', 'catalog_source_id', 'catalog_service_variant_id', 'catalog_code_snapshot'])
+                ->contains(fn (mixed $value): bool => $value !== null);
+            if ($hasOperationalSource && blank($reason)) {
+                throw ValidationException::withMessages(['reason' => 'Explain why this approved-work charge is being removed.']);
+            }
+
+            $snapshot = [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'invoice_status' => $invoice->status,
+                'invoice_line_id' => $line->id,
+                'line_type' => $line->line_type,
+                'description' => $line->description,
+                'quantity_millis' => (int) $line->quantity_millis,
+                'unit' => $line->unit,
+                'unit_price_cents' => $line->unit_price_cents === null ? null : (int) $line->unit_price_cents,
+                'subtotal_cents' => (int) $line->subtotal_cents,
+                'discount_cents' => (int) $line->discount_cents,
+                'tax_cents' => (int) $line->tax_cents,
+                'amount_cents' => (int) $line->total_cents,
+                'source_provenance' => $provenance,
+                'reason' => filled($reason) ? $reason : 'Removed while editing the invoice.',
+                'changed_fields' => ['lines', 'subtotal_cents', 'discount_total_cents', 'tax_total_cents', 'total_cents'],
+            ];
+
+            $line->delete();
+            $invoice = $this->calculator->recalculate($invoice);
+            $this->audit->record($invoice->organization, $actor, 'invoice.line_removed', $invoice, $snapshot + [
+                'recalculated_total_cents' => (int) $invoice->total_cents,
+            ]);
+
+            return $invoice;
+        });
+    }
+
     public function includeProposal(Invoice $invoice, VisitPartProposal $part, User $actor, string $reason): InvoiceLine
     {
         return DB::transaction(function () use ($invoice, $part, $actor, $reason): InvoiceLine {
@@ -400,8 +571,13 @@ class InvoiceWorkflow
             if ($invoice->status === 'void') {
                 return Invoice::query()->where('reissue_of_invoice_id', $invoice->id)->latest('generation')->firstOrFail();
             }
-            $handoff = BillingHandoff::query()->lockForUpdate()->findOrFail($invoice->billing_handoff_id);
-            abort_unless((int) $handoff->current_invoice_id === (int) $invoice->id, 409);
+            $handoff = null;
+            if ($invoice->billing_handoff_id !== null) {
+                $handoff = BillingHandoff::query()->lockForUpdate()->findOrFail($invoice->billing_handoff_id);
+                abort_unless((int) $handoff->current_invoice_id === (int) $invoice->id, 409);
+            } else {
+                abort_unless($invoice->service_ticket_id === null, 409);
+            }
             $invoice->update(['status' => 'void', 'voided_at' => now(), 'voided_by_id' => $actor->id, 'void_reason' => $reason, 'void_token' => $token]);
             $copy = Arr::except($invoice->getAttributes(), ['id', 'invoice_number', 'status', 'generation', 'reissue_of_invoice_id', 'creation_token', 'issue_token', 'issued_at', 'issued_by_id', 'voided_at', 'voided_by_id', 'void_reason', 'void_token', 'pdf_status', 'pdf_disk', 'pdf_key', 'pdf_sha256', 'pdf_failure_code', 'electronic_payment_provider', 'payment_provider_locked_at', 'created_at', 'updated_at']);
             $replacement = Invoice::query()->create($copy + [
@@ -417,26 +593,11 @@ class InvoiceWorkflow
             foreach ($invoice->closeoutLinks as $link) {
                 $replacement->closeoutLinks()->create(Arr::except($link->getAttributes(), ['id', 'invoice_id', 'created_at', 'updated_at']) + ['organization_id' => $invoice->organization_id]);
             }
-            $handoff->update(['current_invoice_id' => $replacement->id]);
+            $handoff?->update(['current_invoice_id' => $replacement->id]);
             $this->audit->record($invoice->organization, $actor, 'invoice.voided', $invoice, ['invoice_id' => $invoice->id, 'replacement_invoice_id' => $replacement->id, 'changed_fields' => ['status', 'voided_at']]);
             $this->audit->record($invoice->organization, $actor, 'invoice.reissued', $replacement, ['invoice_id' => $replacement->id, 'reissue_of_invoice_id' => $invoice->id]);
 
             return $replacement;
-        });
-    }
-
-    private function effectiveMinutes(Closeout $closeout): int
-    {
-        $review = $closeout->reviews->firstWhere('decision', 'approved');
-        $adjustments = $review->adjustments->where('type', 'time')->keyBy('visit_time_entry_id');
-
-        return (int) $closeout->visit->timeEntries->whereIn('category', ['on_site', 'other'])->sum(function ($entry) use ($adjustments): int {
-            $adjustment = $adjustments->get($entry->id);
-            if ($adjustment?->excluded || ! $entry->ended_at) {
-                return 0;
-            }
-
-            return $adjustment?->approved_minutes ?? (int) ceil($entry->started_at->diffInSeconds($entry->ended_at) / 60);
         });
     }
 
@@ -465,6 +626,24 @@ class InvoiceWorkflow
             'product' => 'part',
             default => 'part',
         };
+    }
+
+    /** @return array<string, int|string|null> */
+    private function lineRemovalProvenance(InvoiceLine $line): array
+    {
+        return [
+            'source_visit_id' => $line->source_visit_id,
+            'source_closeout_id' => $line->source_closeout_id,
+            'source_review_id' => $line->source_review_id,
+            'source_time_entry_id' => $line->source_time_entry_id,
+            'source_travel_seconds' => $line->source_travel_seconds,
+            'source_part_proposal_id' => $line->source_part_proposal_id,
+            'labor_rate_id' => $line->labor_rate_id,
+            'catalog_item_type' => $line->catalog_item_type,
+            'catalog_source_id' => $line->catalog_service_id ?: ($line->catalog_product_id ?: $line->catalog_package_id),
+            'catalog_service_variant_id' => $line->catalog_service_variant_id,
+            'catalog_code_snapshot' => $line->catalog_code_snapshot,
+        ];
     }
 
     /** @return array<string, mixed> */
@@ -522,12 +701,13 @@ class InvoiceWorkflow
 
     private function refreshLegacyLaborDescriptions(Invoice $invoice): void
     {
-        $lines = $invoice->lines()->where('line_type', 'labor')->whereNotNull('source_visit_id')->with('sourceVisit')->get();
+        $lines = $invoice->lines()->where('line_type', 'labor')->whereNotNull('source_visit_id')->with('sourceVisit.serviceTicket')->get();
         $multipleVisits = $lines->pluck('source_visit_id')->unique()->count() > 1;
         foreach ($lines as $line) {
-            $legacy = "Visit #{$line->source_visit_id} — {$invoice->serviceTicket->ticket_number}: {$invoice->serviceTicket->title}";
-            if ($line->description === $legacy && $line->sourceVisit) {
-                $line->update(['description' => $this->customerLaborDescription($line->sourceVisit, $invoice->serviceTicket->title, $multipleVisits)]);
+            $ticket = $line->sourceVisit?->serviceTicket;
+            $legacy = $ticket ? "Visit #{$line->source_visit_id} — {$ticket->ticket_number}: {$ticket->title}" : null;
+            if ($legacy && $line->description === $legacy) {
+                $line->update(['description' => $this->customerLaborDescription($line->sourceVisit, $ticket->title, $multipleVisits)]);
             }
         }
     }
