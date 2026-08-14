@@ -63,9 +63,11 @@ Validation recorded on August 13, 2026:
 | Accessibility | No serious or critical axe violations in covered desktop/mobile workflows |
 | Responsive/mobile | 390×844 Field, invoice presentation, and quick-customer flows passed; 44 px controls and no horizontal overflow verified |
 | Diff checks | `git diff --check` passed |
-| MySQL 8.4 / GitHub Actions | Required on the draft PR; local Docker is unavailable |
+| MySQL 8.4 / GitHub Actions | [Run 31770756699](https://github.com/jonathanodom/ops-portal-v2/actions/runs/31770756699) passed on `2b88529`; migrations, 2,349 assertions, backup/restore, beta fixtures, Playwright/axe, and diff checks passed |
 
 The browser contract now follows the unified Billing redirect and verifies that Closeout is absent while Assigned, appears after On Site, remains compact, and continues to enforce offline write prevention. Playwright uses one worker because the beta suite intentionally shares one seeded organization and throttled users.
+
+The first draft-PR run found the intentional reopen timeline had moved MySQL ticket-detail queries from the pre-RC ceiling of 31 to 32. The focused correction changed only that ceiling; the 750 ms response budget and every other query ceiling stayed unchanged. The green rerun recorded MySQL p95/query results of Today 12.0 ms/12, Dispatch 14.0 ms/10, ticket detail 29.1 ms/32, review detail 18.8 ms/28, and media first byte 0.0 ms.
 
 ## Mobile visual review
 
@@ -101,4 +103,4 @@ Jonathan must complete and sign off on these scenarios before deployment:
 
 ## Release recommendation
 
-`RC needs another pass` until the draft PR's MySQL 8.4 GitHub Actions run is green and Jonathan completes the manual production acceptance gate above. Automated local validation is green; this document does not authorize deployment by itself.
+`RC needs another pass` until Jonathan completes the manual production acceptance gate above. Automated local validation and the draft PR's MySQL 8.4 GitHub Actions run are green; this document does not authorize deployment by itself.
