@@ -92,9 +92,9 @@ class CloseoutReviewController extends Controller
             throw $exception;
         }
 
-        $ticketCompleted = $closeout->visit->serviceTicket()->where('status', 'completed')->exists();
-
         $ticket = $closeout->visit->serviceTicket;
+        $ticketCompleted = $ticket->status === 'completed';
+
         return redirect()->route('office.closeout-reviews.index')->with(
             'status',
             $ticketCompleted
