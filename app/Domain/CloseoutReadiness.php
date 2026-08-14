@@ -1,0 +1,81 @@
+<?php
+
+namespace App\Domain;
+
+use App\Models\Closeout;
+use App\Models\VisitMedia;
+
+class CloseoutReadiness
+{
+    /** @return array<string, string> */
+    public function errors(Closeout $closeout): array
+    {
+        $errors = [];
+        if (! $closeout->outcome) {
+            $errors['outcome'] = 'Choose an outcome.';
+        }
+        if (in_array($closeout->outcome, ['resolved', 'needs_return_trip'], true)) {
+            if (blank($closeout->diagnosis)) {
+                $errors['diagnosis'] = 'Diagnosis is required.';
+            }
+            if (blank($closeout->work_performed)) {
+                $errors['work_performed'] = 'Work performed is required.';
+            }
+        }
+        if ($closeout->outcome === 'needs_return_trip') {
+            foreach (['return_reason', 'unfinished_work', 'needed_equipment', 'recommendations'] as $field) {
+                if (blank($closeout->$field)) {
+                    $errors[$field] = 'Required for a return trip.';
+                }
+            }
+        }
+        if ($closeout->outcome === 'on_hold') {
+            if (blank($closeout->hold_reason)) {
+                $errors['hold_reason'] = 'Hold reason is required.';
+            }
+            if (blank($closeout->recommendations)) {
+                $errors['recommendations'] = 'Recommendations are required when work is placed on hold.';
+            }
+        }
+        if ($closeout->outcome === 'customer_unavailable') {
+            if (blank($closeout->unavailable_category)) {
+                $errors['unavailable_category'] = 'Choose a customer unavailable reason.';
+            }
+            if (blank($closeout->unavailable_detail)) {
+                $errors['unavailable_detail'] = 'Customer unavailable details are required.';
+            }
+        }
+        if (in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true) && blank($closeout->representative_name)) {
+            if (blank($closeout->ack_unavailable_category) && blank($closeout->ack_unavailable_detail)) {
+                $errors['representative_name'] = 'Enter a customer or point-of-contact name, or complete the acknowledgment fallback.';
+            } elseif (blank($closeout->ack_unavailable_category)) {
+                $errors['ack_unavailable_category'] = 'Choose why acknowledgment could not be obtained.';
+            } elseif (blank($closeout->ack_unavailable_detail)) {
+                $errors['ack_unavailable_detail'] = 'Acknowledgment fallback details are required.';
+            }
+        }
+        if ($closeout->outcome === 'resolved' && ! VisitMedia::query()->whereIn('closeout_id', $this->versionIds($closeout))->where('state', 'stored')->exists()) {
+            if (blank($closeout->no_photo_category) && blank($closeout->no_photo_detail)) {
+                $errors['no_photo_category'] = 'Add a photo or complete the no-photo fallback.';
+            } elseif (blank($closeout->no_photo_category)) {
+                $errors['no_photo_category'] = 'Choose why photo evidence could not be provided.';
+            } elseif (blank($closeout->no_photo_detail)) {
+                $errors['no_photo_detail'] = 'No-photo fallback details are required.';
+            }
+        }
+
+        return $errors;
+    }
+
+    /** @return array<int, int> */
+    private function versionIds(Closeout $closeout): array
+    {
+        $ids = [];
+        do {
+            $ids[] = $closeout->id;
+            $closeout = $closeout->parent;
+        } while ($closeout);
+
+        return $ids;
+    }
+}

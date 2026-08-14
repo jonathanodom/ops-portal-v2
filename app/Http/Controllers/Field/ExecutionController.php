@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Field;
 
 use App\Domain\CatalogLineSnapshotFactory;
+use App\Domain\CloseoutReadiness;
 use App\Domain\FieldExecution;
 use App\Http\Controllers\Controller;
 use App\Jobs\DeleteRemovedVisitMedia;
@@ -75,7 +76,12 @@ class ExecutionController extends Controller
 
             $versions = Closeout::query()->where('visit_id', $v->id)->where('organization_id', $v->organization_id)->with(['reviews.reviewer', 'media', 'parts'])->orderBy('version')->get();
 
-            return response()->view('field.visits.show', ['visit' => $v, 'versions' => $versions, 'draftConflict' => true], 409);
+            return response()->view('field.visits.show', [
+                'visit' => $v,
+                'versions' => $versions,
+                'draftConflict' => true,
+                'closeoutReadinessErrors' => app(CloseoutReadiness::class)->errors($v->currentCloseout),
+            ], 409);
         }
 
         return back()->with('status', 'Draft saved.');

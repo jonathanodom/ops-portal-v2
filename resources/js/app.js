@@ -52,6 +52,27 @@ document.querySelectorAll('[data-outcome-selector]').forEach((selector) => {
     updateOutcome();
 });
 
+const closeoutDialog = document.querySelector('[data-closeout-dialog]');
+if (closeoutDialog) {
+    let launcher = document.querySelector('[data-closeout-dialog-open]');
+    const open = (button) => {
+        launcher = button ?? launcher;
+        if (!closeoutDialog.open) closeoutDialog.showModal();
+        requestAnimationFrame(() => closeoutDialog.querySelector('[aria-invalid="true"], input:not([type="hidden"]), button')?.focus());
+    };
+    const close = () => {
+        if (closeoutDialog.open) closeoutDialog.close();
+        launcher?.focus();
+    };
+    document.querySelectorAll('[data-closeout-dialog-open]').forEach((button) => button.addEventListener('click', () => open(button)));
+    closeoutDialog.querySelectorAll('[data-closeout-dialog-close]').forEach((button) => button.addEventListener('click', close));
+    closeoutDialog.addEventListener('cancel', (event) => {
+        event.preventDefault();
+        close();
+    });
+    if (closeoutDialog.dataset.autoOpen === 'true') open(launcher);
+}
+
 document.querySelectorAll('[data-dirty-form]').forEach((form) => {
     let dirty = false;
     form.addEventListener('input', () => dirty = true);

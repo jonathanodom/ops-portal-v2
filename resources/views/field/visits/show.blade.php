@@ -7,6 +7,9 @@
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
         $inheritedMedia = ($versions ?? collect())->where('id','!=',$closeout?->id)->flatMap->media->where('state','stored');
+        $closeoutMissing = collect($closeoutReadinessErrors ?? ['outcome' => 'Choose an outcome.']);
+        $showCloseoutAction = in_array($visit->status, ['on_site', 'returned_for_correction'], true) && (! $closeout || $closeout->status === 'draft');
+        $canSubmitCloseout = $activeMembership->hasCapability('visits.execute_any') || $visit->assignments->contains(fn ($assignment) => $assignment->membership->user_id === auth()->id() && $assignment->is_lead);
     @endphp
 
     @if (session('status'))
@@ -314,22 +317,57 @@
                 </form>
             </section>
 
-            <section class="sticky bottom-24 mt-4 rounded-xl border border-orange-300 bg-white p-4">
-                <form method="POST" action="{{ route('field.visits.submit', $visit) }}">
-                    @csrf
-                    <input type="hidden" name="submission_token" value="{{ Str::uuid() }}">
-                    <div class="mb-3 flex items-center justify-between gap-3 border-b border-orange-200 pb-3">
-                        <span class="text-sm font-semibold text-slate-600">Selected outcome</span>
-                        <span data-selected-outcome data-outcome="{{ $selectedOutcome }}" class="field-selected-outcome">{{ $outcomeLabels[$selectedOutcome] ?? 'Not selected' }}</span>
+            @if($showCloseoutAction)
+                <div class="field-closeout-action" data-closeout-action-footer>
+                    <div class="mx-auto flex min-h-16 max-w-2xl items-center justify-between gap-3 px-3 py-2">
+                        <div class="min-w-0">
+                            <p class="truncate text-sm font-bold text-slate-950">{{ $closeoutMissing->isEmpty() ? (($outcomeLabels[$selectedOutcome] ?? 'Closeout').' - Ready to submit') : 'Closeout - '.($closeoutMissing->count() === 1 ? '1 item missing' : $closeoutMissing->count().' items missing') }}</p>
+                            <p class="truncate text-xs text-slate-600">{{ $closeoutMissing->isEmpty() ? 'Review the final acknowledgment.' : 'Review what is still required.' }}</p>
+                        </div>
+                        <button type="button" class="{{ $closeoutMissing->isEmpty() && $canSubmitCloseout ? 'button-action' : 'button-secondary' }} shrink-0" data-closeout-dialog-open>{{ $closeoutMissing->isEmpty() && $canSubmitCloseout ? 'Submit' : 'Review' }}</button>
                     </div>
-                    <label class="flex min-h-11 gap-3 rounded-lg @error('acknowledgment_confirmed') border border-red-500 bg-red-50 p-3 @enderror">
-                        <input type="checkbox" name="acknowledgment_confirmed" value="1" @error('acknowledgment_confirmed') aria-invalid="true" aria-describedby="acknowledgment_confirmed-error" @enderror>
-                        <span class="text-sm font-semibold">I confirm the work and outcome were reviewed with the customer or point of contact named above.</span>
-                    </label>
-                    <x-field-error field="acknowledgment_confirmed" />
-                    <button class="button-action mt-3 w-full">Submit closeout</button>
-                </form>
-            </section>
+                </div>
+
+                <dialog id="field-closeout-review-dialog" class="field-closeout-dialog" data-closeout-dialog data-auto-open="{{ $errors->has('acknowledgment_confirmed') ? 'true' : 'false' }}" aria-labelledby="field-closeout-review-title">
+                    <div class="field-closeout-dialog-panel">
+                        <header class="field-closeout-dialog-header">
+                            <div><p class="text-sm font-bold text-brand-blue">{{ $visit->displayLabel() }}</p><h2 id="field-closeout-review-title" class="mt-1 text-xl font-bold text-slate-950">Review closeout</h2></div>
+                            <button type="button" class="button-secondary min-w-11 px-3" data-closeout-dialog-close aria-label="Close closeout review">Close</button>
+                        </header>
+                        <form method="POST" action="{{ route('field.visits.submit', $visit) }}" class="contents">
+                            @csrf
+                            <input type="hidden" name="submission_token" value="{{ Str::uuid() }}">
+                            <div class="field-closeout-dialog-body">
+                                <div class="flex items-center justify-between gap-3 rounded-lg border border-slate-200 bg-slate-50 p-4">
+                                    <span class="text-sm font-semibold text-slate-600">Selected outcome</span>
+                                    <span data-selected-outcome data-outcome="{{ $selectedOutcome }}" class="field-selected-outcome">{{ $outcomeLabels[$selectedOutcome] ?? 'Not selected' }}</span>
+                                </div>
+                                @if($closeoutMissing->isNotEmpty())
+                                    <section class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4" aria-labelledby="closeout-missing-heading">
+                                        <h3 id="closeout-missing-heading" class="font-bold text-amber-950">{{ $closeoutMissing->count() === 1 ? '1 required item remains' : $closeoutMissing->count().' required items remain' }}</h3>
+                                        <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-950">@foreach($closeoutMissing as $message)<li>{{ $message }}</li>@endforeach</ul>
+                                        <a href="#visit-closeout" class="button-secondary mt-4 w-full" data-closeout-dialog-close>Review notes &amp; outcome</a>
+                                    </section>
+                                @elseif($closeout?->representative_name)
+                                    <label class="mt-5 flex min-h-11 gap-3 rounded-lg border border-slate-300 p-4 @error('acknowledgment_confirmed') border-red-500 bg-red-50 @enderror">
+                                        <input type="checkbox" name="acknowledgment_confirmed" value="1" required @error('acknowledgment_confirmed') aria-invalid="true" aria-describedby="acknowledgment_confirmed-error" @enderror>
+                                        <span class="text-sm font-semibold">I confirm the work and outcome were reviewed with {{ $closeout->representative_name }}.</span>
+                                    </label>
+                                    <x-field-error field="acknowledgment_confirmed" />
+                                @else
+                                    <div class="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">The saved outcome, acknowledgment fallback, and evidence requirements are ready.</div>
+                                @endif
+                                @unless($canSubmitCloseout)<p class="mt-5 rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-700">Only the assigned lead or an authorized supervisor can submit this shared closeout.</p>@endunless
+                            </div>
+                            <footer class="field-closeout-dialog-footer">
+                                <button type="button" class="button-secondary" data-closeout-dialog-close>Continue editing</button>
+                                @if($closeoutMissing->isEmpty() && $canSubmitCloseout)<button class="button-action">Submit closeout</button>@endif
+                            </footer>
+                        </form>
+                    </div>
+                </dialog>
+                <div class="h-16" aria-hidden="true"></div>
+            @endif
         @endif
         @endif
     @endcan
