@@ -92,6 +92,32 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         Event::assertDispatched(BillingHandoffCreated::class);
     }
 
+    public function test_non_billable_site_survey_completes_without_billing_handoff_or_invoice(): void
+    {
+        [$organization, $visit, $closeout] = $this->submittedCloseout();
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        $visit->serviceTicket->update([
+            'purpose' => 'site_survey',
+            'billing_disposition' => 'non_billable',
+        ]);
+
+        $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/approve", [
+            'decision_token' => (string) Str::uuid(),
+        ])->assertRedirect()->assertSessionHasNoErrors()
+            ->assertSessionHas('status', fn (string $status) => str_contains($status, 'Service Ticket is complete'));
+
+        $ticket = $visit->serviceTicket->fresh();
+        $this->assertSame('completed', $ticket->status);
+        $this->assertSame('site_survey', $ticket->purpose);
+        $this->assertSame('non_billable', $ticket->billing_disposition);
+        $this->assertDatabaseCount('billing_handoffs', 0);
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'service_ticket.completed_non_billable',
+            'subject_id' => $ticket->id,
+        ]);
+    }
+
     public function test_correction_resubmission_inherits_acknowledgment_and_photo_without_duplicate_return_work(): void
     {
         [$organization, $visit, $closeout, $technician] = $this->submittedCloseout();

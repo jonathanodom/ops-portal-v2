@@ -94,10 +94,13 @@ class CloseoutReviewController extends Controller
 
         $ticketCompleted = $closeout->visit->serviceTicket()->where('status', 'completed')->exists();
 
+        $ticket = $closeout->visit->serviceTicket;
         return redirect()->route('office.closeout-reviews.index')->with(
             'status',
             $ticketCompleted
-                ? 'Closeout approved. The Service Ticket is complete and its billing handoff is ready.'
+                ? ($ticket->billing_disposition === 'billable'
+                    ? 'Closeout approved. The Service Ticket is complete and its billing handoff is ready.'
+                    : 'Closeout approved. The Service Ticket is complete with no Billing Handoff required.')
                 : 'Closeout approved. The Service Ticket remains open for its remaining visit or disposition.',
         );
     }
