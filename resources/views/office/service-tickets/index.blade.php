@@ -5,7 +5,7 @@
         @endif
     </x-office.page-header>
 
-    <form method="GET" class="office-filter-toolbar xl:grid-cols-[minmax(280px,1.5fr)_repeat(6,minmax(140px,0.65fr))_auto]" aria-label="Service Ticket filters">
+    <form method="GET" class="office-filter-toolbar xl:grid-cols-3 2xl:grid-cols-[minmax(280px,1.5fr)_repeat(6,minmax(120px,0.65fr))_auto]" aria-label="Service Ticket filters">
         <div><label class="form-label" for="search">Search</label><input class="form-input" id="search" name="search" value="{{ request('search') }}" placeholder="Ticket, customer, location, or title"></div>
         <div><label class="form-label" for="status">Status</label><select class="form-input" id="status" name="status"><option value="">All statuses</option>@foreach($statuses as $value=>$label)<option value="{{ $value }}" @selected(request('status')===$value)>{{ $label }}</option>@endforeach</select></div>
         <div><label class="form-label" for="priority">Priority</label><select class="form-input" id="priority" name="priority"><option value="">All priorities</option>@foreach($priorities as $value=>$label)<option value="{{ $value }}" @selected(request('priority')===$value)>{{ $label }}</option>@endforeach</select></div>
