@@ -286,9 +286,13 @@ class InvoiceController extends Controller
             'confirm_invoice_number' => ['required', 'string', Rule::in([$invoice->invoice_number])],
             'confirm_delete' => ['accepted'],
         ]);
-        $workflow->delete($invoice, $request->user(), $data['deletion_reason']);
+        $handoff = $workflow->delete($invoice, $request->user(), $data['deletion_reason']);
 
-        return redirect()->route('office.billing-handoffs.index')->with('status', 'Unissued invoice deleted. The billing handoff is ready to create a new invoice.');
+        if ($handoff) {
+            return redirect()->route('office.billing-handoffs.index')->with('status', 'Unissued invoice deleted. The billing handoff is ready to create a new invoice.');
+        }
+
+        return redirect()->route('office.invoices.index')->with('status', 'Unissued direct invoice deleted.');
     }
 
     public function download(Request $request, string $invoice): StreamedResponse

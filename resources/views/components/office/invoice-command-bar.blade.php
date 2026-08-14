@@ -14,7 +14,7 @@
                 <h1 class="truncate text-lg font-bold text-slate-950 sm:text-xl">{{ $invoice->invoice_number }}</h1>
                 <span class="{{ $statusClass }}">{{ $displayStatus }}</span>
             </div>
-            <p class="mt-1 truncate text-sm text-slate-600">{{ $invoice->billing_name }} <span aria-hidden="true">&middot;</span> {{ $invoice->serviceTicket->ticket_number }}</p>
+            <p class="mt-1 truncate text-sm text-slate-600">{{ $invoice->billing_name }} <span aria-hidden="true">&middot;</span> {{ $invoice->serviceTicket?->ticket_number ?? 'Direct invoice' }}</p>
         </div>
     </div>
 
@@ -65,7 +65,7 @@
                 <label class="sr-only" for="command-invoice-number-{{ $invoice->id }}">Invoice number</label>
                 <input class="sr-only" id="command-invoice-number-{{ $invoice->id }}" value="{{ $invoice->invoice_number }}" readonly>
                 <button class="invoice-command-menu-item" type="button" data-copy-target="command-invoice-number-{{ $invoice->id }}">Copy invoice number</button>
-                <a class="invoice-command-menu-item" href="{{ route('office.service-tickets.show', $invoice->serviceTicket) }}#history">Audit history</a>
+                @if($invoice->serviceTicket)<a class="invoice-command-menu-item" href="{{ route('office.service-tickets.show', $invoice->serviceTicket) }}#history">Ticket history</a>@endif
                 @if($canDeleteDraft)<a class="invoice-command-menu-item text-red-800" href="#delete-unissued-invoice">Delete unissued invoice</a>@endif
                 @if($activeMembership->hasCapability('invoices.void') && $invoice->status !== 'void')<a class="invoice-command-menu-item text-red-800" href="#void-reissue">Void &amp; reissue</a>@endif
             </div>

@@ -130,4 +130,9 @@ class Invoice extends Model
     {
         return in_array($this->status, ['draft', 'ready_for_review'], true);
     }
+
+    public function isDirect(): bool
+    {
+        return $this->service_ticket_id === null && $this->billing_handoff_id === null;
+    }
 }
