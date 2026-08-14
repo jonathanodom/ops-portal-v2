@@ -96,35 +96,93 @@ document.querySelectorAll('[data-dirty-form]').forEach((form) => {
     });
 });
 
-document.querySelectorAll('[data-upload-form]').forEach((form) => form.addEventListener('submit', (event) => {
-    event.preventDefault();
-    const progress = form.querySelector('progress');
-    const status = form.querySelector('[data-upload-status]');
+document.querySelectorAll('[data-upload-form]').forEach((form) => {
+    const sourceInputs = [...form.querySelectorAll('[data-upload-photo-source]')];
+    const selection = form.querySelector('[data-upload-selection]');
+    const submit = form.querySelector('[data-upload-submit]') ?? form.querySelector('button[type="submit"], button:not([type])');
+    let selectedSource = sourceInputs.find((input) => input.files?.length) ?? null;
 
-    if (!navigator.onLine) {
-        status.textContent = 'Offline. Reconnect, then retry this upload.';
-        return;
-    }
+    sourceInputs.forEach((input) => input.addEventListener('change', () => {
+        if (!input.files?.length) {
+            if (selectedSource === input) selectedSource = null;
+            if (selection && !selectedSource) selection.textContent = 'No photo selected.';
+            return;
+        }
 
-    const request = new XMLHttpRequest();
-    progress.hidden = false;
-    request.upload.addEventListener('progress', (progressEvent) => {
-        if (progressEvent.lengthComputable) {
-            progress.value = (progressEvent.loaded / progressEvent.total) * 100;
+        sourceInputs.filter((candidate) => candidate !== input).forEach((candidate) => {
+            candidate.value = '';
+        });
+        selectedSource = input;
+        if (selection) selection.textContent = `${input.dataset.sourceLabel}: ${input.files[0].name}. Choose another file to change it.`;
+    }));
+
+    form.addEventListener('submit', (event) => {
+        event.preventDefault();
+        const progress = form.querySelector('progress');
+        const status = form.querySelector('[data-upload-status]');
+
+        if (!navigator.onLine) {
+            status.textContent = 'Offline. Reconnect, then retry this upload.';
+            return;
         }
-    });
-    request.addEventListener('load', () => {
-        if (request.status >= 200 && request.status < 300) {
-            status.textContent = 'Upload complete. Reloading…';
-            location.reload();
-        } else {
-            status.textContent = 'Upload failed. Check the file and explicitly retry.';
+
+        const data = new FormData(form);
+        if (sourceInputs.length) {
+            const photo = selectedSource?.files?.[0];
+            if (!photo) {
+                status.textContent = 'Choose a photo from the camera, gallery, or files before uploading.';
+                (sourceInputs[0] ?? submit)?.focus();
+                return;
+            }
+            data.delete('photo');
+            data.append('photo', photo, photo.name);
         }
+
+        const request = new XMLHttpRequest();
+        progress.hidden = false;
+        progress.value = 0;
+        submit.disabled = true;
+        status.textContent = 'Uploading photo…';
+        request.timeout = 180000;
+        request.upload.addEventListener('progress', (progressEvent) => {
+            if (progressEvent.lengthComputable) {
+                progress.value = (progressEvent.loaded / progressEvent.total) * 100;
+            }
+        });
+        request.addEventListener('load', () => {
+            let response = null;
+            try {
+                response = JSON.parse(request.responseText);
+            } catch {
+                // A non-JSON response is never treated as a successful upload.
+            }
+            if (request.status >= 200 && request.status < 300 && response?.id) {
+                status.textContent = `${response.message ?? 'Photo uploaded.'} Reloading…`;
+                location.reload();
+                return;
+            }
+
+            const validationMessage = Object.values(response?.errors ?? {}).flat()[0];
+            status.textContent = validationMessage ?? response?.message ?? 'Upload failed. Check the file and explicitly retry.';
+            submit.disabled = false;
+            progress.hidden = true;
+        });
+        request.addEventListener('error', () => {
+            status.textContent = 'Upload failed. Your photo was not saved. Reconnect and retry.';
+            submit.disabled = false;
+            progress.hidden = true;
+        });
+        request.addEventListener('timeout', () => {
+            status.textContent = 'Upload timed out. Your photo was not reported as saved; explicitly retry.';
+            submit.disabled = false;
+            progress.hidden = true;
+        });
+        request.open('POST', form.action);
+        request.setRequestHeader('Accept', 'application/json');
+        request.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+        request.send(data);
     });
-    request.addEventListener('error', () => status.textContent = 'Upload failed. Your photo was not saved. Reconnect and retry.');
-    request.open('POST', form.action);
-    request.send(new FormData(form));
-}));
+});
 
 document.querySelectorAll('[data-dialog-open]').forEach((button) => button.addEventListener('click', () => {
     const dialog = document.getElementById(button.dataset.dialogOpen);

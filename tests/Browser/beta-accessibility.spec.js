@@ -526,6 +526,15 @@ test.describe('mobile beta', () => {
         await expect(page.locator('[data-selected-outcome]')).toHaveAttribute('data-outcome', 'needs_return_trip');
         await workspaceNavigation.getByRole('link', { name: 'Photos' }).click();
         await expect(page.getByRole('heading', { name: 'Private photos' })).toBeVisible();
+        const cameraPhoto = page.getByLabel('Take photo');
+        const libraryPhoto = page.getByLabel('Choose from gallery or files');
+        await expect(cameraPhoto).toHaveAttribute('capture', 'environment');
+        await expect(libraryPhoto).not.toHaveAttribute('capture');
+        await cameraPhoto.setInputFiles({ name: 'camera-photo.jpg', mimeType: 'image/jpeg', buffer: Buffer.from('camera-photo') });
+        await expect(page.locator('[data-upload-selection]')).toContainText('Camera: camera-photo.jpg');
+        await libraryPhoto.setInputFiles({ name: 'saved-photo.png', mimeType: 'image/png', buffer: Buffer.from('saved-photo') });
+        await expect(cameraPhoto).toHaveValue('');
+        await expect(page.locator('[data-upload-selection]')).toContainText('Gallery or files: saved-photo.png');
         const shortControls = await page.locator('button, input, select, textarea, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
             .filter((element) => element.offsetParent !== null)
             .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)

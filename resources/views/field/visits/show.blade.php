@@ -263,13 +263,25 @@
                     @csrf
                     <label class="form-label" for="photo_category">Photo category</label>
                     <select class="form-input" id="photo_category" name="category">@foreach (config('field_execution.photo_categories') as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select>
-                    <label class="form-label" for="photo">Photo</label>
-                    <input class="form-input" id="photo" type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" required>
+                    <fieldset class="space-y-3">
+                        <legend class="form-label">Photo source</legend>
+                        <div class="grid gap-3 sm:grid-cols-2">
+                            <div>
+                                <label class="form-label" for="photo_camera">Take photo</label>
+                                <input class="form-input min-h-11" id="photo_camera" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" data-upload-photo-source data-source-label="Camera">
+                            </div>
+                            <div>
+                                <label class="form-label" for="photo_library">Choose from gallery or files</label>
+                                <input class="form-input min-h-11" id="photo_library" type="file" name="photo" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" data-upload-photo-source data-source-label="Gallery or files">
+                            </div>
+                        </div>
+                        <p class="text-sm text-slate-600" data-upload-selection role="status" aria-live="polite">No photo selected.</p>
+                    </fieldset>
                     <label class="form-label" for="caption">Caption</label>
                     <input class="form-input" id="caption" name="caption">
                     <progress class="w-full" value="0" max="100" hidden></progress>
                     <p data-upload-status class="text-sm" role="status"></p>
-                    <button class="button-secondary w-full">Upload photo</button>
+                    <button class="button-secondary w-full" data-upload-submit>Upload photo</button>
                 </form>
                 @forelse ($activeMedia as $media)
                     <div class="mt-3 flex min-h-11 items-center justify-between gap-3 border-t border-slate-200 pt-3">
