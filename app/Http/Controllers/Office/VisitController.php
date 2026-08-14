@@ -25,6 +25,7 @@ class VisitController extends Controller
     {
         $ticket = $this->ticket($request, $serviceTicket);
         Gate::authorize('update', $ticket);
+        $this->assertTicketAcceptsVisits($ticket);
 
         return view('office.visits.create', [
             'ticket' => $ticket->load('serviceLocation'),
@@ -42,7 +43,7 @@ class VisitController extends Controller
     ): RedirectResponse {
         $ticket = $this->ticket($request, $serviceTicket);
         Gate::authorize('update', $ticket);
-        abort_if($ticket->status === 'canceled', 422, 'Canceled tickets cannot receive visits.');
+        $this->assertTicketAcceptsVisits($ticket);
         $data = $this->validated($request);
         $visit = DB::transaction(function () use ($request, $ticket, $data, $windows, $scheduler, $audit, $visitCreator): Visit {
             $visit = $visitCreator->create($ticket, [
@@ -73,6 +74,7 @@ class VisitController extends Controller
         $visit = $this->visit($request, $visit);
         Gate::authorize('dispatch', [Visit::class, $this->organization($request)]);
         $visit->load(['serviceTicket', 'assignments']);
+        $this->assertVisitCanBeScheduled($visit);
 
         return view('office.visits.edit', [
             'visit' => $visit,
@@ -88,6 +90,8 @@ class VisitController extends Controller
     ): RedirectResponse {
         $visit = $this->visit($request, $visit);
         Gate::authorize('dispatch', [Visit::class, $this->organization($request)]);
+        $visit->loadMissing('serviceTicket');
+        $this->assertVisitCanBeScheduled($visit);
         $data = $this->validated($request);
         $scheduler->save(
             $visit,
@@ -184,5 +188,24 @@ class VisitController extends Controller
             ->where('status', 'active')->get()
             ->filter(fn ($membership) => $membership->hasCapability('experience.field.access'))
             ->sortBy(fn ($membership) => $membership->user->name)->values();
+    }
+
+    private function assertTicketAcceptsVisits(ServiceTicket $ticket): void
+    {
+        abort_unless(
+            in_array($ticket->status, ['open', 'on_hold'], true),
+            422,
+            'Only open or on-hold Service Tickets can receive Visits. Reopen this ticket first.',
+        );
+    }
+
+    private function assertVisitCanBeScheduled(Visit $visit): void
+    {
+        $this->assertTicketAcceptsVisits($visit->serviceTicket);
+        abort_unless(
+            in_array($visit->status, ['planned', 'scheduled', 'assigned'], true),
+            422,
+            'Only pre-execution Visits can be scheduled or reassigned.',
+        );
     }
 }

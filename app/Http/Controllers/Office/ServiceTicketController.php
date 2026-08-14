@@ -162,6 +162,7 @@ class ServiceTicketController extends Controller
             'contact',
             'invoices' => fn ($query) => $query->latest('generation')->withExists('acknowledgments'),
             'notes.author',
+            'reopens.reopenedBy',
             'visits' => fn ($query) => $query->with(['returnOfVisit', 'assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('ticket_visit_number'),
         ]);
         $events = AuditEvent::query()->where('organization_id', $ticket->organization_id)
@@ -261,6 +262,18 @@ class ServiceTicketController extends Controller
         $workflow->changeTicketStatus($ticket, $data['status'], $request->user(), $data['reason'] ?? null, $request->boolean('confirm_stop_active_timers'));
 
         return back()->with('status', 'Service ticket status updated.');
+    }
+
+    public function reopen(Request $request, string $serviceTicket, ServiceTicketWorkflow $workflow): RedirectResponse
+    {
+        $ticket = $this->ticket($request, $serviceTicket);
+        Gate::authorize('update', $ticket);
+        $data = $request->validate([
+            'reason' => ['required', 'string', 'max:2000'],
+        ]);
+        $workflow->reopenForCallback($ticket, $request->user(), $data['reason']);
+
+        return back()->with('status', 'Service Ticket reopened for callback work. Add a new Visit when ready.');
     }
 
     private function validated(Request $request, Organization $organization, ?ServiceTicket $ticket = null): array
