@@ -45,6 +45,11 @@ class Customer extends Model
         return $this->hasMany(ServiceTicket::class);
     }
 
+    public function invoices(): HasMany
+    {
+        return $this->hasMany(Invoice::class);
+    }
+
     public function serviceEnrollments(): HasMany
     {
         return $this->hasMany(CustomerServiceEnrollment::class);

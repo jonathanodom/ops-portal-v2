@@ -61,12 +61,29 @@ class CustomerController extends Controller
         $customer->load([
             'contacts' => fn ($query) => $query->orderByDesc('is_preferred')->orderByDesc('active')->orderBy('name'),
             'serviceLocations' => fn ($query) => $query->with('primaryContact')->orderByDesc('is_primary')->orderByDesc('active')->orderBy('name'),
+            'serviceTickets' => fn ($query) => $query
+                ->with([
+                    'serviceLocation',
+                    'visits' => fn ($visits) => $visits->with('assignments.membership.user')->orderByDesc('scheduled_start_at')->orderByDesc('id'),
+                ])
+                ->withCount('visits')
+                ->latest('updated_at')->latest('id'),
         ]);
+        $invoices = collect();
+        if ($request->attributes->get('membership')->hasCapability('invoices.view')) {
+            $customer->load(['invoices' => fn ($query) => $query
+                ->with(['serviceTicket', 'serviceLocation', 'paymentTransactions'])
+                ->latest('issued_at')->latest('created_at')->latest('id')]);
+            $invoices = $customer->invoices;
+        }
         if ($request->attributes->get('membership')->hasCapability('subscriptions.view')) {
             $customer->load(['serviceEnrollments' => fn ($query) => $query->with('serviceLocation')->orderByRaw("case status when 'active' then 1 when 'paused' then 2 else 3 end")->orderByDesc('id')]);
         }
 
-        return view('office.customers.show', compact('customer'));
+        return view('office.customers.show', compact('customer', 'invoices') + [
+            'purposes' => config('service_tickets.purposes'),
+            'billingDispositions' => config('service_tickets.billing_dispositions'),
+        ]);
     }
 
     public function edit(Request $request, string $customer): View
