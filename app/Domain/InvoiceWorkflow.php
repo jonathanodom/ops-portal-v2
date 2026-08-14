@@ -286,6 +286,54 @@ class InvoiceWorkflow
         });
     }
 
+    public function removeLine(Invoice $invoice, InvoiceLine $line, User $actor, ?string $reason = null): Invoice
+    {
+        return DB::transaction(function () use ($invoice, $line, $actor, $reason): Invoice {
+            $invoice = Invoice::query()->lockForUpdate()->findOrFail($invoice->id);
+            $this->assertEditable($invoice);
+            $line = InvoiceLine::query()
+                ->where('organization_id', $invoice->organization_id)
+                ->where('invoice_id', $invoice->id)
+                ->lockForUpdate()
+                ->findOrFail($line->id);
+
+            $provenance = $this->lineRemovalProvenance($line);
+            $hasOperationalSource = collect($provenance)
+                ->except(['labor_rate_id', 'catalog_item_type', 'catalog_source_id', 'catalog_service_variant_id', 'catalog_code_snapshot'])
+                ->contains(fn (mixed $value): bool => $value !== null);
+            if ($hasOperationalSource && blank($reason)) {
+                throw ValidationException::withMessages(['reason' => 'Explain why this approved-work charge is being removed.']);
+            }
+
+            $snapshot = [
+                'invoice_id' => $invoice->id,
+                'invoice_number' => $invoice->invoice_number,
+                'invoice_status' => $invoice->status,
+                'invoice_line_id' => $line->id,
+                'line_type' => $line->line_type,
+                'description' => $line->description,
+                'quantity_millis' => (int) $line->quantity_millis,
+                'unit' => $line->unit,
+                'unit_price_cents' => $line->unit_price_cents === null ? null : (int) $line->unit_price_cents,
+                'subtotal_cents' => (int) $line->subtotal_cents,
+                'discount_cents' => (int) $line->discount_cents,
+                'tax_cents' => (int) $line->tax_cents,
+                'amount_cents' => (int) $line->total_cents,
+                'source_provenance' => $provenance,
+                'reason' => filled($reason) ? $reason : 'Removed while editing the invoice.',
+                'changed_fields' => ['lines', 'subtotal_cents', 'discount_total_cents', 'tax_total_cents', 'total_cents'],
+            ];
+
+            $line->delete();
+            $invoice = $this->calculator->recalculate($invoice);
+            $this->audit->record($invoice->organization, $actor, 'invoice.line_removed', $invoice, $snapshot + [
+                'recalculated_total_cents' => (int) $invoice->total_cents,
+            ]);
+
+            return $invoice;
+        });
+    }
+
     public function includeProposal(Invoice $invoice, VisitPartProposal $part, User $actor, string $reason): InvoiceLine
     {
         return DB::transaction(function () use ($invoice, $part, $actor, $reason): InvoiceLine {
@@ -465,6 +513,24 @@ class InvoiceWorkflow
             'product' => 'part',
             default => 'part',
         };
+    }
+
+    /** @return array<string, int|string|null> */
+    private function lineRemovalProvenance(InvoiceLine $line): array
+    {
+        return [
+            'source_visit_id' => $line->source_visit_id,
+            'source_closeout_id' => $line->source_closeout_id,
+            'source_review_id' => $line->source_review_id,
+            'source_time_entry_id' => $line->source_time_entry_id,
+            'source_travel_seconds' => $line->source_travel_seconds,
+            'source_part_proposal_id' => $line->source_part_proposal_id,
+            'labor_rate_id' => $line->labor_rate_id,
+            'catalog_item_type' => $line->catalog_item_type,
+            'catalog_source_id' => $line->catalog_service_id ?: ($line->catalog_product_id ?: $line->catalog_package_id),
+            'catalog_service_variant_id' => $line->catalog_service_variant_id,
+            'catalog_code_snapshot' => $line->catalog_code_snapshot,
+        ];
     }
 
     /** @return array<string, mixed> */

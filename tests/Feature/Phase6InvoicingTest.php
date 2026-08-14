@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Domain\CatalogLineSnapshotFactory;
 use App\Domain\InvoiceCalculator;
 use App\Domain\InvoiceWorkflow;
 use App\Domain\NewDayCatalogBootstrap;
@@ -29,6 +30,7 @@ use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitPartProposal;
 use App\Models\VisitTimeEntry;
+use App\Support\AuditRecorder;
 use App\Support\IncidentRecorder;
 use App\Support\InvoiceNumber;
 use Database\Seeders\AccessControlSeeder;
@@ -591,6 +593,207 @@ class Phase6InvoicingTest extends TestCase
             ->assertSee('data-auto-open="true"', false)
             ->assertSee('value="Preserved manual line"', false)
             ->assertSee('This manual line needs attention');
+    }
+
+    public function test_manual_and_catalog_lines_can_be_removed_from_a_draft_with_durable_audit_snapshots(): void
+    {
+        [$organization, $admin, $handoff] = $this->billingScenario(false);
+        $workflow = app(InvoiceWorkflow::class);
+        $invoice = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $manual = $workflow->addLine($invoice, $admin, [
+            'line_type' => 'other',
+            'description' => 'Administrative service charge',
+            'quantity_millis' => 1000,
+            'unit' => 'each',
+            'unit_price_cents' => 2500,
+            'included' => true,
+            'billing_treatment' => 'billable',
+            'taxable' => false,
+        ]);
+        $catalogService = CatalogService::query()->forOrganization($organization->id)->where('service_code', 'LABOR-RES-IT')->firstOrFail();
+        $catalog = $workflow->addCatalogLine(
+            $invoice,
+            $admin,
+            app(CatalogLineSnapshotFactory::class)->create($organization->id, 'service', $catalogService->id, 1000),
+        );
+        $startingTotal = $invoice->fresh()->total_cents;
+
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()
+            ->assertSee("data-invoice-item-open=\"invoice-line-remove-{$manual->id}\"", false)
+            ->assertSee("id=\"invoice-line-remove-{$manual->id}\"", false)
+            ->assertSee('Remove invoice line?');
+
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}/lines/{$manual->id}", [
+            'line_remove_context' => (string) $manual->id,
+        ])->assertRedirect("/office/invoices/{$invoice->id}")->assertSessionHasNoErrors();
+
+        $this->assertDatabaseMissing('invoice_lines', ['id' => $manual->id]);
+        $this->assertSame($startingTotal - 2500, $invoice->fresh()->total_cents);
+        $manualEvent = AuditEvent::query()->where('event_type', 'invoice.line_removed')->where('subject_id', $invoice->id)->latest('id')->firstOrFail();
+        $this->assertSame($admin->id, $manualEvent->actor_id);
+        $this->assertSame($manual->id, $manualEvent->metadata['invoice_line_id']);
+        $this->assertSame('Administrative service charge', $manualEvent->metadata['description']);
+        $this->assertSame(2500, $manualEvent->metadata['amount_cents']);
+        $this->assertSame('Removed while editing the invoice.', $manualEvent->metadata['reason']);
+
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}/lines/{$catalog->id}", [
+            'line_remove_context' => (string) $catalog->id,
+        ])->assertRedirect("/office/invoices/{$invoice->id}")->assertSessionHasNoErrors();
+        $catalogEvent = AuditEvent::query()->where('event_type', 'invoice.line_removed')->where('subject_id', $invoice->id)->latest('id')->firstOrFail();
+        $this->assertSame('service', $catalogEvent->metadata['source_provenance']['catalog_item_type']);
+        $this->assertSame($catalogService->id, $catalogEvent->metadata['source_provenance']['catalog_source_id']);
+        $this->assertSame('LABOR-RES-IT', $catalogEvent->metadata['source_provenance']['catalog_code_snapshot']);
+        $this->assertDatabaseHas('catalog_services', ['id' => $catalogService->id]);
+    }
+
+    public function test_source_generated_line_removal_requires_a_reason_and_preserves_all_source_evidence(): void
+    {
+        [$organization, $admin, $handoff] = $this->billingScenario();
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $labor = $invoice->lines->firstWhere('line_type', 'labor');
+        $part = $invoice->lines->firstWhere('source_part_proposal_id', '!=', null);
+        $visit = $labor->source_visit_id;
+        $closeout = $labor->source_closeout_id;
+        $review = $labor->source_review_id;
+        $timeEntry = VisitTimeEntry::query()->where('visit_id', $visit)->firstOrFail();
+        $proposal = $part->source_part_proposal_id;
+        $startingTotal = $invoice->fresh()->total_cents;
+
+        $validation = $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->followingRedirects()->delete("/office/invoices/{$invoice->id}/lines/{$labor->id}", [
+            'line_remove_context' => (string) $labor->id,
+        ]);
+        $validation->assertOk()
+            ->assertSee('data-auto-open="true"', false)
+            ->assertSee('aria-invalid="true"', false)
+            ->assertSee('Explain why this approved-work charge is being removed.');
+        $this->assertDatabaseHas('invoice_lines', ['id' => $labor->id]);
+        $this->assertSame($startingTotal, $invoice->fresh()->total_cents);
+
+        $reason = 'Warranty callback; labor will not be charged.';
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}/lines/{$labor->id}", [
+            'line_remove_context' => (string) $labor->id,
+            'reason' => $reason,
+        ])->assertRedirect("/office/invoices/{$invoice->id}")->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('visits', ['id' => $visit]);
+        $this->assertDatabaseHas('closeouts', ['id' => $closeout]);
+        $this->assertDatabaseHas('closeout_reviews', ['id' => $review]);
+        $this->assertDatabaseHas('visit_time_entries', ['id' => $timeEntry->id]);
+        $event = AuditEvent::query()->where('event_type', 'invoice.line_removed')->where('subject_id', $invoice->id)->latest('id')->firstOrFail();
+        $this->assertSame($reason, $event->metadata['reason']);
+        $this->assertSame($visit, $event->metadata['source_provenance']['source_visit_id']);
+        $this->assertSame($closeout, $event->metadata['source_provenance']['source_closeout_id']);
+        $this->assertSame($review, $event->metadata['source_provenance']['source_review_id']);
+
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}/lines/{$part->id}", [
+            'line_remove_context' => (string) $part->id,
+            'reason' => 'Customer supplied this component.',
+        ])->assertRedirect("/office/invoices/{$invoice->id}");
+        $this->assertDatabaseHas('visit_part_proposals', ['id' => $proposal]);
+        $partEvent = AuditEvent::query()->where('event_type', 'invoice.line_removed')->where('subject_id', $invoice->id)->latest('id')->firstOrFail();
+        $this->assertSame($proposal, $partEvent->metadata['source_provenance']['source_part_proposal_id']);
+    }
+
+    public function test_ready_invoice_lines_can_be_removed_but_issued_and_void_invoices_remain_immutable(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $readyLine = $invoice->lines->firstOrFail();
+        $invoice->update(['status' => 'ready_for_review']);
+
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}/lines/{$readyLine->id}", [
+            'line_remove_context' => (string) $readyLine->id,
+            'reason' => 'Reviewed as warranty labor.',
+        ])->assertRedirect("/office/invoices/{$invoice->id}")->assertSessionHasNoErrors();
+        $this->assertSame('ready_for_review', $invoice->fresh()->status);
+        $this->assertDatabaseMissing('invoice_lines', ['id' => $readyLine->id]);
+
+        $immutableLine = $invoice->lines()->firstOrFail();
+        $invoice->update(['status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $admin->id]);
+        $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->delete("/office/invoices/{$invoice->id}/lines/{$immutableLine->id}", [
+            'line_remove_context' => (string) $immutableLine->id,
+            'reason' => 'Forged issued edit.',
+        ])->assertSessionHasErrors('invoice');
+        $this->assertDatabaseHas('invoice_lines', ['id' => $immutableLine->id]);
+        $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
+            ->assertOk()->assertDontSee('invoice-line-remove-', false);
+
+        $invoice->update(['status' => 'void', 'voided_at' => now(), 'voided_by_id' => $admin->id, 'void_reason' => 'Test history']);
+        $this->actingAs($admin)->from("/office/invoices/{$invoice->id}")->delete("/office/invoices/{$invoice->id}/lines/{$immutableLine->id}", [
+            'line_remove_context' => (string) $immutableLine->id,
+            'reason' => 'Forged void edit.',
+        ])->assertSessionHasErrors('invoice');
+        $this->assertDatabaseHas('invoice_lines', ['id' => $immutableLine->id]);
+    }
+
+    public function test_line_removal_is_organization_scoped_and_honors_invoice_management_authorization(): void
+    {
+        [$organization, $admin, $handoff] = $this->billingScenario(false);
+        $invoice = app(InvoiceWorkflow::class)->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $manual = app(InvoiceWorkflow::class)->addLine($invoice, $admin, [
+            'line_type' => 'other', 'description' => 'Authorized removal', 'quantity_millis' => 1000,
+            'unit_price_cents' => 1000, 'included' => true, 'taxable' => false,
+        ]);
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        [$billing, , $billingMembership] = $this->userWithRole('billing', $organization);
+        [$inactive, , $inactiveMembership] = $this->userWithRole('super_admin', $organization);
+        $inactiveMembership->update(['status' => 'inactive']);
+
+        $this->actingAs($reviewer)->delete("/office/invoices/{$invoice->id}/lines/{$manual->id}", [
+            'line_remove_context' => (string) $manual->id,
+        ])->assertForbidden();
+        $this->actingAs($inactive)->delete("/office/invoices/{$invoice->id}/lines/{$manual->id}", [
+            'line_remove_context' => (string) $manual->id,
+        ])->assertForbidden();
+
+        $manage = Capability::query()->where('key', 'invoices.manage')->firstOrFail();
+        $billingMembership->capabilityOverrides()->attach($manage, ['effect' => 'deny']);
+        $this->actingAs($billing)->delete("/office/invoices/{$invoice->id}/lines/{$manual->id}", [
+            'line_remove_context' => (string) $manual->id,
+        ])->assertForbidden();
+
+        [, $foreignAdmin, $foreignHandoff] = $this->billingScenario(false);
+        $foreignInvoice = app(InvoiceWorkflow::class)->createFromHandoff($foreignHandoff, $foreignAdmin, (string) Str::uuid());
+        $foreignLine = $foreignInvoice->lines->firstOrFail();
+        $this->actingAs($admin)->delete("/office/invoices/{$foreignInvoice->id}/lines/{$foreignLine->id}", [
+            'line_remove_context' => (string) $foreignLine->id,
+        ])->assertNotFound();
+        $this->actingAs($admin)->delete("/office/invoices/{$invoice->id}/lines/{$foreignLine->id}", [
+            'line_remove_context' => (string) $foreignLine->id,
+        ])->assertNotFound();
+        $this->assertDatabaseHas('invoice_lines', ['id' => $manual->id]);
+        $this->assertTrue(AuditEvent::query()
+            ->where('event_type', 'security.cross_organization_record_denied')
+            ->where('subject_id', $organization->id)
+            ->get()
+            ->contains(fn (AuditEvent $event): bool => ($event->metadata['record_type'] ?? null) === 'invoice_line'
+                && (int) ($event->metadata['record_id'] ?? 0) === (int) $foreignLine->id));
+    }
+
+    public function test_line_removal_rolls_back_deletion_and_totals_when_a_later_write_fails(): void
+    {
+        [, $admin, $handoff] = $this->billingScenario(false);
+        $workflow = app(InvoiceWorkflow::class);
+        $invoice = $workflow->createFromHandoff($handoff, $admin, (string) Str::uuid());
+        $manual = $workflow->addLine($invoice, $admin, [
+            'line_type' => 'other', 'description' => 'Rollback line', 'quantity_millis' => 1000,
+            'unit_price_cents' => 4000, 'included' => true, 'taxable' => false,
+        ]);
+        $startingTotal = $invoice->fresh()->total_cents;
+        $audit = $this->mock(AuditRecorder::class);
+        $audit->shouldReceive('record')->once()->andThrow(new \RuntimeException('Simulated durable audit failure'));
+
+        try {
+            app(InvoiceWorkflow::class)->removeLine($invoice, $manual, $admin);
+            $this->fail('The simulated audit failure should abort removal.');
+        } catch (\RuntimeException $exception) {
+            $this->assertSame('Simulated durable audit failure', $exception->getMessage());
+        }
+
+        $this->assertDatabaseHas('invoice_lines', ['id' => $manual->id, 'total_cents' => 4000]);
+        $this->assertSame($startingTotal, $invoice->fresh()->total_cents);
+        $this->assertDatabaseMissing('audit_events', ['event_type' => 'invoice.line_removed', 'subject_id' => $invoice->id]);
     }
 
     /** @return array{Organization, User, BillingHandoff, Visit, Visit} */

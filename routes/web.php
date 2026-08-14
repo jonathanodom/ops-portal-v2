@@ -136,6 +136,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/invoices/{invoice}/lines', [InvoiceController::class, 'storeLine'])->whereNumber('invoice')->name('invoices.lines.store');
                 Route::post('/invoices/{invoice}/catalog-lines', [InvoiceController::class, 'storeCatalogLine'])->whereNumber('invoice')->middleware('capability:catalog.use')->name('invoices.catalog-lines.store');
                 Route::put('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'updateLine'])->whereNumber(['invoice', 'line'])->name('invoices.lines.update');
+                Route::delete('/invoices/{invoice}/lines/{line}', [InvoiceController::class, 'destroyLine'])->whereNumber(['invoice', 'line'])->name('invoices.lines.destroy');
                 Route::post('/invoices/{invoice}/proposals/{part}', [InvoiceController::class, 'includeProposal'])->whereNumber(['invoice', 'part'])->name('invoices.proposals.include');
                 Route::post('/invoices/{invoice}/ready', [InvoiceController::class, 'ready'])->whereNumber('invoice')->name('invoices.ready');
             });

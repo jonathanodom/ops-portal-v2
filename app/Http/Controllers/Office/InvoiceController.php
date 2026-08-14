@@ -202,7 +202,7 @@ class InvoiceController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('manage', $invoice);
-        $line = InvoiceLine::query()->where('organization_id', $invoice->organization_id)->where('invoice_id', $invoice->id)->findOrFail($line);
+        $line = $this->invoiceLine($request, $invoice, $line);
         $data = $request->validate($this->lineRules(true));
         $values = $this->lineValues($data);
         if ($line->catalog_item_type && ! empty($values['labor_rate_id'])) {
@@ -221,6 +221,20 @@ class InvoiceController extends Controller
         $workflow->updateLine($invoice, $line, $request->user(), $values);
 
         return back()->with('status', 'Invoice line updated.');
+    }
+
+    public function destroyLine(Request $request, string $invoice, string $line, InvoiceWorkflow $workflow): RedirectResponse
+    {
+        $invoice = $this->invoice($request, $invoice);
+        Gate::authorize('manage', $invoice);
+        $line = $this->invoiceLine($request, $invoice, $line);
+        $data = $request->validate([
+            'line_remove_context' => ['required', Rule::in([(string) $line->id])],
+            'reason' => ['nullable', 'string', 'max:2000'],
+        ]);
+        $workflow->removeLine($invoice, $line, $request->user(), $data['reason'] ?? null);
+
+        return redirect()->route('office.invoices.show', $invoice)->with('status', 'Invoice line removed and totals recalculated.');
     }
 
     public function includeProposal(Request $request, string $invoice, string $part, InvoiceWorkflow $workflow): RedirectResponse
@@ -341,5 +355,22 @@ class InvoiceController extends Controller
         }
 
         return $invoice ?? abort(404);
+    }
+
+    private function invoiceLine(Request $request, Invoice $invoice, string $id): InvoiceLine
+    {
+        $line = InvoiceLine::query()
+            ->where('organization_id', $invoice->organization_id)
+            ->where('invoice_id', $invoice->id)
+            ->find($id);
+        if (! $line && InvoiceLine::query()->whereKey($id)->exists()) {
+            app(AuditRecorder::class)->record($invoice->organization, $request->user(), 'security.cross_organization_record_denied', $invoice->organization, [
+                'record_type' => 'invoice_line',
+                'record_id' => (int) $id,
+                'invoice_id' => $invoice->id,
+            ]);
+        }
+
+        return $line ?? abort(404);
     }
 }

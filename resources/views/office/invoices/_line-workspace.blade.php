@@ -39,7 +39,7 @@
                             <td class="whitespace-nowrap px-3 py-4 text-right align-top">{{ $line->unit_price_cents === null ? 'Needs price' : '$'.number_format($line->unit_price_cents / 100, 2) }}</td>
                             <td class="whitespace-nowrap px-3 py-4 text-center align-top">{{ $line->taxable ? 'Yes' : 'No' }}</td>
                             <td class="whitespace-nowrap px-3 py-4 text-right align-top font-bold text-slate-950">${{ number_format($line->total_cents / 100, 2) }}</td>
-                            <td class="px-5 py-4 text-right align-top">@if($invoice->isEditable())<button type="button" class="button-secondary" data-invoice-item-open="invoice-line-editor-{{ $line->id }}" aria-label="Edit {{ $line->description }}">Edit</button>@endif</td>
+                            <td class="px-5 py-4 text-right align-top">@if($invoice->isEditable())<div class="flex justify-end gap-2"><button type="button" class="button-secondary" data-invoice-item-open="invoice-line-editor-{{ $line->id }}" aria-label="Edit {{ $line->description }}">Edit</button><button type="button" class="button-secondary text-red-700" data-invoice-item-open="invoice-line-remove-{{ $line->id }}" aria-label="Remove {{ $line->description }}">Remove</button></div>@endif</td>
                         </tr>
         @if($loop->last)
                     </tbody>
@@ -58,7 +58,7 @@
                     <div class="flex items-start justify-between gap-3"><div><h3 class="font-bold text-slate-950">{{ $line->description }}</h3><p class="mt-1 text-sm text-slate-600">{{ ucfirst(str_replace('_', ' ', $line->line_type)) }}@unless($line->included) &middot; Excluded @endunless</p></div><p class="whitespace-nowrap text-lg font-bold">${{ number_format($line->total_cents / 100, 2) }}</p></div>
                     <dl class="mt-4 grid grid-cols-2 gap-3 text-sm"><div><dt class="font-semibold text-slate-500">Quantity</dt><dd class="mt-1">{{ $quantity }} {{ $line->unit }}</dd></div><div><dt class="font-semibold text-slate-500">Rate</dt><dd class="mt-1">{{ $line->unit_price_cents === null ? 'Needs price' : '$'.number_format($line->unit_price_cents / 100, 2) }}</dd></div><div><dt class="font-semibold text-slate-500">Taxable</dt><dd class="mt-1">{{ $line->taxable ? 'Yes' : 'No' }}</dd></div><div><dt class="font-semibold text-slate-500">Treatment</dt><dd class="mt-1">{{ $line->billing_treatment ? ucfirst(str_replace('_', ' ', $line->billing_treatment)) : 'Not applicable' }}</dd></div></dl>
                     @if($line->catalog_item_type)<details class="mt-2 text-sm text-slate-600" data-catalog-source-details><summary class="min-h-11 cursor-pointer py-3 font-bold text-brand-blue">Catalog source details</summary><div class="rounded-lg border border-blue-200 bg-blue-50 p-3"><p>{{ $line->catalog_name_snapshot }} &middot; {{ $line->catalog_code_snapshot }}</p>@if($line->catalog_package_recipe_snapshot)<p class="mt-1 text-xs">Internal package recipe: {{ count($line->catalog_package_recipe_snapshot['recipe'] ?? []) }} snapshotted components.</p>@endif</div></details>@endif
-                    @if($invoice->isEditable())<button type="button" class="button-secondary mt-3 w-full" data-invoice-item-open="invoice-line-editor-{{ $line->id }}">Edit item</button>@endif
+                    @if($invoice->isEditable())<div class="mt-3 grid grid-cols-2 gap-2"><button type="button" class="button-secondary w-full" data-invoice-item-open="invoice-line-editor-{{ $line->id }}">Edit item</button><button type="button" class="button-secondary w-full text-red-700" data-invoice-item-open="invoice-line-remove-{{ $line->id }}">Remove</button></div>@endif
                 </article>
             @endforeach
         </div>
@@ -66,6 +66,6 @@
 </section>
 
 @if($invoice->isEditable())
-    @foreach($invoice->lines as $line)@include('office.invoices._line-editor', ['line' => $line])@endforeach
+    @foreach($invoice->lines as $line)@include('office.invoices._line-editor', ['line' => $line])@include('office.invoices._line-remove-dialog', ['line' => $line])@endforeach
     @include('office.invoices._manual-line-dialog')
 @endif
