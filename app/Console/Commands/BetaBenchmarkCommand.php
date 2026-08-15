@@ -5,12 +5,14 @@ namespace App\Console\Commands;
 use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\DispatchController;
+use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Models\Closeout;
 use App\Models\OrganizationMembership;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Models\VisitMedia;
+use App\Support\OfficeDashboardSnapshot;
 use Illuminate\Console\Command;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -48,6 +50,10 @@ class BetaBenchmarkCommand extends Command
         });
 
         $cases = [
+            'office_dashboard' => [500, 25, fn () => app(OfficeDashboardController::class)->index(
+                $this->request('/office', $membership),
+                app(OfficeDashboardSnapshot::class),
+            )],
             'today' => [500, 20, fn () => app(TodayController::class)->index($this->request('/field', $membership))],
             'dispatch' => [500, 25, fn () => app(DispatchController::class)->index($this->request('/office/dispatch', $membership))],
             'ticket_detail' => [750, 32, fn () => app()->call([app(ServiceTicketController::class), 'show'], [
