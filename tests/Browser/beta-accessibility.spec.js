@@ -2,6 +2,13 @@ import { test, expect } from '@playwright/test';
 import AxeBuilder from '@axe-core/playwright';
 
 const password = process.env.BETA_DEMO_PASSWORD;
+const dashboardReviewDir = process.env.DASHBOARD_REVIEW_DIR;
+
+async function captureDashboard(page, filename) {
+    if (dashboardReviewDir) {
+        await page.screenshot({ path: `${dashboardReviewDir}/${filename}`, fullPage: true });
+    }
+}
 
 async function login(page, role) {
     await page.goto('/login');
@@ -22,6 +29,29 @@ test.skip(!password, 'BETA_DEMO_PASSWORD is required.');
 
 test.describe('desktop beta', () => {
     test.skip(({ isMobile }) => isMobile);
+
+    test('operations dashboard is responsive, bounded, and accessible', async ({ page }) => {
+        await login(page, 'super_admin');
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office');
+            await expect(page.getByRole('heading', { name: 'Operations Dashboard' })).toBeVisible();
+            await expect(page.locator('[data-dashboard-attention]')).toBeVisible();
+            await expect(page.locator('[data-dashboard-today]')).toBeVisible();
+            await expect(page.locator('[data-dashboard-billing]')).toBeVisible();
+            await expect(page.locator('[data-dashboard-follow-up]')).toBeVisible();
+            await expect(page.locator('[data-dashboard-health]')).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await captureDashboard(page, `super-admin-${viewport.width}x${viewport.height}.png`);
+        }
+    });
 
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
         test.setTimeout(90_000);
@@ -499,6 +529,25 @@ test.describe('desktop beta', () => {
 
 test.describe('mobile beta', () => {
     test.skip(({ isMobile }) => !isMobile);
+
+    test('restricted office dashboard hides financial and health data at phone width', async ({ page }) => {
+        await login(page, 'dispatcher');
+        await page.goto('/office');
+        await expect(page.getByRole('heading', { name: 'Operations Dashboard' })).toBeVisible();
+        await expect(page.locator('[data-dashboard-today]')).toBeVisible();
+        await expect(page.locator('[data-dashboard-follow-up]')).toBeVisible();
+        await expect(page.locator('[data-dashboard-billing]')).toHaveCount(0);
+        await expect(page.locator('[data-dashboard-health]')).toHaveCount(0);
+        await expect(page.getByRole('link', { name: 'New Service Ticket' })).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        const shortControls = await page.locator('button, input, select, textarea, a').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => element.getBoundingClientRect().height < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}.${element.className}:${element.getBoundingClientRect().height}`));
+        expect(shortControls).toEqual([]);
+        await expectAccessible(page);
+        await captureDashboard(page, 'dispatcher-390x844.png');
+    });
 
     test('field today and visit workspace meet mobile and offline contracts', async ({ page, context }) => {
         await login(page, 'technician');

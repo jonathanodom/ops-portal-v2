@@ -24,6 +24,7 @@ use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\CustomerServiceEnrollmentController;
 use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\InvoiceController;
+use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\PaymentController;
@@ -81,7 +82,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->name('office.')
         ->middleware('capability:experience.office.access')
         ->group(function (): void {
-            Route::view('/', 'office.home')->name('home');
+            Route::get('/', [OfficeDashboardController::class, 'index'])->name('home');
             Route::middleware('capability:service_tickets.view')->group(function (): void {
                 Route::get('/service-tickets', [ServiceTicketController::class, 'index'])->name('service-tickets.index');
                 Route::get('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'show'])->whereNumber('serviceTicket')->name('service-tickets.show');

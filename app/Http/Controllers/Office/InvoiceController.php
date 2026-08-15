@@ -25,6 +25,7 @@ use App\Models\VisitPartProposal;
 use App\Support\AuditRecorder;
 use App\Support\CustomerDirectorySearch;
 use App\Support\CustomerSelection;
+use App\Support\InvoiceBalanceExpressions;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
@@ -104,10 +105,10 @@ class InvoiceController extends Controller
             'direction' => ['nullable', Rule::in(['asc', 'desc'])],
             'workspace' => ['nullable', Rule::in(['all', 'ready_to_invoice', 'draft', 'ready_for_review', 'issued', 'paid', 'void', 'overdue'])],
         ]);
-        $paid = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type = 'payment' AND status = 'succeeded'), 0)";
-        $refunded = "COALESCE((SELECT SUM(amount_cents) FROM payment_transactions WHERE payment_transactions.invoice_id = invoices.id AND type IN ('refund', 'reversal') AND status = 'succeeded'), 0)";
-        $net = "({$paid} - {$refunded})";
-        $balance = "(invoices.total_cents - {$paid} + {$refunded})";
+        $paid = InvoiceBalanceExpressions::paid();
+        $refunded = InvoiceBalanceExpressions::refunded();
+        $net = InvoiceBalanceExpressions::net();
+        $balance = InvoiceBalanceExpressions::balance();
 
         $query = Invoice::query()->forOrganization($organization->id)
             ->with(['customer', 'serviceTicket', 'serviceLocation', 'paymentTransactions']);
