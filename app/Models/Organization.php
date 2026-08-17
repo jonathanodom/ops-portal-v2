@@ -41,6 +41,11 @@ class Organization extends Model
         return $this->hasMany(ServiceTicket::class);
     }
 
+    public function projects(): HasMany
+    {
+        return $this->hasMany(Project::class);
+    }
+
     public function visits(): HasMany
     {
         return $this->hasMany(Visit::class);
