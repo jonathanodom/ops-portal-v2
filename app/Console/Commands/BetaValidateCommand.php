@@ -22,6 +22,7 @@ class BetaValidateCommand extends Command
         $expected = [
             'organizations' => 1, 'users' => 5, 'customers' => 250, 'service_locations' => 400,
             'service_tickets' => 500, 'visits' => 1000, 'closeouts' => 200, 'visit_media' => 500,
+            'projects' => 2, 'project_workstreams' => 10, 'project_tasks' => 4, 'project_milestones' => 2,
         ];
         $failed = false;
         foreach ($expected as $table => $count) {

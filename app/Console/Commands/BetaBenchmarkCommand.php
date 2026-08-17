@@ -2,13 +2,16 @@
 
 namespace App\Console\Commands;
 
+use App\Domain\Projects\Queries\ProjectWorkspaceQuery;
 use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\OfficeDashboardController;
+use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Models\Closeout;
 use App\Models\OrganizationMembership;
+use App\Models\Project;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Models\VisitMedia;
@@ -41,6 +44,7 @@ class BetaBenchmarkCommand extends Command
         View::share('errors', new ViewErrorBag);
         $ticket = ServiceTicket::query()->where('organization_id', $membership->organization_id)->firstOrFail();
         $closeout = Closeout::query()->where('organization_id', $membership->organization_id)->where('status', 'submitted')->firstOrFail();
+        $project = Project::query()->where('organization_id', $membership->organization_id)->firstOrFail();
         $currentQueries = 0;
         $counting = false;
         DB::listen(function () use (&$currentQueries, &$counting): void {
@@ -56,6 +60,15 @@ class BetaBenchmarkCommand extends Command
             )],
             'today' => [500, 20, fn () => app(TodayController::class)->index($this->request('/field', $membership))],
             'dispatch' => [500, 25, fn () => app(DispatchController::class)->index($this->request('/office/dispatch', $membership))],
+            'projects_workspace' => [500, 25, fn () => app(ProjectController::class)->index(
+                $this->request('/office/projects', $membership),
+                app(ProjectWorkspaceQuery::class),
+            )],
+            'project_detail' => [750, 30, fn () => app(ProjectController::class)->show(
+                $this->request('/office/projects/'.$project->id, $membership),
+                $project,
+                app(ProjectWorkspaceQuery::class),
+            )],
             'ticket_detail' => [750, 32, fn () => app()->call([app(ServiceTicketController::class), 'show'], [
                 'request' => $this->request('/office/service-tickets/'.$ticket->id, $membership),
                 'serviceTicket' => (string) $ticket->id,
