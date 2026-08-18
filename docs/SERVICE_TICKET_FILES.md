@@ -54,7 +54,7 @@ Metadata contains only Ticket/file IDs, MIME type, and byte size. Captions, orig
 - Playwright/axe: 16 passed, 12 intentionally project-skipped; no serious or critical axe violations
 - `git diff --check`: passed
 
-Ticket detail adds one bounded eager-load query for files and their uploader (22 to 23 queries in the beta benchmark). MySQL 8.4 migration, complete regression, backup/restore, beta, and browser parity remain enforced by the draft PR workflow.
+Ticket detail adds one bounded eager-load query for files and their uploader (22 to 23 queries locally; 32 to 33 on MySQL). The focused performance change raises only the Ticket-detail ceiling from 32 to 33 while preserving the 750 ms response budget and every other query ceiling. MySQL 8.4 migration, complete regression, backup/restore, beta, and browser parity remain enforced by the draft PR workflow.
 
 ## Review screenshots
 
