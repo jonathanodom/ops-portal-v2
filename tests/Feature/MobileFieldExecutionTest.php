@@ -164,6 +164,31 @@ class MobileFieldExecutionTest extends TestCase
             ->assertSee('Customer unavailable details are required.');
     }
 
+    public function test_saved_readiness_errors_map_to_exact_fields_and_actionable_review_items(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [
+            'content_version' => 1,
+            'outcome' => 'needs_return_trip',
+            'diagnosis' => 'Additional work is required.',
+            'work_performed' => 'Made the system safe for a return visit.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('data-closeout-field="return_reason"', false)
+            ->assertSee('id="return_reason"', false)
+            ->assertSee('name="return_reason"', false)
+            ->assertSee('aria-invalid="true"', false)
+            ->assertSee('aria-describedby="return_reason-error"', false)
+            ->assertSee('id="return_reason-error"', false)
+            ->assertSee('data-closeout-fix-target="return_reason"', false)
+            ->assertSee('data-closeout-fix-target="unfinished_work"', false)
+            ->assertSee('data-closeout-fix-target="needed_equipment"', false)
+            ->assertSee('data-closeout-fix-target="recommendations"', false)
+            ->assertSee('Required for a return trip.');
+    }
+
     public function test_all_submission_outcomes_apply_their_atomic_effects(): void
     {
         [$organization, $returnVisit, $lead] = $this->executionGraph('on_site');

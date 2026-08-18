@@ -1,8 +1,10 @@
-@props(['field'])
+@props(['field', 'message' => null])
 
-@error($field)
+@php($fieldMessage = $errors->first($field) ?: $message)
+
+@if($fieldMessage)
     <p id="{{ $field }}-error" class="mt-2 flex items-start gap-2 text-sm font-semibold text-red-700" role="alert">
         <span aria-hidden="true">!</span>
-        <span>{{ $message }}</span>
+        <span>{{ $fieldMessage }}</span>
     </p>
-@enderror
+@endif
