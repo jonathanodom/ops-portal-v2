@@ -32,6 +32,7 @@ use App\Http\Controllers\Office\PaymentSettingsController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
+use App\Http\Controllers\Office\ServiceTicketFileController;
 use App\Http\Controllers\Office\SquareConnectionController;
 use App\Http\Controllers\Office\StripeConnectionController;
 use App\Http\Controllers\Office\TicketCustomerController;
@@ -103,6 +104,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::middleware('capability:service_tickets.view')->group(function (): void {
                 Route::get('/service-tickets', [ServiceTicketController::class, 'index'])->name('service-tickets.index');
                 Route::get('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'show'])->whereNumber('serviceTicket')->name('service-tickets.show');
+                Route::get('/service-ticket-files/{file}', [ServiceTicketFileController::class, 'show'])->whereNumber('file')->name('service-ticket-files.show');
                 Route::get('/dispatch', [DispatchController::class, 'index'])->name('dispatch.index');
             });
             Route::middleware('capability:dispatch.manage')->group(function (): void {
@@ -113,6 +115,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/service-tickets/{serviceTicket}/edit', [ServiceTicketController::class, 'edit'])->whereNumber('serviceTicket')->name('service-tickets.edit');
                 Route::put('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'update'])->whereNumber('serviceTicket')->name('service-tickets.update');
                 Route::post('/service-tickets/{serviceTicket}/notes', [ServiceTicketController::class, 'addNote'])->whereNumber('serviceTicket')->name('service-tickets.notes.store');
+                Route::post('/service-tickets/{serviceTicket}/files', [ServiceTicketFileController::class, 'store'])->whereNumber('serviceTicket')->name('service-tickets.files.store');
+                Route::delete('/service-tickets/{serviceTicket}/files/{file}', [ServiceTicketFileController::class, 'destroy'])->whereNumber(['serviceTicket', 'file'])->name('service-tickets.files.destroy');
                 Route::post('/service-tickets/{serviceTicket}/transition', [ServiceTicketController::class, 'transition'])->whereNumber('serviceTicket')->name('service-tickets.transition');
                 Route::post('/service-tickets/{serviceTicket}/reopen', [ServiceTicketController::class, 'reopen'])->whereNumber('serviceTicket')->name('service-tickets.reopen');
                 Route::get('/service-tickets/{serviceTicket}/visits/create', [VisitController::class, 'create'])->whereNumber('serviceTicket')->name('service-tickets.visits.create');

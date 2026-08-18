@@ -4,6 +4,7 @@ import AxeBuilder from '@axe-core/playwright';
 const password = process.env.BETA_DEMO_PASSWORD;
 const dashboardReviewDir = process.env.DASHBOARD_REVIEW_DIR;
 const projectsReviewDir = process.env.PROJECTS_REVIEW_DIR;
+const fieldTestReviewDir = process.env.FIELD_TEST_REVIEW_DIR;
 
 async function captureDashboard(page, filename) {
     if (dashboardReviewDir) {
@@ -14,6 +15,12 @@ async function captureDashboard(page, filename) {
 async function captureProjects(page, filename) {
     if (projectsReviewDir) {
         await page.screenshot({ path: `${projectsReviewDir}/${filename}`, fullPage: true });
+    }
+}
+
+async function captureFieldTest(page, filename) {
+    if (fieldTestReviewDir) {
+        await page.screenshot({ path: `${fieldTestReviewDir}/${filename}`, fullPage: true });
     }
 }
 
@@ -79,6 +86,28 @@ test.describe('Projects V1', () => {
 
 test.describe('desktop beta', () => {
     test.skip(({ isMobile }) => isMobile);
+
+    test('Ticket files upload, render, and remove in the desktop workspace', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office/service-tickets?search=NDT-ST-2026-9001');
+        await page.getByRole('link', { name: /BETA A:/ }).click();
+        const section = page.locator('[data-ticket-files]');
+        const filename = `desktop-ticket-reference-${Date.now()}.png`;
+        await section.getByLabel('Ticket file').setInputFiles({
+            name: filename,
+            mimeType: 'image/png',
+            buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+        });
+        await section.getByLabel(/Caption/).fill('Desktop Ticket reference');
+        await section.getByRole('button', { name: 'Upload Ticket file' }).click();
+        await expect(page.locator('[data-ticket-files]').getByText(filename)).toBeVisible();
+        await expectAccessible(page);
+        await captureFieldTest(page, 'ticket-files-1440x900.png');
+        const fileCard = page.locator('[data-ticket-files] article').filter({ hasText: filename });
+        await expect(fileCard.getByRole('link', { name: filename })).toBeVisible();
+        await fileCard.getByRole('button', { name: 'Remove' }).click();
+        await expect(page.locator('[data-ticket-files]').getByText(filename)).toHaveCount(0);
+    });
 
     test('operations dashboard is responsive, bounded, and accessible', async ({ page }) => {
         await login(page, 'super_admin');
@@ -579,6 +608,33 @@ test.describe('desktop beta', () => {
 
 test.describe('mobile beta', () => {
     test.skip(({ isMobile }) => !isMobile);
+
+    test('Ticket files remain usable at phone width', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office/service-tickets?search=NDT-ST-2026-9001');
+        await page.getByRole('link', { name: /BETA A:/ }).click();
+        const section = page.locator('[data-ticket-files]');
+        const filename = `mobile-ticket-reference-${Date.now()}.png`;
+        await section.getByLabel('Ticket file').setInputFiles({
+            name: filename,
+            mimeType: 'image/png',
+            buffer: Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64'),
+        });
+        await section.getByLabel(/Caption/).fill('Mobile Ticket reference');
+        await section.getByRole('button', { name: 'Upload Ticket file' }).click();
+        await expect(page.locator('[data-ticket-files]').getByText(filename)).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        const shortControls = await section.locator('button, input, textarea, a').evaluateAll((elements) => elements
+            .filter((element) => element.offsetParent !== null)
+            .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
+            .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+        expect(shortControls).toEqual([]);
+        await expectAccessible(page);
+        await captureFieldTest(page, 'ticket-files-390x844.png');
+        const fileCard = page.locator('[data-ticket-files] article').filter({ hasText: filename });
+        await fileCard.getByRole('button', { name: 'Remove' }).click();
+        await expect(page.locator('[data-ticket-files]').getByText(filename)).toHaveCount(0);
+    });
 
     test('restricted office dashboard hides financial and health data at phone width', async ({ page }) => {
         await login(page, 'dispatcher');

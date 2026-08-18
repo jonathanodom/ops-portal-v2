@@ -10,6 +10,51 @@
         <div class="space-y-6">
             <section class="surface p-5"><h2 class="text-lg font-bold">Customer & location</h2><p class="mt-3 font-bold">{{ $ticket->customer->display_name }}</p><a class="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-brand-blue" href="{{ route('office.locations.show', $ticket->serviceLocation) }}">{{ $ticket->serviceLocation->name }} · {{ $ticket->serviceLocation->formattedAddress() }}</a>@if($ticket->contact)<p class="mt-2 text-sm text-slate-600">Contact: {{ $ticket->contact->name }} @if($ticket->contact->phone)· {{ $ticket->contact->phone }}@endif</p>@endif</section>
             <section class="surface p-5"><h2 class="text-lg font-bold">Work scope</h2><p class="mt-3 whitespace-pre-line text-slate-700">{{ $ticket->description ?: 'No work scope recorded.' }}</p><div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2"><div><p class="text-xs font-bold uppercase tracking-[.1em] text-slate-500">Purpose</p><p class="mt-1 font-semibold">{{ $purposes[$ticket->purpose] ?? ucfirst(str_replace('_',' ',$ticket->purpose)) }}</p></div><div><p class="text-xs font-bold uppercase tracking-[.1em] text-slate-500">Billing disposition</p><p class="mt-1 font-semibold">{{ $billingDispositions[$ticket->billing_disposition] ?? ucfirst(str_replace('_',' ',$ticket->billing_disposition)) }}</p></div></div>@if($ticket->customer_visible_summary)<h3 class="mt-5 text-sm font-bold uppercase tracking-[.1em] text-slate-500">Customer-visible summary</h3><p class="mt-2 whitespace-pre-line text-slate-700">{{ $ticket->customer_visible_summary }}</p>@endif</section>
+            <section class="surface p-5" data-ticket-files>
+                <div>
+                    <h2 class="text-lg font-bold">Ticket files</h2>
+                    <p class="mt-1 text-sm text-slate-600">Private reference files for this Service Ticket. These files are separate from Visit closeout photos.</p>
+                </div>
+                <div class="mt-5 space-y-3">
+                    @forelse($ticket->files->where('state', 'stored') as $file)
+                        <article class="rounded-lg border border-slate-200 p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-3">
+                                <div class="min-w-0">
+                                    <a class="inline-flex min-h-11 max-w-full items-center break-all font-bold text-brand-blue" href="{{ route('office.service-ticket-files.show', $file) }}">{{ $file->original_name }}</a>
+                                    @if($file->caption)<p class="mt-1 whitespace-pre-line text-sm text-slate-700">{{ $file->caption }}</p>@endif
+                                    <p class="mt-2 text-xs font-semibold text-slate-500">{{ number_format($file->byte_size / 1024, 1) }} KB · {{ $file->uploader?->name ?? 'Former user' }} · <x-local-time :value="$file->created_at" :timezone="$activeOrganization->timezone" /></p>
+                                </div>
+                                @if($activeMembership->hasCapability('dispatch.manage'))
+                                    <form method="POST" action="{{ route('office.service-tickets.files.destroy', [$ticket, $file]) }}">
+                                        @csrf
+                                        @method('DELETE')
+                                        <button class="button-secondary">Remove</button>
+                                    </form>
+                                @endif
+                            </div>
+                        </article>
+                    @empty
+                        <p class="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">No Ticket-level files have been uploaded.</p>
+                    @endforelse
+                </div>
+                @if($activeMembership->hasCapability('dispatch.manage'))
+                    <form method="POST" action="{{ route('office.service-tickets.files.store', $ticket) }}" enctype="multipart/form-data" class="mt-5 space-y-3 border-t border-slate-200 pt-5">
+                        @csrf
+                        <div>
+                            <label class="form-label" for="ticket_file">Ticket file</label>
+                            <input class="form-input @error('file') border-red-500 bg-red-50 @enderror" id="ticket_file" type="file" name="file" accept="application/pdf,image/jpeg,image/png,image/webp,image/heic,image/heif" required aria-describedby="ticket-file-help @error('file') file-error @enderror" @error('file') aria-invalid="true" @enderror>
+                            <p id="ticket-file-help" class="mt-1 text-sm text-slate-500">PDF, JPEG, PNG, WebP, HEIC, or HEIF. Maximum 20 MB.</p>
+                            <x-field-error field="file" />
+                        </div>
+                        <div>
+                            <label class="form-label" for="ticket_file_caption">Caption / description <span class="font-normal text-slate-500">(optional)</span></label>
+                            <textarea class="form-textarea @error('caption') border-red-500 bg-red-50 @enderror" id="ticket_file_caption" name="caption" maxlength="500" @error('caption') aria-invalid="true" aria-describedby="caption-error" @enderror>{{ old('caption') }}</textarea>
+                            <x-field-error field="caption" />
+                        </div>
+                        <button class="button-primary">Upload Ticket file</button>
+                    </form>
+                @endif
+            </section>
             <section class="surface overflow-hidden">
                 <div class="flex items-center justify-between border-b border-slate-200 p-5"><h2 class="text-lg font-bold">Visits</h2></div>
                 @if($ticket->visits->count() > 1 && !in_array($ticket->status, ['completed', 'canceled']))

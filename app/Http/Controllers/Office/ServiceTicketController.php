@@ -13,6 +13,7 @@ use App\Models\Customer;
 use App\Models\Organization;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
+use App\Models\ServiceTicketFile;
 use App\Models\ServiceTicketNote;
 use App\Models\Visit;
 use App\Support\AuditRecorder;
@@ -167,6 +168,7 @@ class ServiceTicketController extends Controller
             'serviceLocation.primaryContact',
             'contact',
             'invoices' => fn ($query) => $query->latest('generation')->withExists('acknowledgments'),
+            'files' => fn ($query) => $query->with('uploader')->latest(),
             'notes.author',
             'reopens.reopenedBy',
             'visits' => fn ($query) => $query->with(['returnOfVisit', 'assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('ticket_visit_number'),
@@ -175,7 +177,8 @@ class ServiceTicketController extends Controller
             ->with('actor')
             ->where(fn ($query) => $query
                 ->where(fn ($inner) => $inner->where('subject_type', $ticket->getMorphClass())->where('subject_id', $ticket->id))
-                ->orWhere(fn ($inner) => $inner->where('subject_type', (new Visit)->getMorphClass())->whereIn('subject_id', $ticket->visits->pluck('id'))))
+                ->orWhere(fn ($inner) => $inner->where('subject_type', (new Visit)->getMorphClass())->whereIn('subject_id', $ticket->visits->pluck('id')))
+                ->orWhere(fn ($inner) => $inner->where('subject_type', (new ServiceTicketFile)->getMorphClass())->whereIn('subject_id', $ticket->files->pluck('id'))))
             ->latest('occurred_at')->limit(100)->get();
         $membership = $request->attributes->get('membership');
         $executableVisitIds = $ticket->visits->filter(function (Visit $visit) use ($membership): bool {
