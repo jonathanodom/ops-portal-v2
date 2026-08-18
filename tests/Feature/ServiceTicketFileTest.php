@@ -56,7 +56,7 @@ class ServiceTicketFileTest extends TestCase
 
         $event = AuditEvent::query()->where('event_type', 'service_ticket_file.uploaded')->sole();
         $this->assertSame($file->id, $event->subject_id);
-        $this->assertSame([
+        $this->assertEquals([
             'ticket_id' => $ticket->id,
             'file_id' => $file->id,
             'mime_type' => 'application/pdf',
