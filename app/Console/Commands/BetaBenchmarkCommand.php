@@ -15,6 +15,7 @@ use App\Models\Project;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Models\VisitMedia;
+use App\Support\DispatchSchedule;
 use App\Support\OfficeDashboardSnapshot;
 use Illuminate\Console\Command;
 use Illuminate\Http\Request;
@@ -59,7 +60,10 @@ class BetaBenchmarkCommand extends Command
                 app(OfficeDashboardSnapshot::class),
             )],
             'today' => [500, 20, fn () => app(TodayController::class)->index($this->request('/field', $membership))],
-            'dispatch' => [500, 25, fn () => app(DispatchController::class)->index($this->request('/office/dispatch', $membership))],
+            'dispatch' => [500, 25, fn () => app(DispatchController::class)->index(
+                $this->request('/office/dispatch', $membership),
+                app(DispatchSchedule::class),
+            )],
             'projects_workspace' => [500, 25, fn () => app(ProjectController::class)->index(
                 $this->request('/office/projects', $membership),
                 app(ProjectWorkspaceQuery::class),
