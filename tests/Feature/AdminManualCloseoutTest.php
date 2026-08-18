@@ -86,6 +86,26 @@ class AdminManualCloseoutTest extends TestCase
         $this->assertStringNotContainsString('Administrative reconciliation', json_encode($audit->metadata));
     }
 
+    public function test_manual_closeout_photo_controls_offer_camera_and_gallery_sources(): void
+    {
+        [$organization, $ticket, $visit] = $this->ticketGraph();
+        [$admin] = $this->userWithRole('super_admin', $organization);
+        $this->actingAs($admin)->post(route('office.visits.manual-closeout.start', $visit))->assertRedirect();
+
+        $response = $this->actingAs($admin)->get(route('office.service-tickets.show', [
+            'serviceTicket' => $ticket,
+            'manual_closeout_visit' => $visit->id,
+        ]));
+
+        $response->assertOk()
+            ->assertSee('Take photo')
+            ->assertSee('Choose from gallery or files')
+            ->assertSee('data-upload-photo-source', false)
+            ->assertSee('data-upload-selection', false)
+            ->assertSee('capture="environment"', false);
+        $this->assertSame(1, substr_count($response->getContent(), 'capture="environment"'));
+    }
+
     public function test_manual_completion_requires_standard_resolved_evidence_and_confirmation(): void
     {
         [$organization, , $visit] = $this->ticketGraph();

@@ -66,6 +66,16 @@ if (closeoutDialog) {
     };
     document.querySelectorAll('[data-closeout-dialog-open]').forEach((button) => button.addEventListener('click', () => open(button)));
     closeoutDialog.querySelectorAll('[data-closeout-dialog-close]').forEach((button) => button.addEventListener('click', close));
+    closeoutDialog.querySelectorAll('[data-closeout-fix-target]').forEach((button) => button.addEventListener('click', () => {
+        const field = button.dataset.closeoutFixTarget;
+        const section = document.querySelector(`[data-closeout-field="${CSS.escape(field)}"]`);
+        const control = section?.querySelector(`[name="${CSS.escape(field)}"]`) ?? document.getElementById(field);
+        close();
+        requestAnimationFrame(() => {
+            section?.scrollIntoView({ behavior: 'smooth', block: 'center' });
+            control?.focus({ preventScroll: true });
+        });
+    }));
     closeoutDialog.addEventListener('cancel', (event) => {
         event.preventDefault();
         close();
