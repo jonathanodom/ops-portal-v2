@@ -4,10 +4,15 @@ on:
   pull_request:
     branches: [main]
   push:
-    branches: [main, "codex/**"]
+    branches: [main, "codex/**", "chore/**"]
+  workflow_dispatch:
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.event_name }}-${{ github.head_ref || github.ref_name }}
+  cancel-in-progress: true
 
 jobs:
-  validate:
+  core:
     runs-on: ubuntu-latest
     services:
       mysql:
@@ -58,6 +63,49 @@ jobs:
       - run: php artisan view:cache
       - run: php scripts/lint-compiled-views.php
       - run: php artisan test
+      - run: git diff --check
+
+  safety:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_DATABASE: newday_ops_test
+          MYSQL_USER: newday
+          MYSQL_PASSWORD: test_password
+          MYSQL_ROOT_PASSWORD: root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot_password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      APP_ENV: testing
+      APP_KEY: base64:1ZJGqQmsi4O9P38qKJFrF/eeHixOrfd3M+4c7dA8kgc=
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: newday_ops_test
+      DB_USERNAME: newday
+      DB_PASSWORD: test_password
+      CACHE_STORE: array
+      SESSION_DRIVER: array
+      QUEUE_CONNECTION: sync
+      MAIL_MAILER: array
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, pdo_mysql
+          coverage: none
+      - run: composer install --no-interaction --prefer-dist
+      - run: php artisan migrate --force
+      - run: php artisan db:seed --force
       - name: Rehearse MySQL backup and isolated restore
         env:
           DB_USERNAME: root
@@ -65,36 +113,93 @@ jobs:
         run: |
           php artisan ops:backup --output=storage/app/backups/ci-phase5.sql
           php artisan ops:restore-verify storage/app/backups/ci-phase5.sql
-      - name: Build isolated MySQL beta fixture
+
+  browser:
+    if: github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch'
+    runs-on: ubuntu-latest
+    services:
+      mysql:
+        image: mysql:8.4
         env:
-          APP_ENV: beta
-          DB_CONNECTION: mysql
-          DB_DATABASE: newday_ops_beta
-          DB_USERNAME: root
-          DB_PASSWORD: root_password
-          SESSION_DRIVER: database
-          CACHE_STORE: database
-          QUEUE_CONNECTION: database
-          BETA_DEMO_PASSWORD: BetaCiPassword123!
+          MYSQL_DATABASE: newday_ops_test
+          MYSQL_ROOT_PASSWORD: root_password
+        ports:
+          - 3306:3306
+        options: >-
+          --health-cmd="mysqladmin ping -h localhost -uroot -proot_password"
+          --health-interval=5s
+          --health-timeout=5s
+          --health-retries=20
+    env:
+      APP_ENV: beta
+      APP_KEY: base64:1ZJGqQmsi4O9P38qKJFrF/eeHixOrfd3M+4c7dA8kgc=
+      APP_URL: http://127.0.0.1:8001
+      DB_CONNECTION: mysql
+      DB_HOST: 127.0.0.1
+      DB_PORT: 3306
+      DB_DATABASE: newday_ops_beta
+      DB_USERNAME: root
+      DB_PASSWORD: root_password
+      CACHE_STORE: database
+      SESSION_DRIVER: database
+      QUEUE_CONNECTION: database
+      MAIL_MAILER: array
+      BETA_DEMO_PASSWORD: BetaCiPassword123!
+      BETA_BASE_URL: http://127.0.0.1:8001
+    steps:
+      - uses: actions/checkout@v4
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mbstring, pdo_mysql
+          coverage: none
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: composer install --no-interaction --prefer-dist
+      - run: npm ci
+      - run: npm run build
+      - name: Build isolated MySQL beta fixture
         run: |
           mysql -h 127.0.0.1 -uroot -proot_password -e "CREATE DATABASE newday_ops_beta CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
           composer beta:setup
           php artisan beta:validate --env=beta
           php artisan beta:benchmark --env=beta --runs=10 --fail-on-budget
       - name: Validate beta accessibility and responsive workflows
-        env:
-          APP_ENV: beta
-          DB_CONNECTION: mysql
-          DB_DATABASE: newday_ops_beta
-          DB_USERNAME: root
-          DB_PASSWORD: root_password
-          SESSION_DRIVER: database
-          CACHE_STORE: database
-          QUEUE_CONNECTION: database
-          BETA_DEMO_PASSWORD: BetaCiPassword123!
-          BETA_BASE_URL: http://127.0.0.1:8001
         run: |
           npx playwright install --with-deps chromium
           php artisan serve --env=beta --host=127.0.0.1 --port=8001 > /tmp/ops-beta-server.log 2>&1 &
           npm run test:e2e
-      - run: git diff --check
+
+  validate:
+    if: always()
+    needs: [core, safety, browser]
+    runs-on: ubuntu-latest
+    env:
+      CORE_RESULT: ${{ needs.core.result }}
+      SAFETY_RESULT: ${{ needs.safety.result }}
+      BROWSER_RESULT: ${{ needs.browser.result }}
+      FULL_VALIDATION: ${{ github.event_name == 'pull_request' || github.ref == 'refs/heads/main' || github.event_name == 'workflow_dispatch' }}
+    steps:
+      - name: Require the event's validation jobs
+        shell: bash
+        run: |
+          set -euo pipefail
+
+          if [[ "$CORE_RESULT" != "success" ]]; then
+            echo "Core validation did not succeed: $CORE_RESULT"
+            exit 1
+          fi
+
+          if [[ "$FULL_VALIDATION" == "true" ]]; then
+            if [[ "$SAFETY_RESULT" != "success" || "$BROWSER_RESULT" != "success" ]]; then
+              echo "Full validation did not succeed: safety=$SAFETY_RESULT browser=$BROWSER_RESULT"
+              exit 1
+            fi
+          elif [[ "$SAFETY_RESULT" != "skipped" || "$BROWSER_RESULT" != "skipped" ]]; then
+            echo "Fast validation unexpectedly ran a full-validation job: safety=$SAFETY_RESULT browser=$BROWSER_RESULT"
+            exit 1
+          fi
+
+          echo "Required validation succeeded: core=$CORE_RESULT safety=$SAFETY_RESULT browser=$BROWSER_RESULT"
