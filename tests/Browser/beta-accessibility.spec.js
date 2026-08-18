@@ -259,6 +259,37 @@ test.describe('desktop beta', () => {
         await expectAccessible(page);
     });
 
+    test('dispatch date strip and calendar adapt without horizontal overflow', async ({ page }) => {
+        test.setTimeout(90_000);
+        await login(page, 'super_admin');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 900 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office/dispatch');
+            await expect(page.locator('[data-dispatch-date-strip] > a')).toHaveCount(5);
+            await expect(page.getByRole('link', { name: 'Previous day' })).toBeVisible();
+            await expect(page.getByRole('link', { name: 'Next day' })).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'Dispatch calendar' })).toBeVisible();
+
+            if (viewport.width >= 1024) {
+                await expect(page.locator('[data-dispatch-calendar-grid]')).toBeVisible();
+                await expect(page.locator('[data-dispatch-calendar-agenda]')).toBeHidden();
+            } else {
+                await expect(page.locator('[data-dispatch-calendar-grid]')).toBeHidden();
+                await expect(page.locator('[data-dispatch-calendar-agenda]')).toBeVisible();
+            }
+
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+        }
+    });
+
     test('customer workspace uses responsive cards and full-width desktop tables', async ({ page }) => {
         await login(page, 'super_admin');
 
