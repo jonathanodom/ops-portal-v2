@@ -70,6 +70,11 @@ class ServiceTicket extends Model
         return $this->hasMany(Invoice::class);
     }
 
+    public function files(): HasMany
+    {
+        return $this->hasMany(ServiceTicketFile::class);
+    }
+
     public function projects(): BelongsToMany
     {
         return $this->belongsToMany(Project::class, 'project_service_ticket')->withPivot(['organization_id', 'linked_by_id', 'linked_at'])->withTimestamps();

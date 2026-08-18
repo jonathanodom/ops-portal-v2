@@ -69,7 +69,7 @@ class BetaBenchmarkCommand extends Command
                 $project,
                 app(ProjectWorkspaceQuery::class),
             )],
-            'ticket_detail' => [750, 32, fn () => app()->call([app(ServiceTicketController::class), 'show'], [
+            'ticket_detail' => [750, 33, fn () => app()->call([app(ServiceTicketController::class), 'show'], [
                 'request' => $this->request('/office/service-tickets/'.$ticket->id, $membership),
                 'serviceTicket' => (string) $ticket->id,
             ])],
