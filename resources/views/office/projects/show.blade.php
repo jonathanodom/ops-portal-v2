@@ -3,6 +3,9 @@
     <x-form-errors />
     <x-office.record-header :title="$project->name" :back-href="route('office.projects.index')" back-label="Projects" :description="$project->project_number.' · '.Str::headline($project->type)">
         <x-slot:badges><span class="{{ $project->status === 'active' ? 'status-active' : (in_array($project->status,['completed','canceled']) ? 'status-inactive' : 'status-hold') }}">{{ Str::headline($project->status) }}</span></x-slot:badges>
+        @if($project->customer_id && $activeMembership->hasCapability('projects.admin') && $activeMembership->hasCapability('dispatch.manage'))
+            <x-slot:actions><a href="{{ route('office.projects.service-tickets.create', $project) }}" class="button-primary">Create Service Ticket</a></x-slot:actions>
+        @endif
     </x-office.record-header>
     <x-office.detail-nav :items="['overview'=>'Overview','workstreams'=>'Workstreams','tasks'=>'Tasks','milestones'=>'Milestones','tickets'=>'Related Service Tickets','notes'=>'Notes / Activity']" />
 

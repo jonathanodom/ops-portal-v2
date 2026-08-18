@@ -3,9 +3,9 @@
 namespace App\Http\Controllers\Office;
 
 use App\Domain\AdminManualCloseoutWorkflow;
+use App\Domain\ServiceTicketCreationValidator;
+use App\Domain\ServiceTicketCreator;
 use App\Domain\ServiceTicketWorkflow;
-use App\Domain\VisitCreator;
-use App\Domain\VisitScheduler;
 use App\Http\Controllers\Controller;
 use App\Models\AuditEvent;
 use App\Models\Contact;
@@ -17,12 +17,9 @@ use App\Models\ServiceTicketFile;
 use App\Models\ServiceTicketNote;
 use App\Models\Visit;
 use App\Support\AuditRecorder;
-use App\Support\ScheduleWindow;
-use App\Support\ServiceTicketNumber;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
@@ -95,66 +92,13 @@ class ServiceTicketController extends Controller
 
     public function store(
         Request $request,
-        ServiceTicketNumber $numbers,
-        ScheduleWindow $windows,
-        AuditRecorder $audit,
-        VisitCreator $visitCreator,
+        ServiceTicketCreator $creator,
+        ServiceTicketCreationValidator $validator,
     ): RedirectResponse {
         $organization = $this->organization($request);
         Gate::authorize('create', [ServiceTicket::class, $organization]);
-        $data = $this->validated($request, $organization);
-
-        $ticket = DB::transaction(function () use ($request, $organization, $data, $numbers, $windows, $audit, $visitCreator): ServiceTicket {
-            $contactId = $data['contact_id'] ?? $this->defaultContactId((int) $data['service_location_id'], (int) $data['customer_id']);
-            $ticket = ServiceTicket::query()->create([
-                'organization_id' => $organization->id,
-                'customer_id' => $data['customer_id'],
-                'service_location_id' => $data['service_location_id'],
-                'contact_id' => $contactId,
-                'ticket_number' => $numbers->next($organization),
-                'title' => $data['title'],
-                'description' => $data['description'] ?? null,
-                'customer_visible_summary' => $data['customer_visible_summary'] ?? null,
-                'priority' => $data['priority'],
-                'source' => $data['source'],
-                'purpose' => $data['purpose'],
-                'billing_disposition' => $data['billing_disposition'],
-                'status' => 'open',
-                'created_by_id' => $request->user()->id,
-                'updated_by_id' => $request->user()->id,
-            ]);
-            $audit->record($organization, $request->user(), 'service_ticket.created', $ticket, [
-                'customer_id' => $ticket->customer_id,
-                'service_location_id' => $ticket->service_location_id,
-                'contact_id' => $ticket->contact_id,
-                'priority' => $ticket->priority,
-                'source' => $ticket->source,
-                'purpose' => $ticket->purpose,
-                'billing_disposition' => $ticket->billing_disposition,
-            ]);
-
-            if ($request->boolean('create_visit')) {
-                $visit = $visitCreator->create($ticket, [
-                    'service_location_id' => $ticket->service_location_id,
-                    'status' => 'planned',
-                    'timezone' => $ticket->serviceLocation->timezone,
-                    'created_by_id' => $request->user()->id,
-                    'updated_by_id' => $request->user()->id,
-                ]);
-                $window = $windows->fromLocal($data['scheduled_start'] ?? null, $data['scheduled_end'] ?? null, $visit->timezone);
-                app(VisitScheduler::class)->save(
-                    $visit,
-                    $window,
-                    $data['assignees'] ?? [],
-                    isset($data['lead_membership_id']) ? (int) $data['lead_membership_id'] : null,
-                    $request->user(),
-                    $request->boolean('confirm_conflicts'),
-                );
-                $audit->record($organization, $request->user(), 'visit.created', $visit, ['ticket_id' => $ticket->id]);
-            }
-
-            return $ticket;
-        });
+        $data = $validator->validate($request, $organization);
+        $ticket = $creator->create($organization, $request->user(), $data, $request->boolean('create_visit'), $request->boolean('confirm_conflicts'));
 
         return redirect()->route('office.service-tickets.show', $ticket)->with('status', 'Service ticket created.');
     }
@@ -324,12 +268,6 @@ class ServiceTicketController extends Controller
             'purpose' => $data['purpose'] ?? $ticket?->purpose ?? 'service_call',
             'billing_disposition' => $data['billing_disposition'] ?? $ticket?->billing_disposition ?? 'billable',
         ];
-    }
-
-    private function defaultContactId(int $locationId, int $customerId): ?int
-    {
-        return ServiceLocation::query()->findOrFail($locationId)->primary_contact_id
-            ?? Contact::query()->where('customer_id', $customerId)->where('active', true)->where('is_preferred', true)->value('id');
     }
 
     private function ticket(Request $request, string $id): ServiceTicket
