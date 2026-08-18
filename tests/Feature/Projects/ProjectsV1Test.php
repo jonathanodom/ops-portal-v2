@@ -124,6 +124,46 @@ class ProjectsV1Test extends TestCase
         $this->actingAs($user)->get(route('office.projects.show', $project))->assertOk()->assertSee('Networking')->assertSee('Cutover')->assertSee('Private customer detail')->assertSee('Notes / Activity');
     }
 
+    public function test_project_detail_forms_use_padded_and_inset_treatments(): void
+    {
+        $organization = Organization::factory()->create();
+        [$user] = $this->userWithRole($organization, 'dispatcher');
+        [$customer] = $this->customerLocation($organization, 'Form Spacing Customer');
+        $project = Project::factory()->create([
+            'organization_id' => $organization->id,
+            'customer_id' => $customer->id,
+            'status' => 'active',
+        ]);
+        ProjectWorkstream::query()->create([
+            'organization_id' => $organization->id,
+            'project_id' => $project->id,
+            'name' => 'Delivery',
+            'status' => 'active',
+        ]);
+        ProjectTask::query()->create([
+            'organization_id' => $organization->id,
+            'project_id' => $project->id,
+            'title' => 'Verify spacing',
+            'status' => 'planned',
+            'priority' => 'normal',
+        ]);
+        ProjectMilestone::query()->create([
+            'organization_id' => $organization->id,
+            'project_id' => $project->id,
+            'name' => 'Review',
+            'status' => 'planned',
+        ]);
+
+        $response = $this->actingAs($user)->get(route('office.projects.show', $project))->assertOk();
+
+        $response
+            ->assertSee('office-detail-form-body office-detail-form-separated office-detail-form-grid', false)
+            ->assertSee('office-detail-form-inset office-detail-form-grid', false)
+            ->assertSee('class="form-textarea"', false)
+            ->assertSee('office-detail-form-inset', false)
+            ->assertSee('Edit Project');
+    }
+
     public function test_project_workstream_and_milestone_status_corrections_preserve_history(): void
     {
         $organization = Organization::factory()->create(['timezone' => 'America/Chicago']);

@@ -307,6 +307,22 @@
         @apply px-5 py-8 text-sm text-slate-500;
     }
 
+    .office-detail-form-body {
+        @apply px-5 py-5;
+    }
+
+    .office-detail-form-separated {
+        @apply border-t border-slate-200;
+    }
+
+    .office-detail-form-inset {
+        @apply mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5;
+    }
+
+    .office-detail-form-grid {
+        @apply grid gap-4;
+    }
+
     .office-detail-definition {
         @apply space-y-4 text-sm;
     }

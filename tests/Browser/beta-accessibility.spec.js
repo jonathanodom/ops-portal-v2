@@ -62,15 +62,33 @@ test.describe('Projects V1', () => {
             expect(overflowing).toEqual([]);
             await expectAccessible(page);
             await captureProjects(page, `workspace-${viewport.width}x${viewport.height}.png`);
+
+            await page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first().click();
+            await expect(page.getByRole('heading', { name: 'Trip Hopper — IT Support' })).toBeVisible();
+            for (const section of ['Overview', 'Workstreams', 'Tasks', 'Milestones', 'Related Service Tickets', 'Notes / Activity']) {
+                await expect(page.getByRole('link', { name: section })).toBeVisible();
+            }
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            const bodyPadding = await page.locator('.office-detail-form-body').evaluateAll((forms) => forms.map((form) => Number.parseFloat(getComputedStyle(form).paddingLeft)));
+            expect(bodyPadding.length).toBeGreaterThan(0);
+            expect(bodyPadding.every((padding) => padding === 20)).toBeTruthy();
+            await page.getByText('Edit Workstream', { exact: true }).first().click();
+            const insetTreatment = await page.locator('form.office-detail-form-inset:visible').first().evaluate((form) => ({
+                padding: Number.parseFloat(getComputedStyle(form).paddingLeft),
+                border: Number.parseFloat(getComputedStyle(form).borderLeftWidth),
+                background: getComputedStyle(form).backgroundColor,
+            }));
+            expect(insetTreatment.padding).toBeGreaterThanOrEqual(16);
+            expect(insetTreatment.border).toBe(1);
+            expect(insetTreatment.background).not.toBe('rgba(0, 0, 0, 0)');
+            const shortControls = await page.locator('form:visible input, form:visible select, form:visible textarea, form:visible button').evaluateAll((elements) => elements
+                .filter((element) => element.offsetParent !== null)
+                .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
+                .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
+            expect(shortControls).toEqual([]);
+            await expectAccessible(page);
+            await captureProjects(page, `detail-${viewport.width}x${viewport.height}.png`);
         }
-        await page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first().click();
-        await expect(page.getByRole('heading', { name: 'Trip Hopper — IT Support' })).toBeVisible();
-        for (const section of ['Overview', 'Workstreams', 'Tasks', 'Milestones', 'Related Service Tickets', 'Notes / Activity']) {
-            await expect(page.getByRole('link', { name: section })).toBeVisible();
-        }
-        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
-        await expectAccessible(page);
-        await captureProjects(page, 'detail-1920x1080.png');
     });
 
     test('restricted viewer sees no Projects management controls', async ({ page }) => {
