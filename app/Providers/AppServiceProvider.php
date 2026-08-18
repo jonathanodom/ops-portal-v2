@@ -4,10 +4,15 @@ namespace App\Providers;
 
 use App\Contracts\SquareConnectionClient;
 use App\Contracts\StripeConnectionClient;
+use App\Domain\Projects\Contracts\CustomerDirectory;
+use App\Domain\Projects\Contracts\ServiceOperationsDirectory;
+use App\Domain\Projects\Support\EloquentCustomerDirectory;
+use App\Domain\Projects\Support\EloquentServiceOperationsDirectory;
 use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\CustomerServiceEnrollment;
 use App\Models\Invoice;
+use App\Models\Project;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\Visit;
@@ -17,6 +22,7 @@ use App\Policies\ContactPolicy;
 use App\Policies\CustomerPolicy;
 use App\Policies\CustomerServiceEnrollmentPolicy;
 use App\Policies\InvoicePolicy;
+use App\Policies\ProjectPolicy;
 use App\Policies\ServiceLocationPolicy;
 use App\Policies\ServiceTicketPolicy;
 use App\Policies\VisitPolicy;
@@ -36,6 +42,8 @@ class AppServiceProvider extends ServiceProvider
     {
         $this->app->bind(SquareConnectionClient::class, SquareOAuthConnectionClient::class);
         $this->app->bind(StripeConnectionClient::class, StripeOAuthConnectionClient::class);
+        $this->app->bind(CustomerDirectory::class, EloquentCustomerDirectory::class);
+        $this->app->bind(ServiceOperationsDirectory::class, EloquentServiceOperationsDirectory::class);
     }
 
     /**
@@ -47,6 +55,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(CustomerServiceEnrollment::class, CustomerServiceEnrollmentPolicy::class);
         Gate::policy(Invoice::class, InvoicePolicy::class);
+        Gate::policy(Project::class, ProjectPolicy::class);
         Gate::policy(Contact::class, ContactPolicy::class);
         Gate::policy(ServiceLocation::class, ServiceLocationPolicy::class);
         Gate::policy(ServiceTicket::class, ServiceTicketPolicy::class);

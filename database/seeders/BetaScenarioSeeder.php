@@ -101,6 +101,7 @@ class BetaScenarioSeeder extends Seeder
         }
 
         $this->call(BetaVolumeSeeder::class);
+        $this->call(BetaProjectsSeeder::class);
 
         OrganizationBillingSetting::query()->create([
             'organization_id' => $organization->id, 'seller_name' => 'NewDay Tech', 'seller_legal_name' => 'NewDay Tech LLC',

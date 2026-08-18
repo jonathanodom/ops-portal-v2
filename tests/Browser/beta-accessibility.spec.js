@@ -3,10 +3,17 @@ import AxeBuilder from '@axe-core/playwright';
 
 const password = process.env.BETA_DEMO_PASSWORD;
 const dashboardReviewDir = process.env.DASHBOARD_REVIEW_DIR;
+const projectsReviewDir = process.env.PROJECTS_REVIEW_DIR;
 
 async function captureDashboard(page, filename) {
     if (dashboardReviewDir) {
         await page.screenshot({ path: `${dashboardReviewDir}/${filename}`, fullPage: true });
+    }
+}
+
+async function captureProjects(page, filename) {
+    if (projectsReviewDir) {
+        await page.screenshot({ path: `${projectsReviewDir}/${filename}`, fullPage: true });
     }
 }
 
@@ -26,6 +33,49 @@ async function expectAccessible(page) {
 }
 
 test.skip(!password, 'BETA_DEMO_PASSWORD is required.');
+
+test.describe('Projects V1', () => {
+    test('workspace and detail remain responsive and accessible', async ({ page }) => {
+        await login(page, 'super_admin');
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office/projects');
+            await expect(page.getByRole('heading', { name: 'Projects / Engagements' })).toBeVisible();
+            await expect(page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first()).toBeVisible();
+            const overflowing = await page.locator('body *').evaluateAll((elements) => elements
+                .filter((element) => element.scrollWidth > element.clientWidth + 1)
+                .filter((element) => getComputedStyle(element).overflowX === 'visible')
+                .map((element) => `${element.tagName.toLowerCase()}#${element.id}.${element.className}`));
+            expect(overflowing).toEqual([]);
+            await expectAccessible(page);
+            await captureProjects(page, `workspace-${viewport.width}x${viewport.height}.png`);
+        }
+        await page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first().click();
+        await expect(page.getByRole('heading', { name: 'Trip Hopper — IT Support' })).toBeVisible();
+        for (const section of ['Overview', 'Workstreams', 'Tasks', 'Milestones', 'Related Service Tickets', 'Notes / Activity']) {
+            await expect(page.getByRole('link', { name: section })).toBeVisible();
+        }
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await expectAccessible(page);
+        await captureProjects(page, 'detail-1920x1080.png');
+    });
+
+    test('restricted viewer sees no Projects management controls', async ({ page }) => {
+        await login(page, 'reviewer');
+        await page.goto('/office/projects');
+        await page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first().click();
+        await expect(page.getByText('Edit Project')).toHaveCount(0);
+        await expect(page.getByText('Add Task')).toHaveCount(0);
+        await expect(page.getByRole('button', { name: 'Link Ticket' })).toHaveCount(0);
+        await expectAccessible(page);
+    });
+});
 
 test.describe('desktop beta', () => {
     test.skip(({ isMobile }) => isMobile);

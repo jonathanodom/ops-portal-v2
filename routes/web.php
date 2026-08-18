@@ -29,6 +29,7 @@ use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
+use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\SquareConnectionController;
@@ -83,6 +84,22 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->middleware('capability:experience.office.access')
         ->group(function (): void {
             Route::get('/', [OfficeDashboardController::class, 'index'])->name('home');
+            Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
+                Route::get('/', [ProjectController::class, 'index'])->name('index');
+                Route::get('/create', [ProjectController::class, 'create'])->middleware('capability:projects.manage')->name('create');
+                Route::post('/', [ProjectController::class, 'store'])->middleware('capability:projects.manage')->name('store');
+                Route::get('/{project}', [ProjectController::class, 'show'])->whereNumber('project')->name('show');
+                Route::put('/{project}', [ProjectController::class, 'update'])->whereNumber('project')->middleware('capability:projects.manage')->name('update');
+                Route::post('/{project}/workstreams', [ProjectController::class, 'storeWorkstream'])->whereNumber('project')->middleware('capability:projects.manage')->name('workstreams.store');
+                Route::put('/{project}/workstreams/{workstream}', [ProjectController::class, 'updateWorkstream'])->whereNumber(['project', 'workstream'])->middleware('capability:projects.manage')->name('workstreams.update');
+                Route::post('/{project}/tasks', [ProjectController::class, 'storeTask'])->whereNumber('project')->middleware('capability:projects.tasks.manage')->name('tasks.store');
+                Route::put('/{project}/tasks/{task}', [ProjectController::class, 'updateTask'])->whereNumber(['project', 'task'])->middleware('capability:projects.tasks.manage')->name('tasks.update');
+                Route::post('/{project}/milestones', [ProjectController::class, 'storeMilestone'])->whereNumber('project')->middleware('capability:projects.manage')->name('milestones.store');
+                Route::put('/{project}/milestones/{milestone}', [ProjectController::class, 'updateMilestone'])->whereNumber(['project', 'milestone'])->middleware('capability:projects.manage')->name('milestones.update');
+                Route::post('/{project}/notes', [ProjectController::class, 'storeNote'])->whereNumber('project')->middleware('capability:projects.tasks.manage')->name('notes.store');
+                Route::post('/{project}/tickets', [ProjectController::class, 'linkTicket'])->whereNumber('project')->middleware('capability:projects.admin')->name('tickets.link');
+                Route::delete('/{project}/tickets/{ticket}', [ProjectController::class, 'unlinkTicket'])->whereNumber(['project', 'ticket'])->middleware('capability:projects.admin')->name('tickets.unlink');
+            });
             Route::middleware('capability:service_tickets.view')->group(function (): void {
                 Route::get('/service-tickets', [ServiceTicketController::class, 'index'])->name('service-tickets.index');
                 Route::get('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'show'])->whereNumber('serviceTicket')->name('service-tickets.show');

@@ -146,7 +146,7 @@ class BetaHardeningTest extends TestCase
             putenv('BETA_DEMO_PASSWORD');
         }
 
-        foreach (['customers' => 250, 'service_locations' => 400, 'service_tickets' => 500, 'visits' => 1000, 'closeouts' => 200, 'visit_media' => 500] as $table => $count) {
+        foreach (['customers' => 250, 'service_locations' => 400, 'service_tickets' => 500, 'visits' => 1000, 'closeouts' => 200, 'visit_media' => 500, 'projects' => 2, 'project_workstreams' => 10, 'project_tasks' => 4, 'project_milestones' => 2] as $table => $count) {
             $this->assertDatabaseCount($table, $count);
         }
         $this->assertSame(3, DB::table('service_tickets')->where('title', 'like', 'BETA %:%')->count());
