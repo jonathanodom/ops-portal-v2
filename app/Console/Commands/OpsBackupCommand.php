@@ -72,8 +72,8 @@ class OpsBackupCommand extends Command
             'ticket_reopen' => ['service_ticket_reopens', 'service_tickets', 'SELECT COUNT(*) FROM service_ticket_reopens child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
             'closeout_visit' => ['closeouts', 'visits', 'SELECT COUNT(*) FROM closeouts child LEFT JOIN visits parent ON parent.id = child.visit_id WHERE parent.id IS NULL'],
             'handoff_ticket' => ['billing_handoffs', 'service_tickets', 'SELECT COUNT(*) FROM billing_handoffs child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
-            'invoice_ticket' => ['invoices', 'service_tickets', 'SELECT COUNT(*) FROM invoices child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE parent.id IS NULL'],
-            'invoice_handoff' => ['invoices', 'billing_handoffs', 'SELECT COUNT(*) FROM invoices child LEFT JOIN billing_handoffs parent ON parent.id = child.billing_handoff_id WHERE parent.id IS NULL'],
+            'invoice_ticket' => ['invoices', 'service_tickets', 'SELECT COUNT(*) FROM invoices child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE child.service_ticket_id IS NOT NULL AND parent.id IS NULL'],
+            'invoice_handoff' => ['invoices', 'billing_handoffs', 'SELECT COUNT(*) FROM invoices child LEFT JOIN billing_handoffs parent ON parent.id = child.billing_handoff_id WHERE child.billing_handoff_id IS NOT NULL AND parent.id IS NULL'],
             'invoice_line' => ['invoice_lines', 'invoices', 'SELECT COUNT(*) FROM invoice_lines child LEFT JOIN invoices parent ON parent.id = child.invoice_id WHERE parent.id IS NULL'],
         ];
         foreach ($checks as $name => [$child, $parent, $sql]) {
