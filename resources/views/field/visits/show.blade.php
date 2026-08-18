@@ -8,6 +8,7 @@
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
         $inheritedMedia = ($versions ?? collect())->where('id','!=',$closeout?->id)->flatMap->media->where('state','stored');
         $closeoutMissing = collect($closeoutReadinessErrors ?? ['outcome' => 'Choose an outcome.']);
+        $closeoutFieldError = fn (string $field) => $errors->first($field) ?: $closeoutMissing->get($field);
         $showCloseoutAction = in_array($visit->status, ['on_site', 'returned_for_correction'], true) && (! $closeout || $closeout->status === 'draft');
         $canSubmitCloseout = $activeMembership->hasCapability('visits.execute_any') || $visit->assignments->contains(fn ($assignment) => $assignment->membership->user_id === auth()->id() && $assignment->is_lead);
     @endphp
@@ -155,28 +156,28 @@
                     @csrf
                     <input type="hidden" name="content_version" value="{{ $closeout?->content_version ?? 1 }}">
 
-                    <fieldset class="space-y-4" data-outcome-selector>
+                    <fieldset class="space-y-4" data-outcome-selector data-closeout-field="outcome">
                         <legend class="text-base font-bold text-slate-900">Visit outcome</legend>
                         <p class="text-sm text-slate-600">Choose the result that best describes this visit.</p>
-                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 @error('outcome') rounded-lg border border-red-500 bg-red-50 p-2 @enderror">
+                        <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 {{ $closeoutFieldError('outcome') ? 'rounded-lg border border-red-500 bg-red-50 p-2' : '' }}">
                             @foreach ($outcomeLabels as $value => $label)
                                 <label class="field-outcome-option" data-outcome="{{ $value }}">
-                                    <input class="sr-only" type="radio" name="outcome" value="{{ $value }}" data-outcome-label="{{ $label }}" @checked($selectedOutcome === $value) @error('outcome') aria-invalid="true" aria-describedby="outcome-error" @enderror>
+                                    <input class="sr-only" type="radio" name="outcome" value="{{ $value }}" data-outcome-label="{{ $label }}" @checked($selectedOutcome === $value) @if($closeoutFieldError('outcome')) aria-invalid="true" aria-describedby="outcome-error" @endif>
                                     <span class="font-bold text-slate-950">{{ $label }}</span>
                                     <span class="mt-1 text-xs text-slate-600">{{ match($value) {'resolved' => 'Work is complete.', 'needs_return_trip' => 'More work must be scheduled.', 'customer_unavailable' => 'Work could not be completed with the customer.', default => 'Pause this ticket for office follow-up.'} }}</span>
                                 </label>
                             @endforeach
                         </div>
-                        <x-field-error field="outcome" />
+                        <x-field-error field="outcome" :message="$closeoutMissing->get('outcome')" />
                     </fieldset>
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
                         <legend class="px-1 text-base font-bold text-slate-900">Work summary</legend>
                         @foreach (['diagnosis' => 'Diagnosis', 'work_performed' => 'Work performed', 'exceptions' => 'Exceptions', 'recommendations' => 'Recommendations'] as $field => $label)
-                            <div>
+                            <div data-closeout-field="{{ $field }}">
                                 <label class="form-label" for="{{ $field }}">{{ $label }}</label>
-                                <textarea class="form-textarea mt-1 @error($field) border-red-500 bg-red-50 @enderror" id="{{ $field }}" name="{{ $field }}" @error($field) aria-invalid="true" aria-describedby="{{ $field }}-error" @enderror>{{ old($field, $closeout?->$field) }}</textarea>
-                                <x-field-error :field="$field" />
+                                <textarea class="form-textarea mt-1 {{ $closeoutFieldError($field) ? 'border-red-500 bg-red-50' : '' }}" id="{{ $field }}" name="{{ $field }}" @if($closeoutFieldError($field)) aria-invalid="true" aria-describedby="{{ $field }}-error" @endif>{{ old($field, $closeout?->$field) }}</textarea>
+                                <x-field-error :field="$field" :message="$closeoutMissing->get($field)" />
                             </div>
                         @endforeach
                     </fieldset>
@@ -185,10 +186,10 @@
                         <legend class="px-1 text-base font-bold text-slate-900">Return trip or hold details</legend>
                         <p class="text-sm text-slate-600">Complete the fields that apply when another visit is needed or work is placed on hold.</p>
                         @foreach (['return_reason' => 'Return reason', 'unfinished_work' => 'Unfinished work', 'needed_equipment' => 'Needed parts / equipment', 'hold_reason' => 'Hold reason'] as $field => $label)
-                            <div>
+                            <div data-closeout-field="{{ $field }}">
                                 <label class="form-label" for="{{ $field }}">{{ $label }}</label>
-                                <textarea class="form-textarea mt-1 @error($field) border-red-500 bg-red-50 @enderror" id="{{ $field }}" name="{{ $field }}" @error($field) aria-invalid="true" aria-describedby="{{ $field }}-error" @enderror>{{ old($field, $closeout?->$field) }}</textarea>
-                                <x-field-error :field="$field" />
+                                <textarea class="form-textarea mt-1 {{ $closeoutFieldError($field) ? 'border-red-500 bg-red-50' : '' }}" id="{{ $field }}" name="{{ $field }}" @if($closeoutFieldError($field)) aria-invalid="true" aria-describedby="{{ $field }}-error" @endif>{{ old($field, $closeout?->$field) }}</textarea>
+                                <x-field-error :field="$field" :message="$closeoutMissing->get($field)" />
                             </div>
                         @endforeach
                     </fieldset>
@@ -196,37 +197,37 @@
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
                         <legend class="px-1 text-base font-bold text-slate-900">Customer unavailable</legend>
                         <p class="text-sm text-slate-600">Complete this section only when the selected outcome is Customer unavailable.</p>
-                        <div>
+                        <div data-closeout-field="unavailable_category">
                             <label class="form-label" for="unavailable_category">Reason category</label>
-                            <select class="form-input mt-1 @error('unavailable_category') border-red-500 bg-red-50 @enderror" id="unavailable_category" name="unavailable_category" @error('unavailable_category') aria-invalid="true" aria-describedby="unavailable_category-error" @enderror><option value="">Choose a reason</option>@foreach (config('field_execution.unavailable_reasons') as $value => $label)<option value="{{ $value }}" @selected(old('unavailable_category', $closeout?->unavailable_category) === $value)>{{ $label }}</option>@endforeach</select>
-                            <x-field-error field="unavailable_category" />
+                            <select class="form-input mt-1 {{ $closeoutFieldError('unavailable_category') ? 'border-red-500 bg-red-50' : '' }}" id="unavailable_category" name="unavailable_category" @if($closeoutFieldError('unavailable_category')) aria-invalid="true" aria-describedby="unavailable_category-error" @endif><option value="">Choose a reason</option>@foreach (config('field_execution.unavailable_reasons') as $value => $label)<option value="{{ $value }}" @selected(old('unavailable_category', $closeout?->unavailable_category) === $value)>{{ $label }}</option>@endforeach</select>
+                            <x-field-error field="unavailable_category" :message="$closeoutMissing->get('unavailable_category')" />
                         </div>
-                        <div>
+                        <div data-closeout-field="unavailable_detail">
                             <label class="form-label" for="unavailable_detail">Details</label>
-                            <textarea class="form-textarea mt-1 @error('unavailable_detail') border-red-500 bg-red-50 @enderror" id="unavailable_detail" name="unavailable_detail" @error('unavailable_detail') aria-invalid="true" aria-describedby="unavailable_detail-error" @enderror>{{ old('unavailable_detail', $closeout?->unavailable_detail) }}</textarea>
-                            <x-field-error field="unavailable_detail" />
+                            <textarea class="form-textarea mt-1 {{ $closeoutFieldError('unavailable_detail') ? 'border-red-500 bg-red-50' : '' }}" id="unavailable_detail" name="unavailable_detail" @if($closeoutFieldError('unavailable_detail')) aria-invalid="true" aria-describedby="unavailable_detail-error" @endif>{{ old('unavailable_detail', $closeout?->unavailable_detail) }}</textarea>
+                            <x-field-error field="unavailable_detail" :message="$closeoutMissing->get('unavailable_detail')" />
                         </div>
                     </fieldset>
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
                         <legend class="px-1 text-base font-bold text-slate-900">Customer acknowledgment</legend>
                         <p class="text-sm text-slate-600">Enter the person who reviewed the work. If no one could acknowledge it, leave the name blank and complete the fallback section below.</p>
-                        <div>
+                        <div data-closeout-field="representative_name">
                             <label class="form-label" for="representative_name">Customer or point-of-contact name</label>
-                            <input class="form-input mt-1 @error('representative_name') border-red-500 bg-red-50 @enderror" id="representative_name" name="representative_name" autocomplete="name" value="{{ old('representative_name', $closeout?->representative_name) }}" @error('representative_name') aria-invalid="true" aria-describedby="representative_name-error" @enderror>
-                            <x-field-error field="representative_name" />
+                            <input class="form-input mt-1 {{ $closeoutFieldError('representative_name') ? 'border-red-500 bg-red-50' : '' }}" id="representative_name" name="representative_name" autocomplete="name" value="{{ old('representative_name', $closeout?->representative_name) }}" @if($closeoutFieldError('representative_name')) aria-invalid="true" aria-describedby="representative_name-error" @endif>
+                            <x-field-error field="representative_name" :message="$closeoutMissing->get('representative_name')" />
                         </div>
                         <div class="space-y-4 border-t border-slate-200 pt-4">
                             <p class="font-semibold text-slate-900">Couldn’t obtain acknowledgment?</p>
-                            <div>
+                            <div data-closeout-field="ack_unavailable_category">
                                 <label class="form-label" for="ack_unavailable_category">Reason</label>
-                                <select class="form-input mt-1 @error('ack_unavailable_category') border-red-500 bg-red-50 @enderror" id="ack_unavailable_category" name="ack_unavailable_category" @error('ack_unavailable_category') aria-invalid="true" aria-describedby="ack_unavailable_category-error" @enderror><option value="">Choose a reason</option>@foreach (config('field_execution.ack_fallbacks') as $value => $label)<option value="{{ $value }}" @selected(old('ack_unavailable_category', $closeout?->ack_unavailable_category) === $value)>{{ $label }}</option>@endforeach</select>
-                                <x-field-error field="ack_unavailable_category" />
+                                <select class="form-input mt-1 {{ $closeoutFieldError('ack_unavailable_category') ? 'border-red-500 bg-red-50' : '' }}" id="ack_unavailable_category" name="ack_unavailable_category" @if($closeoutFieldError('ack_unavailable_category')) aria-invalid="true" aria-describedby="ack_unavailable_category-error" @endif><option value="">Choose a reason</option>@foreach (config('field_execution.ack_fallbacks') as $value => $label)<option value="{{ $value }}" @selected(old('ack_unavailable_category', $closeout?->ack_unavailable_category) === $value)>{{ $label }}</option>@endforeach</select>
+                                <x-field-error field="ack_unavailable_category" :message="$closeoutMissing->get('ack_unavailable_category')" />
                             </div>
-                            <div>
+                            <div data-closeout-field="ack_unavailable_detail">
                                 <label class="form-label" for="ack_unavailable_detail">Details</label>
-                                <textarea class="form-textarea mt-1 @error('ack_unavailable_detail') border-red-500 bg-red-50 @enderror" id="ack_unavailable_detail" name="ack_unavailable_detail" @error('ack_unavailable_detail') aria-invalid="true" aria-describedby="ack_unavailable_detail-error" @enderror>{{ old('ack_unavailable_detail', $closeout?->ack_unavailable_detail) }}</textarea>
-                                <x-field-error field="ack_unavailable_detail" />
+                                <textarea class="form-textarea mt-1 {{ $closeoutFieldError('ack_unavailable_detail') ? 'border-red-500 bg-red-50' : '' }}" id="ack_unavailable_detail" name="ack_unavailable_detail" @if($closeoutFieldError('ack_unavailable_detail')) aria-invalid="true" aria-describedby="ack_unavailable_detail-error" @endif>{{ old('ack_unavailable_detail', $closeout?->ack_unavailable_detail) }}</textarea>
+                                <x-field-error field="ack_unavailable_detail" :message="$closeoutMissing->get('ack_unavailable_detail')" />
                             </div>
                         </div>
                     </fieldset>
@@ -234,15 +235,15 @@
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
                         <legend class="px-1 text-base font-bold text-slate-900">No-photo fallback</legend>
                         <p class="text-sm text-slate-600">Complete this section only when required photo evidence cannot be provided.</p>
-                        <div>
+                        <div data-closeout-field="no_photo_category">
                             <label class="form-label" for="no_photo_category">Reason</label>
-                            <select class="form-input mt-1 @error('no_photo_category') border-red-500 bg-red-50 @enderror" id="no_photo_category" name="no_photo_category" @error('no_photo_category') aria-invalid="true" aria-describedby="no_photo_category-error" @enderror><option value="">Choose a reason</option>@foreach (config('field_execution.no_photo_reasons') as $value => $label)<option value="{{ $value }}" @selected(old('no_photo_category', $closeout?->no_photo_category) === $value)>{{ $label }}</option>@endforeach</select>
-                            <x-field-error field="no_photo_category" />
+                            <select class="form-input mt-1 {{ $closeoutFieldError('no_photo_category') ? 'border-red-500 bg-red-50' : '' }}" id="no_photo_category" name="no_photo_category" @if($closeoutFieldError('no_photo_category')) aria-invalid="true" aria-describedby="no_photo_category-error" @endif><option value="">Choose a reason</option>@foreach (config('field_execution.no_photo_reasons') as $value => $label)<option value="{{ $value }}" @selected(old('no_photo_category', $closeout?->no_photo_category) === $value)>{{ $label }}</option>@endforeach</select>
+                            <x-field-error field="no_photo_category" :message="$closeoutMissing->get('no_photo_category')" />
                         </div>
-                        <div>
+                        <div data-closeout-field="no_photo_detail">
                             <label class="form-label" for="no_photo_detail">Details</label>
-                            <textarea class="form-textarea mt-1 @error('no_photo_detail') border-red-500 bg-red-50 @enderror" id="no_photo_detail" name="no_photo_detail" @error('no_photo_detail') aria-invalid="true" aria-describedby="no_photo_detail-error" @enderror>{{ old('no_photo_detail', $closeout?->no_photo_detail) }}</textarea>
-                            <x-field-error field="no_photo_detail" />
+                            <textarea class="form-textarea mt-1 {{ $closeoutFieldError('no_photo_detail') ? 'border-red-500 bg-red-50' : '' }}" id="no_photo_detail" name="no_photo_detail" @if($closeoutFieldError('no_photo_detail')) aria-invalid="true" aria-describedby="no_photo_detail-error" @endif>{{ old('no_photo_detail', $closeout?->no_photo_detail) }}</textarea>
+                            <x-field-error field="no_photo_detail" :message="$closeoutMissing->get('no_photo_detail')" />
                         </div>
                     </fieldset>
 
@@ -357,8 +358,7 @@
                                 @if($closeoutMissing->isNotEmpty())
                                     <section class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4" aria-labelledby="closeout-missing-heading">
                                         <h3 id="closeout-missing-heading" class="font-bold text-amber-950">{{ $closeoutMissing->count() === 1 ? '1 required item remains' : $closeoutMissing->count().' required items remain' }}</h3>
-                                        <ul class="mt-3 list-disc space-y-2 pl-5 text-sm text-amber-950">@foreach($closeoutMissing as $message)<li>{{ $message }}</li>@endforeach</ul>
-                                        <a href="#visit-closeout" class="button-secondary mt-4 w-full" data-closeout-dialog-close>Review notes &amp; outcome</a>
+                                        <ul class="mt-3 space-y-2 text-sm text-amber-950">@foreach($closeoutMissing as $field => $message)<li><button type="button" class="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-left font-semibold hover:border-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue" data-closeout-fix-target="{{ $field }}"><span>{{ $message }}</span><span class="shrink-0 text-brand-blue">Fix</span></button></li>@endforeach</ul>
                                     </section>
                                 @elseif($closeout?->representative_name)
                                     <label class="mt-5 flex min-h-11 gap-3 rounded-lg border border-slate-300 p-4 @error('acknowledgment_confirmed') border-red-500 bg-red-50 @enderror">

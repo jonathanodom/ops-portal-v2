@@ -109,6 +109,21 @@ test.describe('desktop beta', () => {
         await expect(page.locator('[data-ticket-files]').getByText(filename)).toHaveCount(0);
     });
 
+    test('service ticket navigation and open filter retain the directory', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office');
+        await page.getByRole('link', { name: 'Service Tickets', exact: true }).first().click();
+        await expect(page).toHaveURL(/\/office\/service-tickets$/);
+        await expect(page.getByRole('heading', { name: 'Service Tickets', exact: true })).toBeVisible();
+        await captureFieldTest(page, 'office-ticket-directory-1440x900.png');
+
+        await page.goto('/office/service-tickets?status=open');
+        await expect(page.getByLabel('Status')).toHaveValue('open');
+        await expect(page.getByText('No service tickets found.')).toHaveCount(0);
+        await expectAccessible(page);
+        await captureFieldTest(page, 'office-open-tickets-1440x900.png');
+    });
+
     test('operations dashboard is responsive, bounded, and accessible', async ({ page }) => {
         await login(page, 'super_admin');
         for (const viewport of [
@@ -191,6 +206,9 @@ test.describe('desktop beta', () => {
         const manualDimensions = await manualDialog.evaluate((element) => ({ width: element.getBoundingClientRect().width, height: element.getBoundingClientRect().height }));
         expect(manualDimensions.width).toBeGreaterThanOrEqual(0.9 * 1440);
         expect(manualDimensions.height).toBeLessThanOrEqual(900);
+        await expect(manualDialog.getByLabel('Take photo')).toHaveAttribute('capture', 'environment');
+        await expect(manualDialog.getByLabel('Choose from gallery or files')).not.toHaveAttribute('capture');
+        await captureFieldTest(page, 'office-manual-closeout-photos-1440x900.png');
         await expectAccessible(page);
         await page.keyboard.press('Escape');
         const manualLauncher = page.getByRole('button', { name: 'Manual closeout' });
@@ -636,6 +654,33 @@ test.describe('mobile beta', () => {
         await expect(page.locator('[data-ticket-files]').getByText(filename)).toHaveCount(0);
     });
 
+    test('Office manual closeout photos remain usable at phone width', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office/service-tickets?search=NDT-ST-2026-9001');
+        await page.getByRole('link', { name: /BETA A:/ }).click();
+        const manualStart = page.getByRole('button', { name: 'Start manual closeout' });
+        if (await manualStart.count()) {
+            await manualStart.click();
+        } else {
+            await page.getByRole('button', { name: 'Manual closeout' }).click();
+        }
+        const dialog = page.getByRole('dialog', { name: 'Administrative closeout' });
+        await expect(dialog).toBeVisible();
+        const dimensions = await dialog.evaluate((element) => ({
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+            viewportWidth: innerWidth,
+            viewportHeight: innerHeight,
+        }));
+        expect(dimensions.width).toBe(dimensions.viewportWidth);
+        expect(dimensions.height).toBe(dimensions.viewportHeight);
+        await expect(dialog.getByLabel('Take photo')).toHaveAttribute('capture', 'environment');
+        await expect(dialog.getByLabel('Choose from gallery or files')).not.toHaveAttribute('capture');
+        expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+        await expectAccessible(page);
+        await captureFieldTest(page, 'office-manual-closeout-photos-390x844.png');
+    });
+
     test('restricted office dashboard hides financial and health data at phone width', async ({ page }) => {
         await login(page, 'dispatcher');
         await page.goto('/office');
@@ -679,6 +724,17 @@ test.describe('mobile beta', () => {
         await page.getByText('Needs return trip', { exact: true }).click();
         await expect(page.locator('[data-selected-outcome]')).toHaveText('Needs return trip');
         await expect(page.locator('[data-selected-outcome]')).toHaveAttribute('data-outcome', 'needs_return_trip');
+        await page.getByLabel('Diagnosis').fill('Additional work is required.');
+        await page.getByLabel('Work performed').fill('Made the system safe for a return visit.');
+        await page.getByRole('button', { name: 'Save draft' }).click();
+        await expect(page.locator('[data-save-feedback]')).toContainText('Saved successfully');
+        await expect(page.locator('#return_reason')).toHaveAttribute('aria-invalid', 'true');
+        await page.locator('[data-closeout-dialog-open]').click();
+        const closeoutDialog = page.getByRole('dialog', { name: 'Review closeout' });
+        await expect(closeoutDialog.locator('[data-closeout-fix-target="return_reason"]')).toBeVisible();
+        await captureFieldTest(page, 'field-closeout-required-fields-390x844.png');
+        await closeoutDialog.locator('[data-closeout-fix-target="return_reason"]').click();
+        await expect(page.locator('#return_reason')).toBeFocused();
         await workspaceNavigation.getByRole('link', { name: 'Photos' }).click();
         await expect(page.getByRole('heading', { name: 'Private photos' })).toBeVisible();
         const cameraPhoto = page.getByLabel('Take photo');
@@ -690,6 +746,7 @@ test.describe('mobile beta', () => {
         await libraryPhoto.setInputFiles({ name: 'saved-photo.png', mimeType: 'image/png', buffer: Buffer.from('saved-photo') });
         await expect(cameraPhoto).toHaveValue('');
         await expect(page.locator('[data-upload-selection]')).toContainText('Gallery or files: saved-photo.png');
+        await captureFieldTest(page, 'field-photo-source-390x844.png');
         const shortControls = await page.locator('button, input, select, textarea, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
             .filter((element) => element.offsetParent !== null)
             .filter((element) => Math.max(element.getBoundingClientRect().height, element.closest('label')?.getBoundingClientRect().height ?? 0) < 44)
