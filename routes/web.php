@@ -30,6 +30,7 @@ use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
 use App\Http\Controllers\Office\ProjectController;
+use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\ServiceTicketFileController;
@@ -98,6 +99,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/{project}/milestones', [ProjectController::class, 'storeMilestone'])->whereNumber('project')->middleware('capability:projects.manage')->name('milestones.store');
                 Route::put('/{project}/milestones/{milestone}', [ProjectController::class, 'updateMilestone'])->whereNumber(['project', 'milestone'])->middleware('capability:projects.manage')->name('milestones.update');
                 Route::post('/{project}/notes', [ProjectController::class, 'storeNote'])->whereNumber('project')->middleware('capability:projects.tasks.manage')->name('notes.store');
+                Route::get('/{project}/service-tickets/create', [ProjectServiceTicketController::class, 'create'])->whereNumber('project')->middleware(['capability:projects.admin', 'capability:dispatch.manage'])->name('service-tickets.create');
+                Route::post('/{project}/service-tickets', [ProjectServiceTicketController::class, 'store'])->whereNumber('project')->middleware(['capability:projects.admin', 'capability:dispatch.manage'])->name('service-tickets.store');
                 Route::post('/{project}/tickets', [ProjectController::class, 'linkTicket'])->whereNumber('project')->middleware('capability:projects.admin')->name('tickets.link');
                 Route::delete('/{project}/tickets/{ticket}', [ProjectController::class, 'unlinkTicket'])->whereNumber(['project', 'ticket'])->middleware('capability:projects.admin')->name('tickets.unlink');
             });

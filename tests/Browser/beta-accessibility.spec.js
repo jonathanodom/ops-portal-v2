@@ -98,7 +98,32 @@ test.describe('Projects V1', () => {
         await expect(page.getByText('Edit Project')).toHaveCount(0);
         await expect(page.getByText('Add Task')).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Link Ticket' })).toHaveCount(0);
+        await expect(page.getByRole('link', { name: 'Create Service Ticket' })).toHaveCount(0);
         await expectAccessible(page);
+    });
+
+    test('Project Service Ticket creation keeps fixed context across responsive widths', async ({ page }) => {
+        await login(page, 'super_admin');
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office/projects');
+            await page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first().click();
+            await page.getByRole('link', { name: 'Create Service Ticket' }).click();
+            await expect(page.getByRole('heading', { name: 'Create Service Ticket' })).toBeVisible();
+            await expect(page.getByText(/Project context/i)).toBeVisible();
+            await expect(page.locator('input[name="customer_id"]')).toHaveCount(0);
+            await expect(page.getByLabel('Service location')).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Create and link Service Ticket' })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await captureProjects(page, `project-ticket-create-${viewport.width}x${viewport.height}.png`);
+        }
     });
 });
 
