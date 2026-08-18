@@ -30,7 +30,7 @@ No schema, authorization, organization-scoping, private-storage, closeout, or ti
 - Vite production build: passed
 - Beta fixture: exact counts and SQLite integrity passed
 - Beta benchmark (10 runs): Dashboard 10.0 ms/14 queries; Today 10.0 ms/9; Dispatch 9.6 ms/10; Projects 15.6 ms/16; Project detail 18.8 ms/24; Ticket detail 13.1 ms/22; Review detail 14.9 ms/28; media first byte 0.0 ms
-- Playwright/axe: 15 passed, 11 intentionally project-skipped; no serious or critical axe violations
+- Playwright/axe: 16 passed, 12 intentionally project-skipped; no serious or critical axe violations
 - `git diff --check`: passed
 
 MySQL 8.4 migration and full-suite parity remains enforced by the draft PR workflow.
@@ -40,6 +40,7 @@ MySQL 8.4 migration and full-suite parity remains enforced by the draft PR workf
 - [Field closeout required fields](ui-review/field-test-2026-08-17/package-a/field-closeout-required-fields-390x844.png)
 - [Field photo source selection](ui-review/field-test-2026-08-17/package-a/field-photo-source-390x844.png)
 - [Office manual-closeout photo sources](ui-review/field-test-2026-08-17/package-a/office-manual-closeout-photos-1440x900.png)
+- [Office manual-closeout photo sources at 390×844](ui-review/field-test-2026-08-17/package-a/office-manual-closeout-photos-390x844.png)
 - [Service Ticket directory navigation](ui-review/field-test-2026-08-17/package-a/office-ticket-directory-1440x900.png)
 - [Open Service Tickets filter](ui-review/field-test-2026-08-17/package-a/office-open-tickets-1440x900.png)
 

@@ -605,6 +605,33 @@ test.describe('desktop beta', () => {
 test.describe('mobile beta', () => {
     test.skip(({ isMobile }) => !isMobile);
 
+    test('Office manual closeout photos remain usable at phone width', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office/service-tickets?search=NDT-ST-2026-9001');
+        await page.getByRole('link', { name: /BETA A:/ }).click();
+        const manualStart = page.getByRole('button', { name: 'Start manual closeout' });
+        if (await manualStart.count()) {
+            await manualStart.click();
+        } else {
+            await page.getByRole('button', { name: 'Manual closeout' }).click();
+        }
+        const dialog = page.getByRole('dialog', { name: 'Administrative closeout' });
+        await expect(dialog).toBeVisible();
+        const dimensions = await dialog.evaluate((element) => ({
+            width: element.getBoundingClientRect().width,
+            height: element.getBoundingClientRect().height,
+            viewportWidth: innerWidth,
+            viewportHeight: innerHeight,
+        }));
+        expect(dimensions.width).toBe(dimensions.viewportWidth);
+        expect(dimensions.height).toBe(dimensions.viewportHeight);
+        await expect(dialog.getByLabel('Take photo')).toHaveAttribute('capture', 'environment');
+        await expect(dialog.getByLabel('Choose from gallery or files')).not.toHaveAttribute('capture');
+        expect(await dialog.evaluate((element) => element.scrollWidth <= element.clientWidth)).toBeTruthy();
+        await expectAccessible(page);
+        await captureFieldTest(page, 'office-manual-closeout-photos-390x844.png');
+    });
+
     test('restricted office dashboard hides financial and health data at phone width', async ({ page }) => {
         await login(page, 'dispatcher');
         await page.goto('/office');
