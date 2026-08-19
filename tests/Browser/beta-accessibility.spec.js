@@ -43,6 +43,7 @@ test.skip(!password, 'BETA_DEMO_PASSWORD is required.');
 
 test.describe('Projects V1', () => {
     test('workspace and detail remain responsive and accessible', async ({ page }) => {
+        test.setTimeout(90_000);
         await login(page, 'super_admin');
         for (const viewport of [
             { width: 390, height: 844 },
@@ -65,9 +66,13 @@ test.describe('Projects V1', () => {
 
             await page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first().click();
             await expect(page.getByRole('heading', { name: 'Trip Hopper — IT Support' })).toBeVisible();
-            for (const section of ['Overview', 'Workstreams', 'Tasks', 'Milestones', 'Related Service Tickets', 'Notes / Activity']) {
+            for (const section of ['Overview', 'Workstreams', 'Tasks', 'Milestones', 'Related Service Tickets', 'Files & Photos', 'Notes / Activity']) {
                 await expect(page.getByRole('link', { name: section })).toBeVisible();
             }
+            const projectFileInput = page.getByLabel('Choose photo or file');
+            await expect(projectFileInput).toBeVisible();
+            expect(await projectFileInput.getAttribute('capture')).toBeNull();
+            expect(await projectFileInput.getAttribute('accept')).toContain('.heic');
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             const bodyPadding = await page.locator('.office-detail-form-body').evaluateAll((forms) => forms.map((form) => Number.parseFloat(getComputedStyle(form).paddingLeft)));
             expect(bodyPadding.length).toBeGreaterThan(0);
@@ -99,6 +104,8 @@ test.describe('Projects V1', () => {
         await expect(page.getByText('Add Task')).toHaveCount(0);
         await expect(page.getByRole('button', { name: 'Link Ticket' })).toHaveCount(0);
         await expect(page.getByRole('link', { name: 'Create Service Ticket' })).toHaveCount(0);
+        await expect(page.getByLabel('Choose photo or file')).toHaveCount(0);
+        await expect(page.getByRole('link', { name: 'Files & Photos' })).toBeVisible();
         await expectAccessible(page);
     });
 

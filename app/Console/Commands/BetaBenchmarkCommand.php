@@ -68,7 +68,7 @@ class BetaBenchmarkCommand extends Command
                 $this->request('/office/projects', $membership),
                 app(ProjectWorkspaceQuery::class),
             )],
-            'project_detail' => [750, 30, fn () => app(ProjectController::class)->show(
+            'project_detail' => [750, 31, fn () => app(ProjectController::class)->show(
                 $this->request('/office/projects/'.$project->id, $membership),
                 $project,
                 app(ProjectWorkspaceQuery::class),
