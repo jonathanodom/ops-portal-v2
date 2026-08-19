@@ -38,7 +38,7 @@ final class EloquentCustomerDirectory implements CustomerDirectory
         $this->resolve($organization, $customerId);
 
         return ServiceLocation::query()->where('organization_id', $organization->id)->where('customer_id', $customerId)->orderByDesc('active')->orderBy('name')->get()
-            ->mapWithKeys(fn (ServiceLocation $location) => [$location->id => new LocationSummary($location->id, $location->customer_id, $location->name, $location->formattedAddress(), $location->active)]);
+            ->mapWithKeys(fn (ServiceLocation $location) => [$location->id => new LocationSummary($location->id, $location->customer_id, $location->name, $location->formattedAddress(), $location->active, $location->timezone)]);
     }
 
     public function contacts(Organization $organization, int $customerId): Collection
@@ -46,11 +46,11 @@ final class EloquentCustomerDirectory implements CustomerDirectory
         $this->resolve($organization, $customerId);
 
         return Contact::query()->where('organization_id', $organization->id)->where('customer_id', $customerId)->orderByDesc('active')->orderBy('name')->get()
-            ->mapWithKeys(fn (Contact $contact) => [$contact->id => new ContactSummary($contact->id, $contact->customer_id, $contact->name, $contact->role, $contact->active)]);
+            ->mapWithKeys(fn (Contact $contact) => [$contact->id => new ContactSummary($contact->id, $contact->customer_id, $contact->name, $contact->role, $contact->active, $contact->phone, $contact->email)]);
     }
 
     private function customer(Customer $customer): CustomerSummary
     {
-        return new CustomerSummary($customer->id, $customer->display_name, $customer->legal_name, $customer->status);
+        return new CustomerSummary($customer->id, $customer->display_name, $customer->legal_name, $customer->status, $customer->phone, $customer->email);
     }
 }
