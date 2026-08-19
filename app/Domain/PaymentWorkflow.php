@@ -121,7 +121,13 @@ class PaymentWorkflow
 
     public function recordManual(Invoice $invoice, User $actor, string $method, int $amountCents, \DateTimeInterface $receivedAt, ?string $reference, string $idempotencyKey, ?string $note = null): PaymentTransaction
     {
-        return DB::transaction(function () use ($invoice, $actor, $method, $amountCents, $receivedAt, $reference, $idempotencyKey, $note): PaymentTransaction {
+        $paymentSource = match ($method) {
+            'cash', 'check' => 'manual',
+            'credit_card', 'debit_card' => 'square_pos',
+            default => throw ValidationException::withMessages(['method' => 'Select an available manual payment method.']),
+        };
+
+        return DB::transaction(function () use ($invoice, $actor, $method, $paymentSource, $amountCents, $receivedAt, $reference, $idempotencyKey, $note): PaymentTransaction {
             if ($existing = PaymentTransaction::query()->where('idempotency_key', $idempotencyKey)->first()) {
                 abort_unless((int) $existing->invoice_id === (int) $invoice->id, 422);
 
@@ -140,9 +146,9 @@ class PaymentWorkflow
             if ($method === 'check' && blank($reference)) {
                 throw ValidationException::withMessages(['reference' => 'A check reference is required.']);
             }
-            $transaction = PaymentTransaction::query()->create(['organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $method, 'amount_cents' => $amountCents, 'manual_reference' => $reference, 'reason' => $note, 'idempotency_key' => $idempotencyKey, 'received_at' => $receivedAt, 'confirmed_at' => now(), 'recorded_by_id' => $actor->id]);
+            $transaction = PaymentTransaction::query()->create(['organization_id' => $invoice->organization_id, 'invoice_id' => $invoice->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $method, 'payment_source' => $paymentSource, 'amount_cents' => $amountCents, 'manual_reference' => $reference, 'reason' => $note, 'idempotency_key' => $idempotencyKey, 'received_at' => $receivedAt, 'confirmed_at' => now(), 'recorded_by_id' => $actor->id]);
             $this->createReceipt($transaction);
-            $this->audit->record($invoice->organization, $actor, 'payment.manual_recorded', $transaction, ['invoice_id' => $invoice->id, 'transaction_id' => $transaction->id, 'method' => $method, 'amount_cents' => $amountCents]);
+            $this->audit->record($invoice->organization, $actor, 'payment.manual_recorded', $transaction, ['invoice_id' => $invoice->id, 'transaction_id' => $transaction->id, 'method' => $method, 'payment_source' => $paymentSource, 'amount_cents' => $amountCents]);
 
             return $transaction;
         });
@@ -150,8 +156,8 @@ class PaymentWorkflow
 
     public function reverseManual(PaymentTransaction $payment, User $actor, int $amountCents, string $reason, string $idempotencyKey): PaymentTransaction
     {
-        if (! in_array($payment->method, ['cash', 'check'], true) || $payment->type !== 'payment' || $payment->status !== 'succeeded') {
-            throw ValidationException::withMessages(['payment' => 'Only successful cash or check payments can be reversed manually.']);
+        if (! $payment->usesManualReversal() || $payment->type !== 'payment' || $payment->status !== 'succeeded') {
+            throw ValidationException::withMessages(['payment' => 'Only successful manually recorded payments can be reversed manually.']);
         }
 
         return $this->createRefundTransaction($payment, $actor, $amountCents, $reason, $idempotencyKey, 'reversal', 'succeeded');
@@ -159,7 +165,7 @@ class PaymentWorkflow
 
     public function refund(PaymentTransaction $payment, User $actor, int $amountCents, string $reason, string $idempotencyKey): PaymentTransaction
     {
-        if (! $payment->provider || $payment->type !== 'payment' || $payment->status !== 'succeeded') {
+        if (! $payment->provider || $payment->payment_source !== 'hosted_checkout' || $payment->type !== 'payment' || $payment->status !== 'succeeded') {
             throw ValidationException::withMessages(['payment' => 'Only a successful electronic payment can be refunded.']);
         }
         $transaction = $this->createRefundTransaction($payment, $actor, $amountCents, $reason, $idempotencyKey, 'refund', 'pending');
@@ -234,7 +240,7 @@ class PaymentWorkflow
                 if ($amount !== (int) $attempt->amount_cents) {
                     $this->incidents->record($attempt->invoice->organization, $actor, 'payment_amount_mismatch', 'error', $attempt, ['reason_code' => 'provider_amount_mismatch', 'attempt_id' => $attempt->id, 'invoice_id' => $attempt->invoice_id, 'provider' => $attempt->provider]);
                 }
-                $transaction = PaymentTransaction::query()->firstOrCreate(['provider' => $attempt->provider, 'provider_transaction_id' => $result['payment_id']], ['organization_id' => $attempt->organization_id, 'invoice_id' => $attempt->invoice_id, 'payment_attempt_id' => $attempt->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $result['method'] ?: 'card', 'amount_cents' => $amount, 'safe_processor_reference' => $result['payment_id'] ? substr((string) $result['payment_id'], -12) : null, 'idempotency_key' => (string) Str::uuid(), 'received_at' => now(), 'confirmed_at' => now()]);
+                $transaction = PaymentTransaction::query()->firstOrCreate(['provider' => $attempt->provider, 'provider_transaction_id' => $result['payment_id']], ['organization_id' => $attempt->organization_id, 'invoice_id' => $attempt->invoice_id, 'payment_attempt_id' => $attempt->id, 'type' => 'payment', 'status' => 'succeeded', 'method' => $result['method'] ?: 'card', 'payment_source' => 'hosted_checkout', 'amount_cents' => $amount, 'safe_processor_reference' => $result['payment_id'] ? substr((string) $result['payment_id'], -12) : null, 'idempotency_key' => (string) Str::uuid(), 'received_at' => now(), 'confirmed_at' => now()]);
                 $attempt->update(['status' => 'succeeded', 'provider_payment_id' => $result['payment_id'], 'completed_at' => now(), 'safe_failure_code' => null]);
                 $invoice = Invoice::query()->lockForUpdate()->findOrFail($attempt->invoice_id);
                 if (! $invoice->electronic_payment_provider) {
@@ -267,11 +273,11 @@ class PaymentWorkflow
             if ($amountCents < 1 || $amountCents > $payment->amount_cents - $refunded) {
                 throw ValidationException::withMessages(['amount' => 'The amount exceeds the refundable balance.']);
             }
-            $transaction = PaymentTransaction::query()->create(['organization_id' => $payment->organization_id, 'invoice_id' => $payment->invoice_id, 'original_transaction_id' => $payment->id, 'type' => $type, 'status' => $status, 'provider' => $payment->provider, 'method' => $payment->method, 'amount_cents' => $amountCents, 'reason' => $reason, 'idempotency_key' => $idempotencyKey, 'received_at' => now(), 'confirmed_at' => $status === 'succeeded' ? now() : null, 'recorded_by_id' => $actor->id]);
+            $transaction = PaymentTransaction::query()->create(['organization_id' => $payment->organization_id, 'invoice_id' => $payment->invoice_id, 'original_transaction_id' => $payment->id, 'type' => $type, 'status' => $status, 'provider' => $payment->provider, 'method' => $payment->method, 'payment_source' => $payment->payment_source, 'amount_cents' => $amountCents, 'reason' => $reason, 'idempotency_key' => $idempotencyKey, 'received_at' => now(), 'confirmed_at' => $status === 'succeeded' ? now() : null, 'recorded_by_id' => $actor->id]);
             if ($status === 'succeeded') {
                 $this->createReceipt($transaction);
             }
-            $this->audit->record($payment->invoice->organization, $actor, 'payment.'.$type.'_created', $transaction, ['invoice_id' => $payment->invoice_id, 'transaction_id' => $transaction->id, 'original_transaction_id' => $payment->id, 'amount_cents' => $amountCents]);
+            $this->audit->record($payment->invoice->organization, $actor, 'payment.'.$type.'_created', $transaction, ['invoice_id' => $payment->invoice_id, 'transaction_id' => $transaction->id, 'original_transaction_id' => $payment->id, 'method' => $payment->method, 'payment_source' => $payment->payment_source, 'amount_cents' => $amountCents]);
 
             return $transaction;
         });

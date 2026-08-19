@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Domain\PaymentWorkflow;
 use App\Jobs\RenderPaymentReceiptPdf;
+use App\Models\AuditEvent;
 use App\Models\BillingHandoff;
 use App\Models\Closeout;
 use App\Models\Customer;
@@ -11,19 +12,23 @@ use App\Models\Invoice;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\PaymentProviderConfiguration;
+use App\Models\PaymentTransaction;
 use App\Models\Role;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Models\Visit;
+use App\Payments\PaymentProviderResolver;
 use App\Payments\SquarePaymentProviderAdapter;
 use App\Payments\StripePaymentProviderAdapter;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Mockery;
 use Stripe\Exception\SignatureVerificationException;
 use Tests\TestCase;
 
@@ -114,6 +119,7 @@ class Phase7PaymentsTest extends TestCase
         $this->withHeader('X-Fake-Signature', $signature)->postJson($url, $event)->assertOk();
         $this->withHeader('X-Fake-Signature', $signature)->postJson($url, $event)->assertOk();
         $this->assertDatabaseCount('payment_transactions', 1);
+        $this->assertSame('hosted_checkout', PaymentTransaction::query()->sole()->payment_source);
         $this->assertDatabaseCount('payment_receipts', 1);
         $this->assertDatabaseCount('payment_webhook_events', 1);
         $this->assertSame('partially_paid', $invoice->fresh()->paymentState());
@@ -312,6 +318,165 @@ class Phase7PaymentsTest extends TestCase
         $this->get(route('payments.receipts.show', ['receipt' => $transaction->receipt, 'token' => 'invalid']))
             ->assertNotFound()
             ->assertDontSee('Internal collection note.');
+    }
+
+    public function test_manual_square_pos_credit_and_debit_payments_store_safe_canonical_provenance(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $url = route('office.invoices.show', $invoice);
+
+        $this->actingAs($admin)->from($url)->post(route('office.invoices.payments.manual', $invoice), [
+            'payment_form_context' => 'manual',
+            'method' => 'credit_card',
+            'payment_source' => 'hosted_checkout',
+            'amount' => '25.00',
+            'received_at' => now($invoice->organization->timezone)->format('Y-m-d\TH:i'),
+            'reference' => 'SQ-POS-1001',
+            'idempotency_key' => (string) Str::uuid(),
+        ])->assertRedirect($url)->assertSessionHas('status', 'Credit Card · Square POS payment recorded.');
+
+        $credit = $invoice->paymentTransactions()->sole();
+        $this->assertSame('credit_card', $credit->method);
+        $this->assertSame('square_pos', $credit->payment_source);
+        $this->assertNull($credit->provider);
+        $this->assertNull($credit->payment_attempt_id);
+        $this->assertSame('SQ-POS-1001', $credit->manual_reference);
+        $this->assertSame(7500, $invoice->fresh()->balanceCents());
+        $this->assertNotNull($credit->receipt);
+
+        $this->actingAs($admin)->get($url)
+            ->assertOk()
+            ->assertSee('Credit Card &mdash; Square POS', false)
+            ->assertSee('Debit Card &mdash; Square POS', false)
+            ->assertSee('Ops Portal does not charge the card or verify the Square transaction')
+            ->assertSee('Credit Card · Square POS')
+            ->assertSee('SQ-POS-1001');
+
+        $debit = app(PaymentWorkflow::class)->recordManual($invoice->fresh(), $admin, 'debit_card', 7500, now(), null, (string) Str::uuid());
+        $this->assertSame('debit_card', $debit->method);
+        $this->assertSame('square_pos', $debit->payment_source);
+        $this->assertNull($debit->provider);
+        $this->assertNull($debit->payment_attempt_id);
+        $this->assertNull($debit->manual_reference);
+        $this->assertSame('paid', $invoice->fresh()->paymentState());
+    }
+
+    public function test_manual_square_pos_reversal_never_resolves_a_connected_provider(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $resolver = Mockery::mock(PaymentProviderResolver::class);
+        $resolver->shouldNotReceive('resolve');
+        $this->app->instance(PaymentProviderResolver::class, $resolver);
+        $workflow = app(PaymentWorkflow::class);
+
+        $payment = $workflow->recordManual($invoice, $admin, 'credit_card', 4000, now(), 'SQ-POS-REV-1', (string) Str::uuid());
+        $reversal = $workflow->reverseManual($payment, $admin, 1500, 'Corrected after separate Square action.', (string) Str::uuid());
+
+        $this->assertSame('reversal', $reversal->type);
+        $this->assertSame('succeeded', $reversal->status);
+        $this->assertSame('credit_card', $reversal->method);
+        $this->assertSame('square_pos', $reversal->payment_source);
+        $this->assertNull($reversal->provider);
+        $this->assertSame(7500, $invoice->fresh()->balanceCents());
+    }
+
+    public function test_manual_square_pos_receipt_is_labeled_as_an_external_record_and_audit_is_safe(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $payment = app(PaymentWorkflow::class)->recordManual($invoice, $admin, 'debit_card', 2500, now(), 'SQ-POS-SAFE-2', (string) Str::uuid());
+        $result = app(PaymentWorkflow::class)->rotateReceiptToken($payment->receipt, $admin);
+
+        $this->get(route('payments.receipts.show', ['receipt' => $payment->receipt, 'token' => $result['token']]))
+            ->assertOk()
+            ->assertSee('Debit Card · Square POS')
+            ->assertSee('SQ-POS-SAFE-2')
+            ->assertSee('not a Square-generated receipt')
+            ->assertDontSee('card number')
+            ->assertDontSee('CVV');
+
+        $event = AuditEvent::query()->where('organization_id', $invoice->organization_id)->where('event_type', 'payment.manual_recorded')->latest('id')->firstOrFail();
+        $this->assertSame('debit_card', $event->metadata['method']);
+        $this->assertSame('square_pos', $event->metadata['payment_source']);
+        $this->assertSame(2500, $event->metadata['amount_cents']);
+        $this->assertArrayNotHasKey('reference', $event->metadata);
+    }
+
+    public function test_manual_workflow_rejects_unknown_methods_instead_of_accepting_spoofed_sources(): void
+    {
+        [$invoice, $admin] = $this->invoiceScenario();
+
+        try {
+            app(PaymentWorkflow::class)->recordManual($invoice, $admin, 'square', 1000, now(), null, (string) Str::uuid());
+            $this->fail('Unknown manual methods must be rejected.');
+        } catch (ValidationException $exception) {
+            $this->assertArrayHasKey('method', $exception->errors());
+        }
+
+        $this->assertDatabaseCount('payment_transactions', 0);
+    }
+
+    public function test_payment_source_migration_backfills_manual_and_hosted_transactions(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $manual = app(PaymentWorkflow::class)->recordManual($invoice, $admin, 'cash', 1000, now(), null, (string) Str::uuid());
+        $hosted = PaymentTransaction::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'invoice_id' => $invoice->id,
+            'type' => 'payment',
+            'status' => 'succeeded',
+            'provider' => 'stripe',
+            'method' => 'card',
+            'payment_source' => 'hosted_checkout',
+            'amount_cents' => 1000,
+            'provider_transaction_id' => 'pi_backfill_test',
+            'idempotency_key' => (string) Str::uuid(),
+            'received_at' => now(),
+            'confirmed_at' => now(),
+            'recorded_by_id' => $admin->id,
+        ]);
+        DB::table('payment_transactions')->whereIn('id', [$manual->id, $hosted->id])->update(['payment_source' => null]);
+
+        $migration = require database_path('migrations/2026_08_19_010000_add_payment_source_to_payment_transactions.php');
+        $migration->up();
+
+        $this->assertSame('manual', $manual->fresh()->payment_source);
+        $this->assertSame('hosted_checkout', $hosted->fresh()->payment_source);
+        $columns = Schema::getColumnListing('payment_transactions');
+        $this->assertContains('payment_source', $columns);
+        $this->assertEmpty(array_intersect($columns, ['card_number', 'pan', 'cvv', 'cvc', 'expiry', 'pin', 'track_data', 'emv_data']));
+    }
+
+    public function test_connected_provider_refunds_remain_provider_owned_and_inherit_hosted_source(): void
+    {
+        Queue::fake();
+        [$invoice, $admin] = $this->invoiceScenario();
+        $payment = PaymentTransaction::query()->create([
+            'organization_id' => $invoice->organization_id,
+            'invoice_id' => $invoice->id,
+            'type' => 'payment',
+            'status' => 'succeeded',
+            'provider' => 'stripe',
+            'method' => 'card',
+            'payment_source' => 'hosted_checkout',
+            'amount_cents' => 4000,
+            'provider_transaction_id' => 'pi_provider_refund_test',
+            'idempotency_key' => (string) Str::uuid(),
+            'received_at' => now(),
+            'confirmed_at' => now(),
+            'recorded_by_id' => $admin->id,
+        ]);
+
+        $refund = app(PaymentWorkflow::class)->refund($payment, $admin, 1000, 'Provider refund regression.', (string) Str::uuid());
+
+        $this->assertSame('refund', $refund->type);
+        $this->assertSame('succeeded', $refund->status);
+        $this->assertSame('stripe', $refund->provider);
+        $this->assertSame('hosted_checkout', $refund->payment_source);
+        $this->assertStringStartsWith('refund_', $refund->provider_transaction_id);
     }
 
     /** @return array{Invoice,User,PaymentProviderConfiguration} */

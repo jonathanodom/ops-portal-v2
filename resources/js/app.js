@@ -396,6 +396,16 @@ document.querySelectorAll('[data-payment-overlay][data-auto-open="true"]').forEa
     paymentOverlays.get(dialog.id)?.open(document.querySelector(`[data-payment-overlay-open="${CSS.escape(dialog.id)}"]`));
 });
 
+document.querySelectorAll('[data-manual-payment-methods]').forEach((fieldset) => {
+    const warning = fieldset.parentElement?.querySelector('[data-square-pos-warning]');
+    const update = () => {
+        const method = fieldset.querySelector('input[name="method"]:checked')?.value;
+        if (warning) warning.hidden = !['credit_card', 'debit_card'].includes(method);
+    };
+    fieldset.querySelectorAll('input[name="method"]').forEach((input) => input.addEventListener('change', update));
+    update();
+});
+
 document.querySelectorAll('[data-catalog-picker]').forEach((picker) => {
     const dialog = picker.querySelector('[data-catalog-dialog]');
     const launcher = picker.querySelector('[data-catalog-dialog-open]');

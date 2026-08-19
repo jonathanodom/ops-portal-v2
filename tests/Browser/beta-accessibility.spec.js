@@ -593,6 +593,28 @@ test.describe('desktop beta', () => {
         const recordPaymentDialog = page.getByRole('dialog', { name: 'Record payment' });
         await expect(recordPaymentDialog).toBeVisible();
         await expect(recordPaymentDialog.getByText('Balance due')).toBeVisible();
+        await expect(recordPaymentDialog.getByRole('radio', { name: 'Cash', exact: true })).toBeVisible();
+        await expect(recordPaymentDialog.getByRole('radio', { name: 'Check', exact: true })).toBeVisible();
+        await expect(recordPaymentDialog.getByRole('radio', { name: 'Credit Card — Square POS', exact: true })).toBeVisible();
+        await expect(recordPaymentDialog.getByRole('radio', { name: 'Debit Card — Square POS', exact: true })).toBeVisible();
+        await recordPaymentDialog.getByRole('radio', { name: 'Credit Card — Square POS', exact: true }).check();
+        await expect(recordPaymentDialog.getByText('Square POS payment already completed')).toBeVisible();
+        await expect(recordPaymentDialog.getByText(/does not charge the card or verify/)).toBeVisible();
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 800 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            const choices = recordPaymentDialog.locator('.payment-method-choice');
+            await expect(choices).toHaveCount(4);
+            for (const choice of await choices.all()) {
+                expect((await choice.boundingBox())?.height).toBeGreaterThanOrEqual(44);
+            }
+            expect(await recordPaymentDialog.evaluate((dialog) => dialog.scrollWidth <= dialog.clientWidth)).toBeTruthy();
+        }
         await expectAccessible(page);
         await page.keyboard.press('Escape');
         await expect(recordPaymentDialog).toBeHidden();
