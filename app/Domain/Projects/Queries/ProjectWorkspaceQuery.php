@@ -54,7 +54,7 @@ final class ProjectWorkspaceQuery
 
     public function detail(Organization $organization, Project $project): array
     {
-        $project->load(['owner:id,name', 'workstreams.owner:id,name', 'workstreams.tasks.assignee:id,name', 'tasks.workstream:id,name', 'tasks.assignee:id,name', 'milestones', 'notes.author:id,name']);
+        $project->load(['owner:id,name', 'workstreams.owner:id,name', 'workstreams.tasks.assignee:id,name', 'tasks.workstream:id,name', 'tasks.assignee:id,name', 'milestones', 'notes.author:id,name', 'storedAttachments.uploader:id,name']);
         $customer = $project->customer_id ? $this->customers->resolve($organization, $project->customer_id) : null;
         $locations = $project->customer_id ? $this->customers->locations($organization, $project->customer_id) : collect();
         $contacts = $project->customer_id ? $this->customers->contacts($organization, $project->customer_id) : collect();

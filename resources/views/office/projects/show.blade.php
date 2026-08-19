@@ -7,7 +7,7 @@
             <x-slot:actions><a href="{{ route('office.projects.service-tickets.create', $project) }}" class="button-primary">Create Service Ticket</a></x-slot:actions>
         @endif
     </x-office.record-header>
-    <x-office.detail-nav :items="['overview'=>'Overview','workstreams'=>'Workstreams','tasks'=>'Tasks','milestones'=>'Milestones','tickets'=>'Related Service Tickets','notes'=>'Notes / Activity']" />
+    <x-office.detail-nav :items="['overview'=>'Overview','workstreams'=>'Workstreams','tasks'=>'Tasks','milestones'=>'Milestones','tickets'=>'Related Service Tickets','attachments'=>'Files & Photos','notes'=>'Notes / Activity']" />
 
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_360px]">
         <div class="space-y-6">
@@ -57,6 +57,47 @@
             </section>
 
             <section id="tickets" class="office-detail-section" aria-labelledby="tickets-heading"><div class="office-detail-section-header"><div><h2 id="tickets-heading" class="office-detail-section-title">Related Service Tickets</h2><p class="mt-1 text-sm text-slate-500">Canonical Portal Tickets linked for operational context.</p></div></div><div class="office-detail-list">@forelse($tickets as $ticket)<div class="office-detail-row flex flex-wrap items-center justify-between gap-3"><a href="{{ route('office.service-tickets.show',$ticket->id) }}" class="min-h-11 flex-1 py-2"><strong class="text-brand-blue">{{ $ticket->ticketNumber }}</strong><p class="mt-1 text-sm text-slate-800">{{ $ticket->title }}</p><p class="mt-1 text-xs text-slate-500">{{ $ticket->locationName }} · {{ Str::headline($ticket->priority) }} · {{ Str::headline($ticket->status) }}</p>@if($project->service_location_id && $project->service_location_id !== $ticket->serviceLocationId)<span class="mt-2 inline-flex rounded-full bg-amber-100 px-2 py-1 text-xs font-bold text-amber-900">Different project location</span>@endif</a>@if($activeMembership->hasCapability('projects.admin'))<form method="POST" action="{{ route('office.projects.tickets.unlink',[$project,$ticket->id]) }}">@csrf @method('DELETE')<button class="button-secondary">Unlink</button></form>@endif</div>@empty<p class="office-detail-empty">No Service Tickets linked.</p>@endforelse</div>@if($activeMembership->hasCapability('projects.admin') && $project->customer_id)<form method="POST" action="{{ route('office.projects.tickets.link',$project) }}" class="office-detail-form-body office-detail-form-separated office-detail-form-grid sm:grid-cols-[1fr_auto]">@csrf<div><label class="form-label" for="service_ticket_id">Link Customer Ticket</label><select class="form-input" id="service_ticket_id" name="service_ticket_id" required><option value="">Choose Ticket</option>@foreach($availableTickets as $ticket)<option value="{{ $ticket->id }}">{{ $ticket->ticketNumber }} — {{ $ticket->title }} ({{ $ticket->locationName }})</option>@endforeach</select><label class="mt-2 flex min-h-11 items-center gap-2 text-sm"><input type="checkbox" name="confirm_location_mismatch" value="1"> Confirm if the selected Ticket belongs to a different location</label></div><button class="button-primary self-end">Link Ticket</button></form>@endif</section>
+
+            <section id="attachments" class="office-detail-section" aria-labelledby="attachments-heading">
+                <div class="office-detail-section-header"><div><h2 id="attachments-heading" class="office-detail-section-title">Files &amp; Photos</h2><p class="mt-1 text-sm text-slate-500">Private Project context, independent of Service Tickets and Visit evidence.</p></div></div>
+                <div class="office-detail-list">
+                    @forelse($project->storedAttachments as $attachment)
+                        @php($browserImage = in_array($attachment->mime_type, ['image/jpeg','image/png','image/webp'], true))
+                        <article class="office-detail-row flex flex-col gap-4 sm:flex-row sm:items-center">
+                            @if($browserImage)
+                                <a href="{{ route('office.projects.attachments.show', [$project, $attachment]) }}" class="block h-24 w-24 shrink-0 overflow-hidden rounded-lg border border-slate-200 bg-slate-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand-blue">
+                                    <img src="{{ route('office.projects.attachments.show', [$project, $attachment]) }}" alt="Preview of {{ $attachment->original_name }}" class="h-full w-full object-cover" loading="lazy">
+                                </a>
+                            @else
+                                <div class="flex h-20 w-20 shrink-0 items-center justify-center rounded-lg border border-slate-200 bg-slate-50 text-sm font-bold uppercase text-slate-600">{{ strtoupper(pathinfo($attachment->original_name, PATHINFO_EXTENSION) ?: 'File') }}</div>
+                            @endif
+                            <div class="min-w-0 flex-1">
+                                <div class="flex flex-wrap items-center gap-2"><strong class="break-all">{{ $attachment->original_name }}</strong><span class="status-inactive">{{ config('project_attachments.categories.'.$attachment->category) }}</span></div>
+                                @if($attachment->caption)<p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $attachment->caption }}</p>@endif
+                                <p class="mt-2 text-xs text-slate-500">{{ $attachment->uploader?->name ?? 'Former user' }} · {{ $attachment->created_at->timezone($activeOrganization->timezone)->format('M j, Y g:i A') }} · {{ Illuminate\Support\Number::fileSize($attachment->byte_size) }} · {{ $attachment->mime_type }}</p>
+                            </div>
+                            <div class="flex flex-wrap gap-2 sm:justify-end">
+                                <a class="button-secondary" href="{{ route('office.projects.attachments.show', [$project, $attachment]) }}" target="_blank" rel="noopener">View</a>
+                                <a class="button-secondary" href="{{ route('office.projects.attachments.download', [$project, $attachment]) }}">Download</a>
+                                @if($activeMembership->hasCapability('projects.manage') && !in_array($project->status,['completed','canceled']))
+                                    <form method="POST" action="{{ route('office.projects.attachments.destroy', [$project, $attachment]) }}" onsubmit="return confirm('Remove this private Project attachment?');">@csrf @method('DELETE')<button class="button-secondary text-red-700">Remove</button></form>
+                                @endif
+                            </div>
+                        </article>
+                    @empty
+                        <p class="office-detail-empty">No Project files or photos yet.</p>
+                    @endforelse
+                </div>
+                @if($activeMembership->hasCapability('projects.manage') && !in_array($project->status,['completed','canceled']))
+                    <form method="POST" action="{{ route('office.projects.attachments.store', $project) }}" enctype="multipart/form-data" class="office-detail-form-body office-detail-form-separated office-detail-form-grid sm:grid-cols-2">
+                        @csrf
+                        <div><label class="form-label" for="attachment_category">Category</label><select class="form-input" id="attachment_category" name="category" required>@foreach(config('project_attachments.categories') as $value => $label)<option value="{{ $value }}" @selected(old('category')===$value)>{{ $label }}</option>@endforeach</select></div>
+                        <div><label class="form-label" for="project_attachment_file">Choose photo or file</label><input class="form-input" id="project_attachment_file" name="file" type="file" accept=".jpg,.jpeg,.png,.webp,.heic,.heif,.pdf,.docx,.xlsx,.csv,.txt" required aria-describedby="project-attachment-help"><p id="project-attachment-help" class="mt-2 text-xs text-slate-500">JPEG, PNG, WebP, HEIC/HEIF, PDF, DOCX, XLSX, CSV, or TXT. Maximum 20 MB. Mobile gallery and Files selection are supported.</p></div>
+                        <div class="sm:col-span-2"><label class="form-label" for="attachment_caption">Caption <span class="font-normal text-slate-500">(optional)</span></label><textarea class="form-textarea" id="attachment_caption" name="caption" maxlength="500">{{ old('caption') }}</textarea></div>
+                        <button class="button-primary sm:col-span-2">Upload Project attachment</button>
+                    </form>
+                @endif
+            </section>
 
             <section id="notes" class="office-detail-section" aria-labelledby="notes-heading"><div class="office-detail-section-header"><h2 id="notes-heading" class="office-detail-section-title">Notes / Activity</h2></div>@if($activeMembership->hasCapability('projects.tasks.manage') && !in_array($project->status,['completed','canceled']))<form method="POST" action="{{ route('office.projects.notes.store',$project) }}" class="office-detail-form-body office-detail-form-grid sm:grid-cols-[180px_1fr_auto]">@csrf<div><label class="form-label" for="note_type">Type</label><select class="form-input" id="note_type" name="type">@foreach(['note','decision','customer_update','vendor_update'] as $type)<option value="{{ $type }}">{{ Str::headline($type) }}</option>@endforeach</select></div><div><label class="form-label" for="note_body">Internal note</label><textarea class="form-textarea" id="note_body" name="body" required></textarea></div><button class="button-primary self-end">Add Note</button></form>@endif<div class="grid gap-4 border-t border-slate-200 px-5 py-5 lg:grid-cols-2"><div><h3 class="font-bold">Internal notes</h3><div class="mt-3 space-y-3">@forelse($project->notes->take(25) as $note)<article class="rounded-lg border border-slate-200 p-3"><div class="flex justify-between gap-3 text-xs text-slate-500"><span>{{ Str::headline($note->type) }} · {{ $note->author?->name ?? 'Former user' }}</span><time>{{ $note->created_at->timezone($activeOrganization->timezone)->format('M j, Y g:i A') }}</time></div><p class="mt-2 whitespace-pre-line text-sm text-slate-800">{{ $note->body }}</p></article>@empty<p class="text-sm text-slate-500">No notes yet.</p>@endforelse</div></div><div><h3 class="font-bold">Activity</h3><ol class="mt-3 space-y-3">@forelse($activity as $event)<li class="rounded-lg border border-slate-200 p-3"><p class="text-sm font-semibold">{{ Str::headline(str_replace('.',' ',$event->event_type)) }}</p><p class="mt-1 text-xs text-slate-500">{{ $event->actor?->name ?? 'System' }} · {{ $event->occurred_at->timezone($activeOrganization->timezone)->format('M j, Y g:i A') }}</p></li>@empty<li class="text-sm text-slate-500">No activity yet.</li>@endforelse</ol></div></div></section>
         </div>

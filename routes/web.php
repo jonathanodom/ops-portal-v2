@@ -29,6 +29,7 @@ use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
+use App\Http\Controllers\Office\ProjectAttachmentController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ServiceLocationController;
@@ -91,6 +92,10 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/create', [ProjectController::class, 'create'])->middleware('capability:projects.manage')->name('create');
                 Route::post('/', [ProjectController::class, 'store'])->middleware('capability:projects.manage')->name('store');
                 Route::get('/{project}', [ProjectController::class, 'show'])->whereNumber('project')->name('show');
+                Route::get('/{project}/attachments/{attachment}', [ProjectAttachmentController::class, 'show'])->whereNumber(['project', 'attachment'])->name('attachments.show');
+                Route::get('/{project}/attachments/{attachment}/download', [ProjectAttachmentController::class, 'download'])->whereNumber(['project', 'attachment'])->name('attachments.download');
+                Route::post('/{project}/attachments', [ProjectAttachmentController::class, 'store'])->whereNumber('project')->name('attachments.store');
+                Route::delete('/{project}/attachments/{attachment}', [ProjectAttachmentController::class, 'destroy'])->whereNumber(['project', 'attachment'])->name('attachments.destroy');
                 Route::put('/{project}', [ProjectController::class, 'update'])->whereNumber('project')->middleware('capability:projects.manage')->name('update');
                 Route::post('/{project}/workstreams', [ProjectController::class, 'storeWorkstream'])->whereNumber('project')->middleware('capability:projects.manage')->name('workstreams.store');
                 Route::put('/{project}/workstreams/{workstream}', [ProjectController::class, 'updateWorkstream'])->whereNumber(['project', 'workstream'])->middleware('capability:projects.manage')->name('workstreams.update');

@@ -52,6 +52,16 @@ class Project extends Model
         return $this->hasMany(ProjectNote::class)->latest();
     }
 
+    public function attachments(): HasMany
+    {
+        return $this->hasMany(ProjectAttachment::class);
+    }
+
+    public function storedAttachments(): HasMany
+    {
+        return $this->attachments()->where('state', 'stored')->latest();
+    }
+
     public function serviceTickets(): BelongsToMany
     {
         return $this->belongsToMany(ServiceTicket::class, 'project_service_ticket')->withPivot(['organization_id', 'linked_by_id', 'linked_at'])->withTimestamps();
