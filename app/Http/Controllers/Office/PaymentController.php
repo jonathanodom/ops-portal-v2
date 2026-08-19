@@ -70,11 +70,11 @@ class PaymentController extends Controller
     {
         $invoice = $this->invoice($request, $invoice);
         $this->capability($request, 'payments.record_manual');
-        $data = $request->validate(['payment_form_context' => ['nullable', Rule::in(['manual'])], 'method' => ['required', Rule::in(['cash', 'check'])], 'amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'received_at' => ['required', 'date'], 'reference' => ['nullable', 'string', 'max:120'], 'note' => ['nullable', 'string', 'max:2000'], 'idempotency_key' => ['required', 'uuid']]);
+        $data = $request->validate(['payment_form_context' => ['nullable', Rule::in(['manual'])], 'method' => ['required', Rule::in(['cash', 'check', 'credit_card', 'debit_card'])], 'amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'received_at' => ['required', 'date'], 'reference' => ['nullable', 'string', 'max:120'], 'note' => ['nullable', 'string', 'max:2000'], 'idempotency_key' => ['required', 'uuid']]);
         $receivedAt = Carbon::parse($data['received_at'], $invoice->organization->timezone)->utc();
-        $workflow->recordManual($invoice, $request->user(), $data['method'], $this->cents($data['amount']), $receivedAt, $data['reference'] ?? null, $data['idempotency_key'], $data['note'] ?? null);
+        $transaction = $workflow->recordManual($invoice, $request->user(), $data['method'], $this->cents($data['amount']), $receivedAt, $data['reference'] ?? null, $data['idempotency_key'], $data['note'] ?? null);
 
-        return back()->with('status', ucfirst($data['method']).' payment recorded.')->with('payment_overlay', 'history');
+        return back()->with('status', $transaction->displayMethodLabel().' payment recorded.')->with('payment_overlay', 'history');
     }
 
     public function refund(Request $request, Invoice $invoice, PaymentTransaction $transaction, PaymentWorkflow $workflow): RedirectResponse
@@ -83,13 +83,13 @@ class PaymentController extends Controller
         $this->capability($request, 'payments.refund');
         $transaction = $this->transaction($invoice, $transaction);
         $data = $request->validate(['amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'reason' => ['required', 'string', 'max:2000'], 'idempotency_key' => ['required', 'uuid']]);
-        if (in_array($transaction->method, ['cash', 'check'], true)) {
+        if ($transaction->usesManualReversal()) {
             $workflow->reverseManual($transaction, $request->user(), $this->cents($data['amount']), $data['reason'], $data['idempotency_key']);
         } else {
             $workflow->refund($transaction, $request->user(), $this->cents($data['amount']), $data['reason'], $data['idempotency_key']);
         }
 
-        return back()->with('status', in_array($transaction->method, ['cash', 'check'], true) ? 'Manual reversal recorded.' : 'Refund requested.')->with('payment_overlay', 'history');
+        return back()->with('status', $transaction->usesManualReversal() ? 'Manual reversal recorded.' : 'Refund requested.')->with('payment_overlay', 'history');
     }
 
     public function receiptLink(Request $request, Invoice $invoice, PaymentReceipt $receipt, PaymentWorkflow $workflow): RedirectResponse

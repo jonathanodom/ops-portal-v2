@@ -31,7 +31,7 @@ class AccessControlSeeder extends Seeder
         'organization.settings.manage' => 'Manage organization identity, timezone, and branding',
         'payments.view' => 'View payment status and safe transaction summaries',
         'payments.collect' => 'Create and reconcile hosted payment checkouts',
-        'payments.record_manual' => 'Record cash and check payments',
+        'payments.record_manual' => 'Record cash, check, and external POS payments',
         'payments.manage_links' => 'Expire payment links and manage receipt links',
         'payments.refund' => 'Refund or reverse successful payments',
         'payments.settings.manage' => 'Manage encrypted payment provider credentials',
