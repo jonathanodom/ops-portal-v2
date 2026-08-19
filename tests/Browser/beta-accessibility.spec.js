@@ -5,6 +5,7 @@ const password = process.env.BETA_DEMO_PASSWORD;
 const dashboardReviewDir = process.env.DASHBOARD_REVIEW_DIR;
 const projectsReviewDir = process.env.PROJECTS_REVIEW_DIR;
 const fieldTestReviewDir = process.env.FIELD_TEST_REVIEW_DIR;
+const printDocumentReviewDir = process.env.PRINT_DOCUMENT_REVIEW_DIR;
 
 async function captureDashboard(page, filename) {
     if (dashboardReviewDir) {
@@ -24,6 +25,12 @@ async function captureFieldTest(page, filename) {
     }
 }
 
+async function capturePrintDocument(page, filename) {
+    if (printDocumentReviewDir) {
+        await page.screenshot({ path: `${printDocumentReviewDir}/${filename}`, fullPage: true });
+    }
+}
+
 async function login(page, role) {
     await page.goto('/login');
     await expectAccessible(page);
@@ -40,6 +47,51 @@ async function expectAccessible(page) {
 }
 
 test.skip(!password, 'BETA_DEMO_PASSWORD is required.');
+
+test.describe('Printable operational documents', () => {
+    test('Work Order and Project Workbook are accessible print-oriented private previews', async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name !== 'desktop', 'One browser project loops through all required widths.');
+        test.setTimeout(120_000);
+        await login(page, 'super_admin');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office/projects');
+            await page.locator('a:visible').filter({ hasText: /^Trip Hopper — IT Support/ }).first().click();
+            await page.getByRole('link', { name: 'Print Project Workbook' }).click();
+            await expect(page.getByText('PROJECT WORKBOOK', { exact: true })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Print' })).toBeVisible();
+            await expect(page.locator('nav[aria-label="Office"]')).toHaveCount(0);
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await capturePrintDocument(page, `project-workbook-${viewport.width}x${viewport.height}.png`);
+            await page.emulateMedia({ media: 'print' });
+            await expect(page.locator('.print-toolbar')).toBeHidden();
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
+            await page.emulateMedia({ media: 'screen' });
+
+            await page.goto('/office/service-tickets');
+            await page.getByRole('link', { name: /^NDT-ST-/ }).first().click();
+            await page.getByRole('link', { name: 'Print Work Order' }).click();
+            await expect(page.getByText('SERVICE WORK ORDER', { exact: true })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Print' })).toBeVisible();
+            await expect(page.locator('nav[aria-label="Office"]')).toHaveCount(0);
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await capturePrintDocument(page, `service-work-order-${viewport.width}x${viewport.height}.png`);
+            await page.emulateMedia({ media: 'print' });
+            await expect(page.locator('.print-toolbar')).toBeHidden();
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
+            await page.emulateMedia({ media: 'screen' });
+        }
+    });
+});
 
 test.describe('Projects V1', () => {
     test('workspace and detail remain responsive and accessible', async ({ page }) => {

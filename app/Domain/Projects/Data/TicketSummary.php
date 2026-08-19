@@ -17,5 +17,6 @@ final readonly class TicketSummary
         public string $status,
         public string $locationName,
         public CarbonImmutable $updatedAt,
+        public int $visitCount = 0,
     ) {}
 }

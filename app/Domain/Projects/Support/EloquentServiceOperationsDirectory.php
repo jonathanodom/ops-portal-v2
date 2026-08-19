@@ -28,7 +28,7 @@ final class EloquentServiceOperationsDirectory implements ServiceOperationsDirec
 
     private function query(Organization $organization)
     {
-        return ServiceTicket::query()->forOrganization($organization->id)->with('serviceLocation:id,name');
+        return ServiceTicket::query()->forOrganization($organization->id)->with('serviceLocation:id,name')->withCount('visits');
     }
 
     private function ticket(ServiceTicket $ticket): TicketSummary
@@ -38,6 +38,7 @@ final class EloquentServiceOperationsDirectory implements ServiceOperationsDirec
             $ticket->title, $ticket->purpose, $ticket->priority, $ticket->status,
             $ticket->serviceLocation->name,
             CarbonImmutable::instance($ticket->updated_at),
+            (int) $ticket->visits_count,
         );
     }
 }

@@ -32,9 +32,11 @@ use App\Http\Controllers\Office\PaymentSettingsController;
 use App\Http\Controllers\Office\ProjectAttachmentController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ProjectServiceTicketController;
+use App\Http\Controllers\Office\ProjectWorkbookPrintController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\ServiceTicketFileController;
+use App\Http\Controllers\Office\ServiceTicketPrintController;
 use App\Http\Controllers\Office\SquareConnectionController;
 use App\Http\Controllers\Office\StripeConnectionController;
 use App\Http\Controllers\Office\TicketCustomerController;
@@ -92,6 +94,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/create', [ProjectController::class, 'create'])->middleware('capability:projects.manage')->name('create');
                 Route::post('/', [ProjectController::class, 'store'])->middleware('capability:projects.manage')->name('store');
                 Route::get('/{project}', [ProjectController::class, 'show'])->whereNumber('project')->name('show');
+                Route::get('/{project}/workbook/print', ProjectWorkbookPrintController::class)->whereNumber('project')->name('workbook.print');
                 Route::get('/{project}/attachments/{attachment}', [ProjectAttachmentController::class, 'show'])->whereNumber(['project', 'attachment'])->name('attachments.show');
                 Route::get('/{project}/attachments/{attachment}/download', [ProjectAttachmentController::class, 'download'])->whereNumber(['project', 'attachment'])->name('attachments.download');
                 Route::post('/{project}/attachments', [ProjectAttachmentController::class, 'store'])->whereNumber('project')->name('attachments.store');
@@ -112,6 +115,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::middleware('capability:service_tickets.view')->group(function (): void {
                 Route::get('/service-tickets', [ServiceTicketController::class, 'index'])->name('service-tickets.index');
                 Route::get('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'show'])->whereNumber('serviceTicket')->name('service-tickets.show');
+                Route::get('/service-tickets/{serviceTicket}/print', ServiceTicketPrintController::class)->whereNumber('serviceTicket')->name('service-tickets.print');
                 Route::get('/service-ticket-files/{file}', [ServiceTicketFileController::class, 'show'])->whereNumber('file')->name('service-ticket-files.show');
                 Route::get('/dispatch', [DispatchController::class, 'index'])->name('dispatch.index');
             });
