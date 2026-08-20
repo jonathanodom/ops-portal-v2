@@ -189,6 +189,51 @@ test.describe('Projects V1', () => {
 test.describe('desktop beta', () => {
     test.skip(({ isMobile }) => isMobile);
 
+    test('closeout review photo gallery is responsive and keyboard operable', async ({ page }) => {
+        test.setTimeout(120_000);
+        await login(page, 'reviewer');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office/closeout-reviews');
+            await page.locator('a[href*="/office/closeout-reviews/"]:visible').first().click();
+
+            const gallery = page.locator('[data-review-photo-gallery]');
+            await expect(gallery).toBeVisible();
+            const thumbnails = gallery.locator('[data-review-photo-open]');
+            expect(await thumbnails.count()).toBeGreaterThan(1);
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+
+            await thumbnails.first().click();
+            const dialog = page.getByRole('dialog', { name: 'Photo evidence' });
+            await expect(dialog).toBeVisible();
+            await expect(dialog.locator('[data-review-photo-position]')).toHaveText(/1 of \d+/);
+            await expect(dialog.locator('[data-review-photo-image]')).toHaveAttribute('src', /\/field-media\/\d+/);
+            await dialog.getByRole('button', { name: /Next/ }).click();
+            await expect(dialog.locator('[data-review-photo-position]')).toHaveText(/2 of \d+/);
+            await page.keyboard.press('ArrowLeft');
+            await expect(dialog.locator('[data-review-photo-position]')).toHaveText(/1 of \d+/);
+            await page.keyboard.press('ArrowRight');
+            await expect(dialog.locator('[data-review-photo-position]')).toHaveText(/2 of \d+/);
+            await page.keyboard.press('Escape');
+            await expect(dialog).toBeHidden();
+            await expect(thumbnails.first()).toBeFocused();
+
+            await thumbnails.first().click();
+            await dialog.getByRole('button', { name: 'Close photo viewer' }).click();
+            await expect(dialog).toBeHidden();
+            await expect(page.getByRole('button', { name: /Approve closeout/ })).toBeVisible();
+            await expect(page.getByRole('button', { name: 'Return to field' })).toBeVisible();
+            await expectAccessible(page);
+        }
+    });
+
     test('Ticket files upload, render, and remove in the desktop workspace', async ({ page }) => {
         await login(page, 'super_admin');
         await page.goto('/office/service-tickets?search=NDT-ST-2026-9001');

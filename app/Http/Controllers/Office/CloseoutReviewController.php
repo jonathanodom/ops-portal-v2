@@ -46,6 +46,11 @@ class CloseoutReviewController extends Controller
         $visit = $closeout->visit;
         $versions = Closeout::query()->where('organization_id', $closeout->organization_id)->where('visit_id', $visit->id)
             ->with(['submittedBy', 'lastSavedBy', 'timeEntries.user', 'media', 'parts', 'reviews.reviewer', 'reviews.adjustments'])->orderBy('version')->get();
+        $activeMedia = $versions->flatMap(fn (Closeout $version) => $version->media
+            ->where('state', 'stored')
+            ->sortBy([['created_at', 'asc'], ['id', 'asc']])
+            ->map(fn ($media) => ['media' => $media, 'version' => $version->version]))
+            ->values();
         $visit->load(['serviceTicket.customer', 'serviceTicket.contact', 'serviceTicket.visits.currentCloseout', 'serviceLocation.primaryContact', 'assignments.membership.user', 'timeEntries.user']);
         $completionBlockingVisits = $visit->serviceTicket->visits
             ->where('id', '!=', $visit->id)
@@ -59,7 +64,7 @@ class CloseoutReviewController extends Controller
             })->with('actor')->latest('occurred_at')->limit(50)->get();
         $tripChargeRecommendation = $this->tripCharges->recommend($visit);
 
-        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'events', 'completionBlockingVisits', 'tripChargeRecommendation'));
+        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'activeMedia', 'events', 'completionBlockingVisits', 'tripChargeRecommendation'));
     }
 
     public function approve(Request $request, string $closeout, CloseoutReviewWorkflow $workflow, AuditRecorder $audit): RedirectResponse
