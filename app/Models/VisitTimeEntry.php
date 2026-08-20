@@ -23,4 +23,9 @@ class VisitTimeEntry extends Model
     {
         return $this->belongsTo(Closeout::class);
     }
+
+    public function visit(): BelongsTo
+    {
+        return $this->belongsTo(Visit::class)->withTrashed();
+    }
 }

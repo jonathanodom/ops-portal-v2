@@ -9,6 +9,7 @@ use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitTimeEntry;
 use App\Support\AuditRecorder;
+use App\Support\TimeConflictDiagnostic;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -19,6 +20,7 @@ class FieldExecution
         private readonly AuditRecorder $audit,
         private readonly VisitCreator $visitCreator,
         private readonly CloseoutReadiness $readiness,
+        private readonly TimeConflictDiagnostic $timeConflictDiagnostic,
     ) {}
 
     public function draft(Visit $visit, User $actor): Closeout
@@ -119,7 +121,7 @@ class FieldExecution
             if ($closeout->status !== 'draft') {
                 throw ValidationException::withMessages(['time' => 'Submitted closeout time is immutable.']);
             }
-            $this->assertNoOverlap($owner->id, $start, $end);
+            $this->assertNoOverlap($visit, $owner->id, $start, $end);
             $entry = VisitTimeEntry::query()->create([
                 'organization_id' => $visit->organization_id,
                 'visit_id' => $visit->id,
@@ -157,7 +159,7 @@ class FieldExecution
             if ($entry->active_user_id || ! $entry->ended_at) {
                 throw ValidationException::withMessages(['time' => 'Stop the timer before correcting it.']);
             }
-            $this->assertNoOverlap($entry->user_id, $start, $end, $entry->id);
+            $this->assertNoOverlap($entry->visit, $entry->user_id, $start, $end, $entry->id);
             $changed = collect(['started_at', 'ended_at'])->filter(function (string $field) use ($entry, $start, $end): bool {
                 $value = $field === 'started_at' ? $start : $end;
 
@@ -237,17 +239,19 @@ class FieldExecution
         }
     }
 
-    private function assertNoOverlap(int $userId, CarbonInterface $start, CarbonInterface $end, ?int $exceptId = null): void
+    private function assertNoOverlap(Visit $contextVisit, int $userId, CarbonInterface $start, CarbonInterface $end, ?int $exceptId = null): void
     {
         $overlap = VisitTimeEntry::query()
             ->where('user_id', $userId)
             ->when($exceptId, fn ($query) => $query->whereKeyNot($exceptId))
             ->where('started_at', '<', $end)
             ->where(fn ($query) => $query->whereNull('ended_at')->orWhere('ended_at', '>', $start))
+            ->orderBy('started_at')
+            ->orderBy('id')
             ->lockForUpdate()
-            ->exists();
+            ->first();
         if ($overlap) {
-            throw ValidationException::withMessages(['time' => 'That time overlaps another entry for this user.']);
+            throw ValidationException::withMessages(['time' => $this->timeConflictDiagnostic->message($overlap, $contextVisit)]);
         }
     }
 }
