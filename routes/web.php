@@ -23,6 +23,7 @@ use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\CustomerServiceEnrollmentController;
 use App\Http\Controllers\Office\DispatchController;
+use App\Http\Controllers\Office\FieldTestServiceTicketPurgeController;
 use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\OperationalHealthController;
@@ -115,6 +116,10 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::middleware('capability:service_tickets.view')->group(function (): void {
                 Route::get('/service-tickets', [ServiceTicketController::class, 'index'])->name('service-tickets.index');
                 Route::get('/service-tickets/{serviceTicket}', [ServiceTicketController::class, 'show'])->whereNumber('serviceTicket')->name('service-tickets.show');
+                Route::get('/service-tickets/{serviceTicket}/field-test-purge', [FieldTestServiceTicketPurgeController::class, 'confirm'])->whereNumber('serviceTicket')->name('service-tickets.field-test-purge.confirm');
+                Route::post('/service-tickets/{serviceTicket}/field-test-purge', [FieldTestServiceTicketPurgeController::class, 'destroy'])->whereNumber('serviceTicket')->name('service-tickets.field-test-purge.destroy');
+                Route::get('/field-test-purge-cleanups/{cleanup}', [FieldTestServiceTicketPurgeController::class, 'showCleanup'])->name('field-test-purge-cleanups.show');
+                Route::post('/field-test-purge-cleanups/{cleanup}/retry', [FieldTestServiceTicketPurgeController::class, 'retryCleanup'])->name('field-test-purge-cleanups.retry');
                 Route::get('/service-tickets/{serviceTicket}/print', ServiceTicketPrintController::class)->whereNumber('serviceTicket')->name('service-tickets.print');
                 Route::get('/service-ticket-files/{file}', [ServiceTicketFileController::class, 'show'])->whereNumber('file')->name('service-ticket-files.show');
                 Route::get('/dispatch', [DispatchController::class, 'index'])->name('dispatch.index');

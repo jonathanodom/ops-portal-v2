@@ -39,6 +39,7 @@ class AccessControlSeeder extends Seeder
         'customers.view' => 'View customer and service-location records',
         'customers.manage' => 'Create and update customer and service-location records',
         'service_tickets.view' => 'View service tickets and visits in the office experience',
+        'service_tickets.purge_test_data' => 'Permanently purge Service Ticket test data while destructive field-test tooling is enabled',
         'closeouts.inspect' => 'Inspect submitted field closeout evidence',
         'operations.health.view' => 'View operational health incidents',
         'operations.health.manage' => 'Resolve operational health incidents',
