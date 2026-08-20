@@ -139,6 +139,16 @@
                 <section class="surface p-5"><h2 class="font-bold">Callback history</h2><div class="mt-4 space-y-4">@foreach($ticket->reopens as $reopen)<article class="border-l-4 border-orange-300 pl-4"><p class="text-sm font-semibold text-slate-700">Reopened from {{ ucfirst($reopen->from_status) }}</p><p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $reopen->reason }}</p><p class="mt-2 text-xs font-semibold text-slate-500">{{ $reopen->reopenedBy?->name ?? 'Former user' }} · <x-local-time :value="$reopen->reopened_at" :timezone="$activeOrganization->timezone" /></p></article>@endforeach</div></section>
             @endif
             <section id="history" class="surface scroll-mt-6 p-5"><h2 class="font-bold">History</h2><div class="mt-4 space-y-4">@forelse($events as $event)<div><p class="text-sm font-semibold text-slate-700">{{ str_replace(['.','_'],' ',ucfirst($event->event_type)) }}</p><p class="mt-1 text-xs text-slate-500">{{ $event->actor?->name ?? 'System' }} · <x-local-time :value="$event->occurred_at" :timezone="$activeOrganization->timezone" format="M j, g:i A T" /></p></div>@empty<p class="text-sm text-slate-500">No history yet.</p>@endforelse</div></section>
+            @if(config('field_test.destructive_service_ticket_purge_enabled'))
+                @can('purgeTestData', $ticket)
+                    <section class="rounded-xl border-2 border-red-400 bg-red-50 p-5">
+                        <p class="text-xs font-bold uppercase tracking-wide text-red-700">Field Testing Tools</p>
+                        <h2 class="mt-1 font-bold text-red-950">Permanent test-data purge</h2>
+                        <p class="mt-2 text-sm text-red-900">Permanently removes this Ticket aggregate from Ops Portal. This is not an archive, void, or provider refund.</p>
+                        <a class="mt-4 inline-flex min-h-11 w-full items-center justify-center rounded-lg bg-red-700 px-4 py-2 font-bold text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700" href="{{ route('office.service-tickets.field-test-purge.confirm', $ticket) }}">Permanently purge test Service Ticket</a>
+                    </section>
+                @endcan
+            @endif
         </aside>
     </div>
 </x-layouts.office>
