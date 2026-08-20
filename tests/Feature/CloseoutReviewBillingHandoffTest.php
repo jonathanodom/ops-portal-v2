@@ -20,6 +20,7 @@ use App\Models\VisitTimeEntry;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Event;
+use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
 
@@ -287,6 +288,80 @@ class CloseoutReviewBillingHandoffTest extends TestCase
 
         $this->assertDatabaseHas('closeout_reviews', ['closeout_id' => $closeout->id, 'self_review_override' => true]);
         $this->assertDatabaseHas('audit_events', ['event_type' => 'closeout.approved']);
+    }
+
+    public function test_review_gallery_has_an_accessible_empty_state(): void
+    {
+        [$organization, , $closeout] = $this->submittedCloseout();
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+
+        $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
+            ->assertOk()
+            ->assertSee('No active photos recorded.')
+            ->assertDontSee('data-review-photo-dialog', false);
+    }
+
+    public function test_review_gallery_renders_stored_media_across_versions_in_stable_order_with_fallbacks(): void
+    {
+        [$organization, $visit, $closeout, $technician] = $this->submittedCloseout();
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        $second = Closeout::query()->create([
+            'organization_id' => $organization->id,
+            'visit_id' => $visit->id,
+            'parent_closeout_id' => $closeout->id,
+            'version' => 2,
+            'status' => 'submitted',
+            'content_version' => 2,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Revised diagnosis',
+            'work_performed' => 'Revised work',
+            'submitted_by_id' => $technician->id,
+            'submitted_at' => now(),
+        ]);
+        $first = VisitMedia::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'uploader_id' => $technician->id, 'storage_disk' => 'local', 'storage_key' => 'field-media/first.jpg', 'mime_type' => 'image/jpeg', 'byte_size' => 100, 'category' => 'before', 'caption' => 'First caption', 'state' => 'stored', 'created_at' => now()->subMinutes(3)]);
+        $removed = VisitMedia::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'uploader_id' => $technician->id, 'storage_disk' => 'local', 'storage_key' => 'field-media/removed.png', 'mime_type' => 'image/png', 'byte_size' => 100, 'category' => 'damage', 'caption' => 'Removed caption', 'state' => 'removed', 'created_at' => now()->subMinutes(2)]);
+        $heic = VisitMedia::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $second->id, 'uploader_id' => $technician->id, 'storage_disk' => 'local', 'storage_key' => 'field-media/second.heic', 'mime_type' => 'image/heic', 'byte_size' => 100, 'category' => 'after', 'caption' => null, 'state' => 'stored', 'created_at' => now()->subMinute()]);
+        $heif = VisitMedia::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $second->id, 'uploader_id' => $technician->id, 'storage_disk' => 'local', 'storage_key' => 'field-media/third.heif', 'mime_type' => 'image/heif', 'byte_size' => 100, 'category' => 'serial_model', 'caption' => 'Model label', 'state' => 'stored', 'created_at' => now()]);
+
+        $response = $this->actingAs($reviewer)->get("/office/closeout-reviews/{$closeout->id}")
+            ->assertOk()
+            ->assertSee('3 active across 2 version(s)')
+            ->assertSee('data-review-photo-gallery', false)
+            ->assertSee('data-review-photo-dialog', false)
+            ->assertSee('loading="lazy"', false)
+            ->assertSee('decoding="async"', false)
+            ->assertSee('Before · v1')
+            ->assertSee('First caption')
+            ->assertSee('After · v2')
+            ->assertSee('Serial model · v2')
+            ->assertSee('Model label')
+            ->assertSee('HEIC photo')
+            ->assertSee('Preview unavailable in this browser')
+            ->assertSee(route('field.media.show', $first), false)
+            ->assertSee(route('field.media.show', $heic), false)
+            ->assertSee(route('field.media.show', $heif), false)
+            ->assertDontSee('Removed caption')
+            ->assertDontSee(route('field.media.show', $removed), false);
+
+        $response->assertSeeInOrder(['Before · v1', 'After · v2', 'Serial model · v2']);
+    }
+
+    public function test_review_gallery_uses_existing_private_media_authorization(): void
+    {
+        Storage::fake('local');
+        [$organization, $visit, $closeout, $technician] = $this->submittedCloseout();
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        [$billing] = $this->userWithRole('billing', $organization);
+        $media = VisitMedia::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'uploader_id' => $technician->id, 'storage_disk' => 'local', 'storage_key' => 'field-media/private.jpg', 'mime_type' => 'image/jpeg', 'byte_size' => 7, 'category' => 'after', 'state' => 'stored']);
+        Storage::disk('local')->put($media->storage_key, 'private');
+
+        $this->actingAs($reviewer)->get(route('field.media.show', $media))
+            ->assertOk()
+            ->assertHeader('Cache-Control', 'no-store, private');
+        $this->actingAs($billing)->get(route('field.media.show', $media))->assertForbidden();
+
+        $media->update(['state' => 'removed']);
+        $this->actingAs($reviewer)->get(route('field.media.show', $media))->assertNotFound();
     }
 
     public function test_billing_can_create_invoice_without_access_to_private_evidence(): void
