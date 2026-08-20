@@ -118,16 +118,18 @@
                 <div class="mt-3 border-t border-slate-200 pt-3 text-sm">
                     <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · <x-local-time :value="$entry->started_at" :timezone="$visit->timezone" format="g:i A T" />–@if($entry->ended_at)<x-local-time :value="$entry->ended_at" :timezone="$visit->timezone" format="g:i A T" />@else running @endif</p>
                     @if ($closeout?->status === 'draft' && $entry->user_id === auth()->id() && $entry->ended_at)
-                        <details class="mt-2">
+                        @php($correctionForm = 'field-correction-'.$entry->id)
+                        <details class="mt-2" @if($errors->has('time') && old('time_form') === $correctionForm) open @endif>
                             <summary class="min-h-11 cursor-pointer py-3 font-bold text-brand-blue">Correct my entry</summary>
                             <form method="POST" action="{{ route('field.visits.time.update', [$visit, $entry]) }}" class="space-y-3">
                                 @csrf @method('PUT')
+                                <input type="hidden" name="time_form" value="{{ $correctionForm }}">
                                 <label class="form-label" for="started_at_{{ $entry->id }}">Started</label>
-                                <input class="form-input" id="started_at_{{ $entry->id }}" name="started_at" type="datetime-local" value="{{ $entry->started_at->timezone($visit->timezone)->format('Y-m-d\TH:i') }}" required>
+                                <input class="form-input" id="started_at_{{ $entry->id }}" name="started_at" type="datetime-local" value="{{ old('time_form') === $correctionForm ? old('started_at') : $entry->started_at->timezone($visit->timezone)->format('Y-m-d\TH:i') }}" required>
                                 <label class="form-label" for="ended_at_{{ $entry->id }}">Ended</label>
-                                <input class="form-input" id="ended_at_{{ $entry->id }}" name="ended_at" type="datetime-local" value="{{ $entry->ended_at->timezone($visit->timezone)->format('Y-m-d\TH:i') }}" required>
+                                <input class="form-input" id="ended_at_{{ $entry->id }}" name="ended_at" type="datetime-local" value="{{ old('time_form') === $correctionForm ? old('ended_at') : $entry->ended_at->timezone($visit->timezone)->format('Y-m-d\TH:i') }}" required>
                                 <label class="form-label" for="correction_reason_{{ $entry->id }}">Correction reason</label>
-                                <textarea class="form-textarea" id="correction_reason_{{ $entry->id }}" name="correction_reason" required></textarea>
+                                <textarea class="form-textarea" id="correction_reason_{{ $entry->id }}" name="correction_reason" required>{{ old('time_form') === $correctionForm ? old('correction_reason') : '' }}</textarea>
                                 <button class="button-secondary w-full">Save correction</button>
                             </form>
                         </details>
