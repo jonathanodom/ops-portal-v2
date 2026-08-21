@@ -271,7 +271,7 @@ test.describe('desktop beta', () => {
         await captureFieldTest(page, 'office-open-tickets-1440x900.png');
     });
 
-    test('operations dashboard is responsive, bounded, and accessible', async ({ page }) => {
+    test('NewDay Home is responsive, bounded, and accessible', async ({ page }) => {
         await login(page, 'super_admin');
         for (const viewport of [
             { width: 390, height: 844 },
@@ -282,7 +282,11 @@ test.describe('desktop beta', () => {
         ]) {
             await page.setViewportSize(viewport);
             await page.goto('/office');
-            await expect(page.getByRole('heading', { name: 'Operations Dashboard' })).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'NewDay Home' })).toBeVisible();
+            await expect(page.locator('[data-home-directory-search]')).toBeVisible();
+            await expect(page.locator('[data-home-apps]')).toBeVisible();
+            await expect(page.locator('[data-home-attention-feed]')).toBeVisible();
+            await expect(page.locator('[data-home-projects]')).toBeVisible();
             await expect(page.locator('[data-dashboard-attention]')).toBeVisible();
             await expect(page.locator('[data-dashboard-today]')).toBeVisible();
             await expect(page.locator('[data-dashboard-billing]')).toBeVisible();
@@ -292,6 +296,22 @@ test.describe('desktop beta', () => {
             await expectAccessible(page);
             await captureDashboard(page, `super-admin-${viewport.width}x${viewport.height}.png`);
         }
+    });
+
+    test('NewDay Home directory search is keyboard usable and grouped', async ({ page }) => {
+        await login(page, 'super_admin');
+        await page.goto('/office');
+        const search = page.getByLabel('Search Customers, Contacts, and Service Locations');
+        await search.focus();
+        await search.fill('BETA');
+        await search.press('Enter');
+        await expect(page).toHaveURL(/\/office\/search\?q=BETA/);
+        await expect(page.getByRole('heading', { name: 'Customer Directory Search' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Customers' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Contacts' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Service Locations' })).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+        await expectAccessible(page);
     });
 
     test('dispatch, review, billing, and health remain keyboard accessible', async ({ page }) => {
@@ -884,7 +904,7 @@ test.describe('mobile beta', () => {
     test('restricted office dashboard hides financial and health data at phone width', async ({ page }) => {
         await login(page, 'dispatcher');
         await page.goto('/office');
-        await expect(page.getByRole('heading', { name: 'Operations Dashboard' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'NewDay Home' })).toBeVisible();
         await expect(page.locator('[data-dashboard-today]')).toBeVisible();
         await expect(page.locator('[data-dashboard-follow-up]')).toBeVisible();
         await expect(page.locator('[data-dashboard-billing]')).toHaveCount(0);

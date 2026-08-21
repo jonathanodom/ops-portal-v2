@@ -26,6 +26,7 @@ use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\FieldTestServiceTicketPurgeController;
 use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\OfficeDashboardController;
+use App\Http\Controllers\Office\OfficeSearchController;
 use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\PaymentController;
@@ -90,6 +91,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->middleware('capability:experience.office.access')
         ->group(function (): void {
             Route::get('/', [OfficeDashboardController::class, 'index'])->name('home');
+            Route::get('/search', OfficeSearchController::class)->middleware('capability:customers.view')->name('search');
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');
                 Route::get('/create', [ProjectController::class, 'create'])->middleware('capability:projects.manage')->name('create');

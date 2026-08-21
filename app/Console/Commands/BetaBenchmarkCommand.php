@@ -16,7 +16,7 @@ use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Models\VisitMedia;
 use App\Support\DispatchSchedule;
-use App\Support\OfficeDashboardSnapshot;
+use App\Support\NewDayHomeSnapshot;
 use Illuminate\Console\Command;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
@@ -55,9 +55,9 @@ class BetaBenchmarkCommand extends Command
         });
 
         $cases = [
-            'office_dashboard' => [500, 25, fn () => app(OfficeDashboardController::class)->index(
+            'office_dashboard' => [500, 32, fn () => app(OfficeDashboardController::class)->index(
                 $this->request('/office', $membership),
-                app(OfficeDashboardSnapshot::class),
+                app(NewDayHomeSnapshot::class),
             )],
             'today' => [500, 20, fn () => app(TodayController::class)->index($this->request('/field', $membership))],
             'dispatch' => [500, 25, fn () => app(DispatchController::class)->index(
