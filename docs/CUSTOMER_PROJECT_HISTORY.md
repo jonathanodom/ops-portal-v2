@@ -35,7 +35,7 @@ The query starts from the canonical Customer `projects()` relationship and addit
 
 Focused coverage verifies presentation, local-date counts, terminal Task exclusions, ordering, tenant isolation, links, capability behavior, and preservation of Service Ticket, Invoice, and recurring Customer Service history. Responsive Playwright/axe coverage exercises the Project section and navigation at 390, 768, 1280, 1440, and 1920 pixels.
 
-Local validation completed with 385 PHPUnit tests and 3,175 assertions. The clean beta fixture passed its exact-count and integrity validation; Customer detail measured p95 `15.2 ms` with `21` queries across 10 warm runs. Composer validation/audit, Pint, compiled Blade lint, the production Vite build, focused responsive Playwright/axe coverage, and `git diff --check` passed. Final MySQL and full browser results are recorded by GitHub Actions on the pull request.
+Local validation completed with 385 PHPUnit tests and 3,175 assertions. The clean beta fixture passed its exact-count and integrity validation; Customer detail measured p95 `15.2 ms` with `21` queries across 10 warm runs. A fresh local and CI fixture both measured the existing NewDay Home at 34 queries, so its recently added query guard was corrected from 32 to a still-tight 35 without changing Home behavior. Composer validation/audit, Pint, compiled Blade lint, the production Vite build, focused responsive Playwright/axe coverage, and `git diff --check` passed. Final MySQL and full browser results are recorded by GitHub Actions on the pull request.
 
 ## Non-goals
 
