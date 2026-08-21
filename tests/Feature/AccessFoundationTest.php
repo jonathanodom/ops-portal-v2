@@ -26,7 +26,7 @@ class AccessFoundationTest extends TestCase
         [$user, $membership] = $this->userWithRole('super_admin');
 
         $this->assertNull($user->technicianProfile);
-        $this->actingAs($user)->get('/office')->assertOk()->assertSee('Operations Dashboard');
+        $this->actingAs($user)->get('/office')->assertOk()->assertSee('NewDay Home');
         $this->actingAs($user)->get('/field')->assertOk()->assertSee('No visits today');
         $this->assertTrue($membership->hasCapability('visits.execute_any'));
         $this->assertSame(Capability::query()->count(), $membership->roles()->firstOrFail()->capabilities()->count());

@@ -26,7 +26,7 @@
             <x-organization-logo variant="full" class="max-h-20 w-48 object-contain object-left" />
             <div class="mt-9 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Office workspace</div>
             <nav class="mt-3" aria-label="Office">
-                <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home')) aria-current="page" @endif class="flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.home') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Dashboard</a>
+                <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home', 'office.search')) aria-current="page" @endif class="flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ request()->routeIs('office.home', 'office.search') ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Home</a>
                 @if ($activeMembership->hasCapability('customers.view'))
                     <a href="{{ route('office.customers.index') }}" data-office-primary-customers @if($customerWorkspaceActive) aria-current="page" @endif class="mt-1 flex min-h-11 items-center rounded-lg border-l-4 px-4 text-sm font-bold {{ $customerWorkspaceActive ? 'border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">Customers</a>
                 @endif
@@ -82,7 +82,7 @@
                 </div>
             </header>
             <nav class="office-mobile-primary-nav flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">
-                    <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home')) aria-current="page" @endif class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.home') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Dashboard</a>
+                    <a href="{{ route('office.home') }}" @if(request()->routeIs('office.home', 'office.search')) aria-current="page" @endif class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.home', 'office.search') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Home</a>
                     @if ($activeMembership->hasCapability('customers.view'))
                     <a href="{{ route('office.customers.index') }}" data-office-primary-customers @if($customerWorkspaceActive) aria-current="page" @endif class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ $customerWorkspaceActive ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Customers</a>
                     @endif

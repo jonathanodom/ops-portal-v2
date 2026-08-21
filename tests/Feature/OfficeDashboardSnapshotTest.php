@@ -193,7 +193,10 @@ class OfficeDashboardSnapshotTest extends TestCase
 
         $this->actingAs($dispatcher)->get('/office')
             ->assertOk()
-            ->assertSee('Operations Dashboard')
+            ->assertSee('NewDay Home')
+            ->assertSee('Search Customers, Contacts, and Service Locations')
+            ->assertSee('Service Operations')
+            ->assertSee('Projects, Tasks &amp; Milestones', false)
             ->assertSee('Today’s Visits')
             ->assertSee('Awaiting Review')
             ->assertSee('New Service Ticket')
@@ -206,6 +209,7 @@ class OfficeDashboardSnapshotTest extends TestCase
 
         $this->actingAs($billing)->get('/office')
             ->assertOk()
+            ->assertSee('NewDay Home')
             ->assertSee('Billing &amp; Collections', false)
             ->assertSee('New Invoice')
             ->assertDontSee('Awaiting Review')
