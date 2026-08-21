@@ -5,11 +5,13 @@ namespace App\Console\Commands;
 use App\Domain\Projects\Queries\ProjectWorkspaceQuery;
 use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Office\CloseoutReviewController;
+use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Models\Closeout;
+use App\Models\Customer;
 use App\Models\OrganizationMembership;
 use App\Models\Project;
 use App\Models\ServiceTicket;
@@ -46,6 +48,7 @@ class BetaBenchmarkCommand extends Command
         $ticket = ServiceTicket::query()->where('organization_id', $membership->organization_id)->firstOrFail();
         $closeout = Closeout::query()->where('organization_id', $membership->organization_id)->where('status', 'submitted')->firstOrFail();
         $project = Project::query()->where('organization_id', $membership->organization_id)->firstOrFail();
+        $customer = Customer::query()->where('organization_id', $membership->organization_id)->whereHas('projects')->firstOrFail();
         $currentQueries = 0;
         $counting = false;
         DB::listen(function () use (&$currentQueries, &$counting): void {
@@ -67,6 +70,10 @@ class BetaBenchmarkCommand extends Command
             'projects_workspace' => [500, 25, fn () => app(ProjectController::class)->index(
                 $this->request('/office/projects', $membership),
                 app(ProjectWorkspaceQuery::class),
+            )],
+            'customer_detail' => [750, 30, fn () => app(CustomerController::class)->show(
+                $this->request('/office/customers/'.$customer->id, $membership),
+                (string) $customer->id,
             )],
             'project_detail' => [750, 31, fn () => app(ProjectController::class)->show(
                 $this->request('/office/projects/'.$project->id, $membership),

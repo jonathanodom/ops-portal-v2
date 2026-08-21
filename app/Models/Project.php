@@ -32,6 +32,11 @@ class Project extends Model
         return $this->belongsTo(User::class, 'owner_user_id');
     }
 
+    public function serviceLocation(): BelongsTo
+    {
+        return $this->belongsTo(ServiceLocation::class);
+    }
+
     public function workstreams(): HasMany
     {
         return $this->hasMany(ProjectWorkstream::class)->orderBy('sort_order')->orderBy('id');

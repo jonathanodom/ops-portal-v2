@@ -16,7 +16,14 @@
         @endif
     </x-office.record-header>
 
-    <x-office.detail-nav :items="['overview' => 'Overview', 'history' => 'Service & invoice history', 'locations' => 'Locations', 'contacts' => 'Contacts'] + ($activeMembership->hasCapability('subscriptions.view') ? ['customer-services' => 'Customer Services'] : [])" />
+    @php
+        $detailNav = ['overview' => 'Overview', 'history' => 'Service Tickets']
+            + ($activeMembership->hasCapability('projects.view') ? ['projects' => 'Projects'] : [])
+            + ($activeMembership->hasCapability('invoices.view') ? ['invoice-history' => 'Invoices'] : [])
+            + ['locations' => 'Locations', 'contacts' => 'Contacts']
+            + ($activeMembership->hasCapability('subscriptions.view') ? ['customer-services' => 'Customer Services'] : []);
+    @endphp
+    <x-office.detail-nav :items="$detailNav" />
 
     <div class="office-detail-grid" data-office-detail-grid>
         <div class="office-detail-main xl:order-first" data-office-detail-main>
@@ -43,6 +50,46 @@
                     @endforelse
                 </div>
             </section>
+
+            @if($activeMembership->hasCapability('projects.view'))
+                <section id="projects" class="office-detail-section" aria-labelledby="projects-heading" data-customer-projects>
+                    <div class="office-detail-section-header">
+                        <div>
+                            <h2 id="projects-heading" class="office-detail-section-title">Projects</h2>
+                            <p class="mt-1 text-sm text-slate-500">Project and engagement history for this customer.</p>
+                        </div>
+                        @if($activeMembership->hasCapability('projects.manage'))
+                            <a href="{{ route('office.projects.create', ['customer_id' => $customer->id]) }}" class="button-primary">New Project</a>
+                        @endif
+                    </div>
+                    <div class="office-detail-list">
+                        @forelse($customer->projects as $project)
+                            <a href="{{ route('office.projects.show', $project) }}" class="office-detail-row grid gap-3 sm:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)_auto] sm:items-center">
+                                <div class="min-w-0">
+                                    <div class="flex flex-wrap items-center gap-2">
+                                        <strong class="text-slate-950">{{ $project->project_number }}</strong>
+                                        <span class="{{ $project->status === 'active' ? 'status-active' : (in_array($project->status, ['completed', 'canceled'], true) ? 'status-inactive' : 'status-hold') }}">{{ Str::headline($project->status) }}</span>
+                                    </div>
+                                    <p class="mt-1 font-semibold text-slate-800">{{ $project->name }}</p>
+                                    <p class="mt-1 text-sm text-slate-500">{{ Str::headline($project->type) }}</p>
+                                    <p class="mt-1 text-sm text-slate-500">{{ $project->serviceLocation?->name ?: 'Customer-wide / multi-site' }} · Owner: {{ $project->owner?->name ?: 'Unassigned' }}</p>
+                                </div>
+                                <div class="text-sm text-slate-700">
+                                    @if($project->target_end_on)<p class="font-semibold text-slate-500">Target {{ $project->target_end_on->format('M j, Y') }}</p>@endif
+                                    <div class="mt-1 flex flex-wrap gap-x-3 gap-y-1">
+                                        <span>{{ $project->open_tasks_count }} open</span>
+                                        <span class="{{ $project->overdue_tasks_count ? 'font-bold text-red-700' : '' }}">{{ $project->overdue_tasks_count }} overdue</span>
+                                        <span class="{{ $project->blocked_tasks_count ? 'font-bold text-brand-orange-dark' : '' }}">{{ $project->blocked_tasks_count }} blocked</span>
+                                    </div>
+                                </div>
+                                <span class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">Open<span class="sr-only"> {{ $project->project_number }}</span> →</span>
+                            </a>
+                        @empty
+                            <p class="office-detail-empty">No projects have been recorded for this customer.</p>
+                        @endforelse
+                    </div>
+                </section>
+            @endif
 
             @if($activeMembership->hasCapability('invoices.view'))
                 <section id="invoice-history" class="office-detail-section" aria-labelledby="invoice-history-heading">

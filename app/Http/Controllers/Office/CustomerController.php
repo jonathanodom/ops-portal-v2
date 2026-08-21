@@ -9,6 +9,7 @@ use App\Models\Organization;
 use App\Support\AuditRecorder;
 use App\Support\CustomerDirectorySearch;
 use App\Support\Phone;
+use Carbon\CarbonImmutable;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -56,6 +57,8 @@ class CustomerController extends Controller
 
     public function show(Request $request, string $customer): View
     {
+        $organization = $this->organization($request);
+        $membership = $request->attributes->get('membership');
         $customer = $this->customer($request, $customer);
         Gate::authorize('view', $customer);
         $customer->load([
@@ -69,14 +72,28 @@ class CustomerController extends Controller
                 ->withCount('visits')
                 ->latest('updated_at')->latest('id'),
         ]);
+        if ($membership->hasCapability('projects.view')) {
+            $today = CarbonImmutable::now($organization->timezone)->toDateString();
+            $customer->load(['projects' => fn ($query) => $query
+                ->where('organization_id', $organization->id)
+                ->with(['owner:id,name', 'serviceLocation:id,organization_id,customer_id,name'])
+                ->withCount([
+                    'tasks as open_tasks_count' => fn ($tasks) => $tasks->whereNotIn('status', ['done', 'canceled']),
+                    'tasks as overdue_tasks_count' => fn ($tasks) => $tasks->whereNotIn('status', ['done', 'canceled'])->whereDate('due_on', '<', $today),
+                    'tasks as blocked_tasks_count' => fn ($tasks) => $tasks->where('status', 'blocked'),
+                ])
+                ->orderByRaw("case status when 'active' then 1 when 'planning' then 2 when 'on_hold' then 3 when 'completed' then 4 when 'canceled' then 5 else 6 end")
+                ->latest('updated_at')
+                ->latest('id')]);
+        }
         $invoices = collect();
-        if ($request->attributes->get('membership')->hasCapability('invoices.view')) {
+        if ($membership->hasCapability('invoices.view')) {
             $customer->load(['invoices' => fn ($query) => $query
                 ->with(['serviceTicket', 'serviceLocation', 'paymentTransactions'])
                 ->latest('issued_at')->latest('created_at')->latest('id')]);
             $invoices = $customer->invoices;
         }
-        if ($request->attributes->get('membership')->hasCapability('subscriptions.view')) {
+        if ($membership->hasCapability('subscriptions.view')) {
             $customer->load(['serviceEnrollments' => fn ($query) => $query->with('serviceLocation')->orderByRaw("case status when 'active' then 1 when 'paused' then 2 else 3 end")->orderByDesc('id')]);
         }
 

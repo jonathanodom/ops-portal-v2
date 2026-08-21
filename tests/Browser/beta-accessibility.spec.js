@@ -521,6 +521,11 @@ test.describe('desktop beta', () => {
                     expect(width).toBeGreaterThan(1500);
                     expect(width).toBeLessThanOrEqual(1600);
                 }
+
+                if (path === '/office/customers/1') {
+                    await expect(page.locator('[data-customer-projects]')).toBeVisible();
+                    await expect(page.getByRole('link', { name: 'New Project' })).toBeVisible();
+                }
             }
         }
 
@@ -528,9 +533,11 @@ test.describe('desktop beta', () => {
         await page.goto('/office/customers/1');
         const detailNav = page.getByRole('navigation', { name: 'On this page' });
         await expect(detailNav.getByRole('link', { name: 'Overview' })).toHaveAttribute('href', '#overview');
+        await expect(detailNav.getByRole('link', { name: 'Projects' })).toHaveAttribute('href', '#projects');
         await expect(detailNav.getByRole('link', { name: 'Locations' })).toHaveAttribute('href', '#locations');
         await expect(detailNav.getByRole('link', { name: 'Contacts' })).toHaveAttribute('href', '#contacts');
         await expect(page.locator('#overview')).toHaveCount(1);
+        await expect(page.locator('#projects')).toHaveCount(1);
         await expect(page.locator('#locations')).toHaveCount(1);
         await expect(page.locator('#contacts')).toHaveCount(1);
         const shortControls = await page.locator('button, input, select, a.office-detail-nav-link, a.button-primary, a.button-secondary, a.office-record-back').evaluateAll((elements) => elements
