@@ -45,13 +45,23 @@ class CloseoutReviewController extends Controller
         $closeout->load('returnVisit.returnOfVisit');
         $visit = $closeout->visit;
         $versions = Closeout::query()->where('organization_id', $closeout->organization_id)->where('visit_id', $visit->id)
-            ->with(['submittedBy', 'lastSavedBy', 'timeEntries.user', 'media', 'parts', 'reviews.reviewer', 'reviews.adjustments'])->orderBy('version')->get();
+            ->with(['submittedBy', 'lastSavedBy', 'timeEntries.user', 'timeEntries.corrections.correctedBy', 'media', 'parts', 'reviews.reviewer', 'reviews.adjustments'])->orderBy('version')->get();
         $activeMedia = $versions->flatMap(fn (Closeout $version) => $version->media
             ->where('state', 'stored')
             ->sortBy([['created_at', 'asc'], ['id', 'asc']])
             ->map(fn ($media) => ['media' => $media, 'version' => $version->version]))
             ->values();
-        $visit->load(['serviceTicket.customer', 'serviceTicket.contact', 'serviceTicket.visits.currentCloseout', 'serviceLocation.primaryContact', 'assignments.membership.user', 'timeEntries.user']);
+        $visit->load([
+            'serviceTicket' => fn ($query) => $query->withExists('billingHandoff'),
+            'serviceTicket.customer',
+            'serviceTicket.contact',
+            'serviceTicket.visits.currentCloseout',
+            'serviceLocation.primaryContact',
+            'assignments.membership.user',
+            'timeEntries.user',
+            'timeEntries.closeout.reviews',
+            'timeEntries.corrections.correctedBy',
+        ]);
         $completionBlockingVisits = $visit->serviceTicket->visits
             ->where('id', '!=', $visit->id)
             ->whereNotIn('status', ['approved', 'canceled', 'customer_unavailable'])
@@ -63,8 +73,11 @@ class CloseoutReviewController extends Controller
                     ->orWhere(fn ($q) => $q->where('subject_type', $visit->serviceTicket->getMorphClass())->where('subject_id', $visit->service_ticket_id));
             })->with('actor')->latest('occurred_at')->limit(50)->get();
         $tripChargeRecommendation = $this->tripCharges->recommend($visit);
+        $membership = $request->attributes->get('membership');
+        $canCorrectSubmittedTime = $membership->roles->contains('key', 'super_admin')
+            && $membership->hasCapability('visit_time.correct_submitted');
 
-        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'activeMedia', 'events', 'completionBlockingVisits', 'tripChargeRecommendation'));
+        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'activeMedia', 'events', 'completionBlockingVisits', 'tripChargeRecommendation', 'canCorrectSubmittedTime'));
     }
 
     public function approve(Request $request, string $closeout, CloseoutReviewWorkflow $workflow, AuditRecorder $audit): RedirectResponse

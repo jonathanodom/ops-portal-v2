@@ -189,6 +189,39 @@ test.describe('Projects V1', () => {
 test.describe('desktop beta', () => {
     test.skip(({ isMobile }) => isMobile);
 
+    test('Super Admin submitted-time correction remains responsive and accessible', async ({ page }) => {
+        test.setTimeout(120_000);
+        await login(page, 'super_admin');
+        await page.goto('/office/closeout-reviews');
+        const reviewLinks = await page.locator('a[href*="/office/closeout-reviews/"]:visible').evaluateAll((links) => links.map((link) => link.href));
+        let correctableReview = null;
+        for (const reviewLink of reviewLinks) {
+            await page.goto(reviewLink);
+            if (await page.getByText('Correct submitted time', { exact: true }).count()) {
+                correctableReview = reviewLink;
+                break;
+            }
+        }
+        expect(correctableReview).not.toBeNull();
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto(correctableReview);
+            const correction = page.getByText('Correct submitted time', { exact: true });
+            await expect(correction).toBeVisible();
+            await correction.click();
+            await expect(page.getByLabel(/Why was the recorded clock interval wrong/)).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+        }
+    });
+
     test('closeout review photo gallery is responsive and keyboard operable', async ({ page }) => {
         test.setTimeout(120_000);
         await login(page, 'reviewer');

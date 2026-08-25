@@ -98,7 +98,7 @@
                             </div>
                         @endif
                         @if($visit->currentCloseout)
-                            @php($timeSeconds = $visit->timeEntries->sum(fn ($entry) => $entry->ended_at ? $entry->started_at->diffInSeconds($entry->ended_at) : 0))
+                            @php($timeSeconds = $visit->timeEntries->sum(fn ($entry) => $entry->effectiveDurationSeconds()))
                             <div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-4"><p class="text-sm font-bold">Field closeout: {{ ucfirst($visit->currentCloseout->status) }}</p><p class="mt-1 text-sm text-slate-600">Crew time: {{ number_format($timeSeconds / 3600, 2) }} hours</p>
                             @if($administrativeReview = $visit->currentCloseout->reviews->firstWhere('administrative_completion', true))<p class="mt-2 text-sm font-semibold text-brand-orange"><span class="status-priority">Administratively completed</span> by {{ $administrativeReview->reviewer?->name ?? 'Super Admin' }} · <x-local-time :value="$administrativeReview->administratively_completed_at" :timezone="$activeOrganization->timezone" /></p>@endif
                             @if($visit->currentCloseout->status==='submitted' && $activeMembership->hasCapability('closeouts.inspect'))<a class="mt-3 inline-flex min-h-11 items-center font-bold text-brand-blue" href="{{ route('office.closeout-reviews.show',$visit->currentCloseout) }}">Open review packet</a>@endif

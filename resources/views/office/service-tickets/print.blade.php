@@ -44,7 +44,7 @@
             @forelse($ticket->visits as $visit)
                 @php
                     $closeout = $visit->currentCloseout;
-                    $timeSeconds = $visit->timeEntries->sum(fn ($entry) => $entry->ended_at ? $entry->started_at->diffInSeconds($entry->ended_at) : 0);
+                    $timeSeconds = $visit->timeEntries->sum(fn ($entry) => $entry->effectiveDurationSeconds());
                     $categories = $closeout?->media->groupBy('category')->map->count() ?? collect();
                 @endphp
                 <article class="print-record">

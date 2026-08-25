@@ -115,7 +115,7 @@ class ServiceTicketController extends Controller
             'files' => fn ($query) => $query->with('uploader')->latest(),
             'notes.author',
             'reopens.reopenedBy',
-            'visits' => fn ($query) => $query->with(['returnOfVisit', 'assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('ticket_visit_number'),
+            'visits' => fn ($query) => $query->with(['returnOfVisit', 'assignments.membership.user', 'timeEntries.user', 'timeEntries.closeout.reviews', 'timeEntries.corrections.correctedBy', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('ticket_visit_number'),
         ]);
         $events = AuditEvent::query()->where('organization_id', $ticket->organization_id)
             ->with('actor')
@@ -125,6 +125,8 @@ class ServiceTicketController extends Controller
                 ->orWhere(fn ($inner) => $inner->where('subject_type', (new ServiceTicketFile)->getMorphClass())->whereIn('subject_id', $ticket->files->pluck('id'))))
             ->latest('occurred_at')->limit(100)->get();
         $membership = $request->attributes->get('membership');
+        $canCorrectSubmittedTime = $membership->roles->contains('key', 'super_admin')
+            && $membership->hasCapability('visit_time.correct_submitted');
         $executableVisitIds = $ticket->visits->filter(function (Visit $visit) use ($membership): bool {
             if ($membership->hasCapability('visits.execute_any')) {
                 return true;
@@ -145,7 +147,7 @@ class ServiceTicketController extends Controller
             ? $ticket->visits->filter(fn (Visit $visit): bool => $manualCloseout->canStart($visit))->pluck('id')->all()
             : [];
 
-        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds') + $this->options());
+        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds', 'canCorrectSubmittedTime') + $this->options());
     }
 
     public function edit(Request $request, string $serviceTicket): View
@@ -273,7 +275,7 @@ class ServiceTicketController extends Controller
     private function ticket(Request $request, string $id): ServiceTicket
     {
         $organization = $this->organization($request);
-        $ticket = ServiceTicket::query()->forOrganization($organization->id)->find($id);
+        $ticket = ServiceTicket::query()->forOrganization($organization->id)->withExists('billingHandoff')->find($id);
         if (! $ticket) {
             if (ServiceTicket::query()->whereKey($id)->exists()) {
                 app(AuditRecorder::class)->record($organization, $request->user(), 'security.cross_organization_record_denied', $organization, [

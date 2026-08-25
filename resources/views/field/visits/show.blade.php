@@ -116,7 +116,7 @@
             <h2 class="text-lg font-bold">Time</h2>
             @forelse ($closeout?->timeEntries ?? collect() as $entry)
                 <div class="mt-3 border-t border-slate-200 pt-3 text-sm">
-                    <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · <x-local-time :value="$entry->started_at" :timezone="$visit->timezone" format="g:i A T" />–@if($entry->ended_at)<x-local-time :value="$entry->ended_at" :timezone="$visit->timezone" format="g:i A T" />@else running @endif</p>
+                    <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · <x-local-time :value="$entry->effective_started_at" :timezone="$visit->timezone" format="g:i A T" />–@if($entry->effective_ended_at)<x-local-time :value="$entry->effective_ended_at" :timezone="$visit->timezone" format="g:i A T" />@else running @endif @if($entry->hasSubmittedCorrection())<span class="status-active ml-2">Corrected by office</span>@endif</p>
                     @if ($closeout?->status === 'draft' && $entry->user_id === auth()->id() && $entry->ended_at)
                         @php($correctionForm = 'field-correction-'.$entry->id)
                         <details class="mt-2" @if($errors->has('time') && old('time_form') === $correctionForm) open @endif>
