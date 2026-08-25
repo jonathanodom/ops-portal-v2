@@ -59,7 +59,7 @@ class ExecutionController extends Controller
         return $visit;
     }
 
-    public function save(Request $r, string $visit, FieldExecution $flow): RedirectResponse|Response
+    public function save(Request $r, string $visit, FieldExecution $flow): RedirectResponse|Response|JsonResponse
     {
         $v = $this->writable($r, $visit);
         $c = $flow->draft($v, $r->user());
@@ -67,6 +67,15 @@ class ExecutionController extends Controller
         $version = (int) $d['content_version'];
         unset($d['content_version']);
         if (! $flow->save($c, $d, $version, $r->user())) {
+            if ($r->expectsJson()) {
+                $latest = $c->fresh();
+
+                return response()->json([
+                    'message' => 'This shared draft changed before your save completed. Review the latest version and explicitly retry.',
+                    'content_version' => $latest->content_version,
+                    'readiness_errors' => app(CloseoutReadiness::class)->errors($latest, false, true),
+                ], 409);
+            }
             $r->flash();
             $v->load([
                 'serviceTicket.customer', 'serviceTicket.contact',
@@ -85,6 +94,15 @@ class ExecutionController extends Controller
                 'draftConflict' => true,
                 'closeoutReadinessErrors' => app(CloseoutReadiness::class)->errors($v->currentCloseout),
             ], 409);
+        }
+
+        $c = $c->fresh();
+        if ($r->expectsJson()) {
+            return response()->json([
+                'message' => 'Draft saved.',
+                'content_version' => $c->content_version,
+                'readiness_errors' => app(CloseoutReadiness::class)->errors($c, false, true),
+            ]);
         }
 
         return back()->with('status', 'Draft saved.');
@@ -215,7 +233,15 @@ class ExecutionController extends Controller
         }
         $audit->record($r->attributes->get('organization'), $r->user(), 'visit_media.uploaded', $m, ['visit_id' => $v->id, 'category' => $m->category, 'byte_size' => $m->byte_size]);
 
-        return response()->json(['message' => 'Photo uploaded.', 'id' => $m->id], 201);
+        return response()->json([
+            'message' => 'Photo uploaded.',
+            'id' => $m->id,
+            'category' => $m->category,
+            'caption' => $m->caption,
+            'show_url' => route('field.media.show', $m),
+            'remove_url' => route('field.visits.media.remove', [$v, $m]),
+            'readiness_errors' => app(CloseoutReadiness::class)->errors($c->fresh(), false, true),
+        ], 201);
     }
 
     public function media(Request $r, string $media): StreamedResponse
@@ -232,7 +258,7 @@ class ExecutionController extends Controller
         return Storage::disk($m->storage_disk)->response($m->storage_key, null, ['Content-Type' => $m->mime_type, 'Cache-Control' => 'private, no-store']);
     }
 
-    public function removeMedia(Request $r, string $visit, string $media, AuditRecorder $audit): RedirectResponse
+    public function removeMedia(Request $r, string $visit, string $media, AuditRecorder $audit): RedirectResponse|JsonResponse
     {
         $v = $this->writable($r, $visit);
         $m = VisitMedia::where('visit_id', $v->id)->where('state', 'stored')->findOrFail($media);
@@ -240,6 +266,14 @@ class ExecutionController extends Controller
         $m->update(['state' => 'removed', 'removed_at' => now(), 'removed_by_id' => $r->user()->id]);
         $audit->record($r->attributes->get('organization'), $r->user(), 'visit_media.removed', $m, ['visit_id' => $v->id]);
         DeleteRemovedVisitMedia::dispatch($m->id)->afterCommit();
+
+        if ($r->expectsJson()) {
+            return response()->json([
+                'message' => 'Photo removed.',
+                'id' => $m->id,
+                'readiness_errors' => app(CloseoutReadiness::class)->errors($m->closeout->fresh(), false, true),
+            ]);
+        }
 
         return back()->with('status', 'Photo removed.');
     }

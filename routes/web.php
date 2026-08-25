@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\CloseoutAcknowledgmentSignatureController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
+use App\Http\Controllers\Field\FieldVisitWorkspaceV2Controller;
 use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Field\VisitWorkItemController;
 use App\Http\Controllers\InvoicePresentationController;
@@ -347,6 +348,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->group(function (): void {
             Route::get('/', [TodayController::class, 'index'])->name('home');
             Route::get('/visits/{visit}', [TodayController::class, 'show'])->whereNumber('visit')->name('visits.show');
+            Route::get('/visits/{visit}/workspace-v2', FieldVisitWorkspaceV2Controller::class)->whereNumber('visit')->name('visits.workspace-v2');
             Route::post('/visits/{visit}/transition', [TodayController::class, 'transition'])->whereNumber('visit')->name('visits.transition');
             Route::post('/visits/{visit}/draft', [ExecutionController::class, 'save'])->name('visits.draft');
             Route::post('/visits/{visit}/timer', [ExecutionController::class, 'timer'])->name('visits.timer');

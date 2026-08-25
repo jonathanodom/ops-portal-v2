@@ -1,4 +1,5 @@
 import './bootstrap';
+import './field-visit-workspace-v2';
 
 const connectivityBanner = document.querySelector('[data-connectivity-banner]');
 const connectivityStatus = document.querySelector('[data-connectivity-status]');
@@ -209,6 +210,10 @@ document.querySelectorAll('[data-signature-pad]').forEach((pad) => {
         canvas.focus();
     });
     form.addEventListener('submit', (event) => {
+        if (pad.hidden || pad.classList.contains('hidden')) {
+            input.value = '';
+            return;
+        }
         if (!hasInk) {
             event.preventDefault();
             status.textContent = 'Draw the POC signature before submitting.';
