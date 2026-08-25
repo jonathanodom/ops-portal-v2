@@ -6,6 +6,7 @@ use App\Jobs\DeleteRemovedVisitMedia;
 use App\Models\AuditEvent;
 use App\Models\Capability;
 use App\Models\Closeout;
+use App\Models\CloseoutAcknowledgmentSignature;
 use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\Organization;
@@ -111,8 +112,8 @@ class MobileFieldExecutionTest extends TestCase
             ->assertSessionHasNoErrors();
         $this->actingAs($lead)->get(route('field.visits.show', $visit))
             ->assertOk()
-            ->assertSee('Resolved - Ready to submit')
-            ->assertSee('>Submit<', false)
+            ->assertSee('Resolved - Ready for final review')
+            ->assertSee('>Final review<', false)
             ->assertSee('Submit closeout')
             ->assertSee('data-closeout-dialog-close', false);
 
@@ -162,6 +163,67 @@ class MobileFieldExecutionTest extends TestCase
             ->assertSee('aria-invalid="true"', false)
             ->assertSee('Choose a customer unavailable reason.')
             ->assertSee('Customer unavailable details are required.');
+    }
+
+    public function test_on_site_acknowledgment_requires_and_stores_immutable_private_signature_evidence(): void
+    {
+        Storage::fake('local');
+        [$organization, $visit, $lead] = $this->executionGraph('on_site');
+        $draft = $this->resolvedDraft();
+        unset($draft['ack_unavailable_category'], $draft['ack_unavailable_detail']);
+        $draft['representative_name'] = 'Taylor Customer';
+        $draft['representative_role'] = 'Site manager';
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $draft)->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), [
+            'submission_token' => (string) Str::uuid(),
+            'acknowledgment_confirmed' => '1',
+        ])->assertSessionHasErrors('signature_data');
+
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), [
+            'submission_token' => (string) Str::uuid(),
+            'acknowledgment_confirmed' => '1',
+            'signature_data' => $this->signaturePng(),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $signature = CloseoutAcknowledgmentSignature::query()->firstOrFail();
+        $this->assertSame($organization->id, $signature->organization_id);
+        $this->assertSame('Taylor Customer', $signature->signer_name);
+        $this->assertSame('Site manager', $signature->signer_role);
+        $this->assertStringNotContainsString('Taylor', $signature->storage_key);
+        Storage::disk('local')->assertExists($signature->storage_key);
+        $this->actingAs($lead)->get(route('closeout-acknowledgment-signatures.show', $signature))
+            ->assertOk()->assertHeader('Cache-Control', 'no-store, private');
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        $this->actingAs($reviewer)->get(route('office.closeout-reviews.show', $signature->closeout_id))
+            ->assertOk()->assertSee('Signed on-site')->assertSee('View signature evidence');
+        [$billing] = $this->userWithRole('billing', $organization);
+        $this->actingAs($billing)->get(route('closeout-acknowledgment-signatures.show', $signature))->assertForbidden();
+        [$outsider] = $this->userWithRole('super_admin');
+        $this->actingAs($outsider)->get(route('closeout-acknowledgment-signatures.show', $signature))->assertNotFound();
+        $this->assertDatabaseHas('audit_events', ['event_type' => 'closeout.customer_acknowledgment_signed']);
+    }
+
+    public function test_acknowledgment_fallback_needs_no_signature_and_signature_pad_rejects_blank_or_mixed_submission(): void
+    {
+        Storage::fake('local');
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $this->resolvedDraft())->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), [
+            'submission_token' => (string) Str::uuid(),
+            'signature_data' => $this->signaturePng(),
+        ])->assertSessionHasErrors('signature_data');
+
+        $otherVisit = $this->additionalAssignedVisit($visit, $lead, 'on_site');
+        $draft = $this->resolvedDraft();
+        unset($draft['ack_unavailable_category'], $draft['ack_unavailable_detail']);
+        $draft['representative_name'] = 'Blank Test';
+        $this->actingAs($lead)->post(route('field.visits.draft', $otherVisit), $draft)->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $otherVisit), [
+            'submission_token' => (string) Str::uuid(),
+            'acknowledgment_confirmed' => '1',
+            'signature_data' => $this->signaturePng(false),
+        ])->assertSessionHasErrors('signature_data');
     }
 
     public function test_saved_readiness_errors_map_to_exact_fields_and_actionable_review_items(): void
@@ -438,5 +500,28 @@ class MobileFieldExecutionTest extends TestCase
     private function holdDraft(): array
     {
         return ['content_version' => 1, 'outcome' => 'on_hold', 'hold_reason' => 'Awaiting site access', 'recommendations' => 'Coordinate access', 'ack_unavailable_category' => 'representative_unavailable', 'ack_unavailable_detail' => 'No representative available'];
+    }
+
+    private function signaturePng(bool $withInk = true): string
+    {
+        $width = 300;
+        $height = 120;
+        $raw = '';
+        for ($y = 0; $y < $height; $y++) {
+            $raw .= "\0";
+            for ($x = 0; $x < $width; $x++) {
+                $ink = $withInk && $x >= 40 && $x <= 260 && abs($y - (35 + intdiv($x, 6) % 45)) < 3;
+                $raw .= $ink ? "\x0f\x17\x2a\xff" : "\xff\xff\xff\0";
+            }
+        }
+        $chunk = static function (string $type, string $data): string {
+            return pack('N', strlen($data)).$type.$data.pack('H*', hash('crc32b', $type.$data));
+        };
+        $png = "\x89PNG\r\n\x1a\n"
+            .$chunk('IHDR', pack('NNCCCCC', $width, $height, 8, 6, 0, 0, 0))
+            .$chunk('IDAT', gzcompress($raw, 9))
+            .$chunk('IEND', '');
+
+        return 'data:image/png;base64,'.base64_encode($png);
     }
 }

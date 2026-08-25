@@ -49,13 +49,13 @@ class TodayController extends Controller
             'serviceTicket.visits' => fn ($query) => $query->select(['id', 'service_ticket_id', 'ticket_visit_number', 'return_of_visit_id', 'status', 'scheduled_start_at', 'timezone'])->with('returnOfVisit:id,ticket_visit_number')->orderBy('ticket_visit_number'),
             'serviceLocation.primaryContact',
             'assignments.membership.user',
-            'currentCloseout.lastSavedBy', 'currentCloseout.timeEntries.user', 'currentCloseout.timeEntries.workItem', 'currentCloseout.media', 'currentCloseout.parts',
+            'currentCloseout.lastSavedBy', 'currentCloseout.timeEntries.user', 'currentCloseout.timeEntries.workItem', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.acknowledgmentSignature',
             'currentCloseout.parent.reviews.reviewer',
             'workItems.followUpServiceTicket',
         ]);
 
         $versions = Closeout::query()->where('visit_id', $visit->id)->where('organization_id', $visit->organization_id)
-            ->with(['reviews.reviewer', 'media', 'parts'])->orderBy('version')->get();
+            ->with(['reviews.reviewer', 'media', 'parts', 'acknowledgmentSignature'])->orderBy('version')->get();
         $catalogServices = collect();
         $catalogProducts = collect();
         $catalogPackages = collect();
@@ -66,7 +66,7 @@ class TodayController extends Controller
         }
 
         $closeoutReadinessErrors = $visit->currentCloseout
-            ? $readiness->errors($visit->currentCloseout)
+            ? $readiness->errors($visit->currentCloseout, false, true)
             : ['outcome' => 'Choose an outcome.'];
 
         return view('field.visits.show', compact('visit', 'versions', 'catalogServices', 'catalogProducts', 'catalogPackages', 'closeoutReadinessErrors'));

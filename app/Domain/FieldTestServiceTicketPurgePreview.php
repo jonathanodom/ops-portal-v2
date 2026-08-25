@@ -5,6 +5,7 @@ namespace App\Domain;
 use App\Models\AuditEvent;
 use App\Models\BillingHandoff;
 use App\Models\Closeout;
+use App\Models\CloseoutAcknowledgmentSignature;
 use App\Models\CloseoutReview;
 use App\Models\CloseoutReviewAdjustment;
 use App\Models\CloseoutReviewTripCharge;
@@ -37,6 +38,7 @@ final class FieldTestServiceTicketPurgePreview
         $ticketId = (int) $ticket->id;
         $visitIds = Visit::withTrashed()->where('service_ticket_id', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $closeoutIds = Closeout::query()->whereIn('visit_id', $visitIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $signatureIds = CloseoutAcknowledgmentSignature::query()->whereIn('closeout_id', $closeoutIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $reviewIds = CloseoutReview::query()->whereIn('closeout_id', $closeoutIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $handoffIds = BillingHandoff::query()->where('service_ticket_id', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $invoiceIds = Invoice::query()
@@ -81,7 +83,7 @@ final class FieldTestServiceTicketPurgePreview
             'visitIds', 'closeoutIds', 'reviewIds', 'handoffIds', 'invoiceIds', 'attemptIds', 'transactionIds',
             'receiptIds', 'fileIds', 'mediaIds', 'timeEntryIds', 'partIds', 'lineIds', 'invoiceCloseoutIds',
             'acknowledgmentIds', 'assignmentIds', 'adjustmentIds', 'tripChargeIds', 'noteIds', 'reopenIds', 'projectLinkIds',
-            'workItemIds', 'workItemVisitIds', 'allocationSetIds', 'allocationIds'
+            'workItemIds', 'workItemVisitIds', 'allocationSetIds', 'allocationIds', 'signatureIds'
         );
         $ids['ticketIds'] = [$ticketId];
         $auditIds = $this->referencingAuditIds((int) $ticket->organization_id, $ids);
@@ -95,6 +97,9 @@ final class FieldTestServiceTicketPurgePreview
         }
         foreach (VisitMedia::query()->whereIn('id', $mediaIds)->get(['storage_disk', 'storage_key']) as $media) {
             $storage[] = ['disk' => $media->storage_disk, 'key' => $media->storage_key, 'kind' => 'visit_media'];
+        }
+        foreach (CloseoutAcknowledgmentSignature::query()->whereIn('id', $signatureIds)->get(['storage_disk', 'storage_key']) as $signature) {
+            $storage[] = ['disk' => $signature->storage_disk, 'key' => $signature->storage_key, 'kind' => 'acknowledgment_signature'];
         }
         foreach (Invoice::query()->whereIn('id', $invoiceIds)->whereNotNull('pdf_key')->get(['pdf_disk', 'pdf_key']) as $invoice) {
             $storage[] = ['disk' => $invoice->pdf_disk, 'key' => $invoice->pdf_key, 'kind' => 'invoice_pdf'];
@@ -117,6 +122,7 @@ final class FieldTestServiceTicketPurgePreview
             'operational_incidents' => count($incidentIds), 'private_objects' => count($storage),
             'work_items' => count($workItemIds), 'work_item_visit_touches' => count($workItemVisitIds),
             'time_allocation_sets' => count($allocationSetIds), 'time_allocations' => count($allocationIds),
+            'acknowledgment_signatures' => count($signatureIds),
         ];
 
         return ['ids' => $ids, 'counts' => $counts, 'storage' => $storage, 'blockers' => [
@@ -156,6 +162,7 @@ final class FieldTestServiceTicketPurgePreview
             ServiceTicket::class => 'ticketIds', ServiceTicketNote::class => 'noteIds', ServiceTicketReopen::class => 'reopenIds',
             Visit::class => 'visitIds', VisitAssignment::class => 'assignmentIds', VisitTimeEntry::class => 'timeEntryIds',
             VisitMedia::class => 'mediaIds', VisitPartProposal::class => 'partIds', Closeout::class => 'closeoutIds',
+            CloseoutAcknowledgmentSignature::class => 'signatureIds',
             CloseoutReview::class => 'reviewIds', CloseoutReviewAdjustment::class => 'adjustmentIds',
             CloseoutReviewTripCharge::class => 'tripChargeIds', BillingHandoff::class => 'handoffIds', Invoice::class => 'invoiceIds',
             InvoiceLine::class => 'lineIds', InvoiceCloseout::class => 'invoiceCloseoutIds',
@@ -205,6 +212,7 @@ final class FieldTestServiceTicketPurgePreview
             'time_entry_id' => 'timeEntryIds', 'visit_time_entry_id' => 'timeEntryIds', 'source_time_entry_id' => 'timeEntryIds',
             'assignment_id' => 'assignmentIds', 'assignment_ids' => 'assignmentIds', 'reopen_id' => 'reopenIds',
             'work_item_id' => 'workItemIds', 'service_ticket_work_item_id' => 'workItemIds',
+            'signature_id' => 'signatureIds', 'closeout_acknowledgment_signature_id' => 'signatureIds',
         ];
         foreach ($metadata as $key => $value) {
             if (isset($keys[$key]) && is_numeric($value) && in_array((int) $value, $ids[$keys[$key]] ?? [], true)) {

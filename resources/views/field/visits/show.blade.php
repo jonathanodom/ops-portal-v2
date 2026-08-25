@@ -8,6 +8,9 @@
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
         $inheritedMedia = ($versions ?? collect())->where('id','!=',$closeout?->id)->flatMap->media->where('state','stored');
         $closeoutMissing = collect($closeoutReadinessErrors ?? ['outcome' => 'Choose an outcome.']);
+        $closeoutDraftMissing = $closeoutMissing->except('signature_data');
+        $signaturePath = $closeout && blank($closeout->ack_unavailable_category) && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true);
+        $closeoutReadyForFinalReview = $closeoutDraftMissing->isEmpty();
         $closeoutFieldError = fn (string $field) => $errors->first($field) ?: $closeoutMissing->get($field);
         $showCloseoutAction = in_array($visit->status, ['on_site', 'returned_for_correction'], true) && (! $closeout || $closeout->status === 'draft');
         $canSubmitCloseout = $activeMembership->hasCapability('visits.execute_any') || $visit->assignments->contains(fn ($assignment) => $assignment->membership->user_id === auth()->id() && $assignment->is_lead);
@@ -282,14 +285,19 @@
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
                         <legend class="px-1 text-base font-bold text-slate-900">Customer acknowledgment</legend>
-                        <p class="text-sm text-slate-600">Enter the person who reviewed the work. If no one could acknowledge it, leave the name blank and complete the fallback section below.</p>
+                        <p class="text-sm text-slate-600">For an on-site acknowledgment, enter the POC who will sign during final review. Otherwise choose a valid fallback and explain it.</p>
                         <div data-closeout-field="representative_name">
-                            <label class="form-label" for="representative_name">Customer or point-of-contact name</label>
+                            <label class="form-label" for="representative_name">POC or customer name</label>
                             <input class="form-input mt-1 {{ $closeoutFieldError('representative_name') ? 'border-red-500 bg-red-50' : '' }}" id="representative_name" name="representative_name" autocomplete="name" value="{{ old('representative_name', $closeout?->representative_name) }}" @if($closeoutFieldError('representative_name')) aria-invalid="true" aria-describedby="representative_name-error" @endif>
                             <x-field-error field="representative_name" :message="$closeoutMissing->get('representative_name')" />
                         </div>
+                        <div data-closeout-field="representative_role">
+                            <label class="form-label" for="representative_role">POC role or title <span class="font-normal text-slate-500">(optional)</span></label>
+                            <input class="form-input mt-1" id="representative_role" name="representative_role" maxlength="120" value="{{ old('representative_role', $closeout?->representative_role) }}">
+                        </div>
                         <div class="space-y-4 border-t border-slate-200 pt-4">
-                            <p class="font-semibold text-slate-900">Couldn’t obtain acknowledgment?</p>
+                            <p class="font-semibold text-slate-900">Acknowledgment fallback</p>
+                            <p class="text-sm text-slate-600">Use this only when an on-site signature is not appropriate or cannot be obtained.</p>
                             <div data-closeout-field="ack_unavailable_category">
                                 <label class="form-label" for="ack_unavailable_category">Reason</label>
                                 <select class="form-input mt-1 {{ $closeoutFieldError('ack_unavailable_category') ? 'border-red-500 bg-red-50' : '' }}" id="ack_unavailable_category" name="ack_unavailable_category" @if($closeoutFieldError('ack_unavailable_category')) aria-invalid="true" aria-describedby="ack_unavailable_category-error" @endif><option value="">Choose a reason</option>@foreach (config('field_execution.ack_fallbacks') as $value => $label)<option value="{{ $value }}" @selected(old('ack_unavailable_category', $closeout?->ack_unavailable_category) === $value)>{{ $label }}</option>@endforeach</select>
@@ -405,14 +413,14 @@
                 <div class="field-closeout-action" data-closeout-action-footer>
                     <div class="mx-auto flex min-h-16 max-w-2xl items-center justify-between gap-3 px-3 py-2">
                         <div class="min-w-0">
-                            <p class="truncate text-sm font-bold text-slate-950">{{ $closeoutMissing->isEmpty() ? (($outcomeLabels[$selectedOutcome] ?? 'Closeout').' - Ready to submit') : 'Closeout - '.($closeoutMissing->count() === 1 ? '1 item missing' : $closeoutMissing->count().' items missing') }}</p>
-                            <p class="truncate text-xs text-slate-600">{{ $closeoutMissing->isEmpty() ? 'Review the final acknowledgment.' : 'Review what is still required.' }}</p>
+                            <p class="truncate text-sm font-bold text-slate-950">{{ $closeoutReadyForFinalReview ? (($outcomeLabels[$selectedOutcome] ?? 'Closeout').' - Ready for final review') : 'Closeout - '.($closeoutDraftMissing->count() === 1 ? '1 item missing' : $closeoutDraftMissing->count().' items missing') }}</p>
+                            <p class="truncate text-xs text-slate-600">{{ $closeoutReadyForFinalReview ? 'Complete the acknowledgment and submit.' : 'Review what is still required.' }}</p>
                         </div>
-                        <button type="button" class="{{ $closeoutMissing->isEmpty() && $canSubmitCloseout ? 'button-action' : 'button-secondary' }} shrink-0" data-closeout-dialog-open>{{ $closeoutMissing->isEmpty() && $canSubmitCloseout ? 'Submit' : 'Review' }}</button>
+                        <button type="button" class="{{ $closeoutReadyForFinalReview && $canSubmitCloseout ? 'button-action' : 'button-secondary' }} shrink-0" data-closeout-dialog-open>{{ $closeoutReadyForFinalReview && $canSubmitCloseout ? 'Final review' : 'Review' }}</button>
                     </div>
                 </div>
 
-                <dialog id="field-closeout-review-dialog" class="field-closeout-dialog" data-closeout-dialog data-auto-open="{{ $errors->has('acknowledgment_confirmed') ? 'true' : 'false' }}" aria-labelledby="field-closeout-review-title">
+                <dialog id="field-closeout-review-dialog" class="field-closeout-dialog" data-closeout-dialog data-auto-open="{{ $errors->hasAny(['acknowledgment_confirmed', 'signature_data']) ? 'true' : 'false' }}" aria-labelledby="field-closeout-review-title">
                     <div class="field-closeout-dialog-panel">
                         <header class="field-closeout-dialog-header">
                             <div><p class="text-sm font-bold text-brand-blue">{{ $visit->displayLabel() }}</p><h2 id="field-closeout-review-title" class="mt-1 text-xl font-bold text-slate-950">Review closeout</h2></div>
@@ -426,25 +434,39 @@
                                     <span class="text-sm font-semibold text-slate-600">Selected outcome</span>
                                     <span data-selected-outcome data-outcome="{{ $selectedOutcome }}" class="field-selected-outcome">{{ $outcomeLabels[$selectedOutcome] ?? 'Not selected' }}</span>
                                 </div>
-                                @if($closeoutMissing->isNotEmpty())
+                                @if($closeoutDraftMissing->isNotEmpty())
                                     <section class="mt-5 rounded-lg border border-amber-300 bg-amber-50 p-4" aria-labelledby="closeout-missing-heading">
-                                        <h3 id="closeout-missing-heading" class="font-bold text-amber-950">{{ $closeoutMissing->count() === 1 ? '1 required item remains' : $closeoutMissing->count().' required items remain' }}</h3>
-                                        <ul class="mt-3 space-y-2 text-sm text-amber-950">@foreach($closeoutMissing as $field => $message)<li><button type="button" class="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-left font-semibold hover:border-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue" data-closeout-fix-target="{{ $field }}"><span>{{ $message }}</span><span class="shrink-0 text-brand-blue">Fix</span></button></li>@endforeach</ul>
+                                        <h3 id="closeout-missing-heading" class="font-bold text-amber-950">{{ $closeoutDraftMissing->count() === 1 ? '1 required item remains' : $closeoutDraftMissing->count().' required items remain' }}</h3>
+                                        <ul class="mt-3 space-y-2 text-sm text-amber-950">@foreach($closeoutDraftMissing as $field => $message)<li><button type="button" class="flex min-h-11 w-full items-center justify-between gap-3 rounded-lg border border-amber-300 bg-white px-3 py-2 text-left font-semibold hover:border-brand-blue focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue" data-closeout-fix-target="{{ $field }}"><span>{{ $message }}</span><span class="shrink-0 text-brand-blue">Fix</span></button></li>@endforeach</ul>
                                     </section>
-                                @elseif($closeout?->representative_name)
-                                    <label class="mt-5 flex min-h-11 gap-3 rounded-lg border border-slate-300 p-4 @error('acknowledgment_confirmed') border-red-500 bg-red-50 @enderror">
-                                        <input type="checkbox" name="acknowledgment_confirmed" value="1" required @error('acknowledgment_confirmed') aria-invalid="true" aria-describedby="acknowledgment_confirmed-error" @enderror>
-                                        <span class="text-sm font-semibold">I confirm the work and outcome were reviewed with {{ $closeout->representative_name }}.</span>
-                                    </label>
-                                    <x-field-error field="acknowledgment_confirmed" />
+                                @elseif($signaturePath)
+                                    <section class="mt-5 space-y-4" data-signature-pad>
+                                        <div class="rounded-lg border border-slate-200 bg-slate-50 p-4 text-sm">
+                                            <p class="font-bold text-slate-950">On-site POC acknowledgment</p>
+                                            <p class="mt-1">{{ $closeout->representative_name }}@if($closeout->representative_role) · {{ $closeout->representative_role }}@endif</p>
+                                            <p class="mt-3 text-slate-700">{{ config('field_execution.ack_statement') }}</p>
+                                        </div>
+                                        <div>
+                                            <label class="form-label" for="closeout_signature_canvas">POC signature</label>
+                                            <canvas id="closeout_signature_canvas" class="mt-1 h-40 w-full touch-none rounded-lg border-2 border-slate-400 bg-white focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-brand-blue" width="600" height="240" tabindex="0" role="img" aria-label="Signature drawing area" data-signature-canvas></canvas>
+                                            <input type="hidden" name="signature_data" data-signature-data>
+                                            <div class="mt-2 flex items-center justify-between gap-3"><p class="text-sm text-slate-600" role="status" aria-live="polite" data-signature-status>Signature not yet captured.</p><button type="button" class="button-secondary min-h-11" data-signature-clear>Clear signature</button></div>
+                                            <x-field-error field="signature_data" />
+                                        </div>
+                                        <label class="flex min-h-11 gap-3 rounded-lg border border-slate-300 p-4 @error('acknowledgment_confirmed') border-red-500 bg-red-50 @enderror">
+                                            <input type="checkbox" name="acknowledgment_confirmed" value="1" required @error('acknowledgment_confirmed') aria-invalid="true" aria-describedby="acknowledgment_confirmed-error" @enderror>
+                                            <span class="text-sm font-semibold">I confirm the work and outcome were presented to the named POC for this acknowledgment.</span>
+                                        </label>
+                                        <x-field-error field="acknowledgment_confirmed" />
+                                    </section>
                                 @else
-                                    <div class="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm font-semibold text-emerald-900">The saved outcome, acknowledgment fallback, and evidence requirements are ready.</div>
+                                    <div class="mt-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 text-sm text-emerald-950"><p class="font-bold">Acknowledgment fallback recorded</p><p class="mt-1">{{ config('field_execution.ack_fallbacks.'.$closeout?->ack_unavailable_category, 'Fallback') }} · {{ $closeout?->ack_unavailable_detail }}</p></div>
                                 @endif
                                 @unless($canSubmitCloseout)<p class="mt-5 rounded-lg border border-slate-300 bg-slate-50 p-4 text-sm font-semibold text-slate-700">Only the assigned lead or an authorized supervisor can submit this shared closeout.</p>@endunless
                             </div>
                             <footer class="field-closeout-dialog-footer">
                                 <button type="button" class="button-secondary" data-closeout-dialog-close>Continue editing</button>
-                                @if($closeoutMissing->isEmpty() && $canSubmitCloseout)<button class="button-action">Submit closeout</button>@endif
+                                @if($closeoutReadyForFinalReview && $canSubmitCloseout)<button class="button-action">Submit closeout</button>@endif
                             </footer>
                         </form>
                     </div>
@@ -470,6 +492,7 @@
                         <p class="font-semibold">Version {{ $version->version }} · {{ ucfirst($version->status) }}</p>
                         @foreach($version->reviews as $review)<p class="mt-1 text-sm text-slate-600">{{ ucfirst($review->decision) }} by {{ $review->reviewer?->name ?? 'Office reviewer' }}</p>@endforeach
                         <p class="mt-1 text-xs text-slate-500">{{ $version->media->where('state','stored')->count() }} preserved photo(s) · {{ $version->parts->whereNull('removed_at')->count() }} proposal(s)</p>
+                        @if($version->acknowledgmentSignature)<a class="mt-2 inline-flex min-h-11 items-center font-bold text-brand-blue" href="{{ route('closeout-acknowledgment-signatures.show', $version->acknowledgmentSignature) }}" target="_blank" rel="noopener">View this version's signature</a>@endif
                     </div>
                 @endforeach
             </div>

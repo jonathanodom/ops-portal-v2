@@ -119,7 +119,7 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         ]);
     }
 
-    public function test_correction_resubmission_inherits_acknowledgment_and_photo_without_duplicate_return_work(): void
+    public function test_correction_resubmission_requires_new_acknowledgment_but_inherits_photo_without_duplicate_return_work(): void
     {
         [$organization, $visit, $closeout, $technician] = $this->submittedCloseout();
         [$reviewer] = $this->userWithRole('reviewer', $organization);
@@ -128,13 +128,15 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         VisitMedia::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'uploader_id' => $technician->id, 'storage_disk' => 'local', 'storage_key' => 'field-media/inherited.jpg', 'mime_type' => 'image/jpeg', 'byte_size' => 100, 'category' => 'after', 'state' => 'stored']);
         $this->actingAs($reviewer)->post("/office/closeout-reviews/{$closeout->id}/return", ['decision_token' => (string) Str::uuid(), 'reason' => 'Clarify diagnosis'])->assertRedirect();
         $next = $visit->fresh()->currentCloseout;
+        $this->assertNull($next->acknowledged_at);
+        $this->assertNull($next->acknowledgmentSignature);
 
-        $this->actingAs($technician)->post("/field/visits/{$visit->id}/draft", ['content_version' => 1, 'outcome' => 'resolved', 'diagnosis' => 'Corrected diagnosis', 'work_performed' => $next->work_performed, 'representative_name' => $next->representative_name])->assertRedirect()->assertSessionHasNoErrors();
-        $this->actingAs($technician)->post("/field/visits/{$visit->id}/submit", ['submission_token' => (string) Str::uuid(), 'acknowledgment_confirmed' => 1])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($technician)->post("/field/visits/{$visit->id}/draft", ['content_version' => 1, 'outcome' => 'resolved', 'diagnosis' => 'Corrected diagnosis', 'work_performed' => $next->work_performed, 'representative_name' => null, 'ack_unavailable_category' => 'remote_service', 'ack_unavailable_detail' => 'Correction reviewed remotely'])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($technician)->post("/field/visits/{$visit->id}/submit", ['submission_token' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
 
         $this->assertSame('submitted', $next->fresh()->status);
         $this->assertSame('pending_closeout', $visit->fresh()->status);
-        $this->assertTrue($next->fresh()->acknowledged_at->equalTo($acknowledgedAt));
+        $this->assertNull($next->fresh()->acknowledged_at);
         $this->assertDatabaseCount('visit_media', 1);
     }
 

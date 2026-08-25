@@ -63,7 +63,7 @@ class ExecutionController extends Controller
     {
         $v = $this->writable($r, $visit);
         $c = $flow->draft($v, $r->user());
-        $d = $r->validate(['content_version' => 'required|integer', 'outcome' => ['nullable', Rule::in(['resolved', 'needs_return_trip', 'customer_unavailable', 'on_hold'])], 'diagnosis' => 'nullable|string|max:10000', 'work_performed' => 'nullable|string|max:10000', 'exceptions' => 'nullable|string|max:10000', 'recommendations' => 'nullable|string|max:10000', 'return_reason' => 'nullable|string|max:5000', 'unfinished_work' => 'nullable|string|max:5000', 'needed_equipment' => 'nullable|string|max:5000', 'hold_reason' => 'nullable|string|max:5000', 'unavailable_category' => ['nullable', Rule::in(array_keys(config('field_execution.unavailable_reasons')))], 'unavailable_detail' => 'nullable|string|max:5000', 'representative_name' => 'nullable|string|max:255', 'ack_unavailable_category' => ['nullable', Rule::in(array_keys(config('field_execution.ack_fallbacks')))], 'ack_unavailable_detail' => 'nullable|string|max:5000', 'no_photo_category' => ['nullable', Rule::in(array_keys(config('field_execution.no_photo_reasons')))], 'no_photo_detail' => 'nullable|string|max:5000']);
+        $d = $r->validate(['content_version' => 'required|integer', 'outcome' => ['nullable', Rule::in(['resolved', 'needs_return_trip', 'customer_unavailable', 'on_hold'])], 'diagnosis' => 'nullable|string|max:10000', 'work_performed' => 'nullable|string|max:10000', 'exceptions' => 'nullable|string|max:10000', 'recommendations' => 'nullable|string|max:10000', 'return_reason' => 'nullable|string|max:5000', 'unfinished_work' => 'nullable|string|max:5000', 'needed_equipment' => 'nullable|string|max:5000', 'hold_reason' => 'nullable|string|max:5000', 'unavailable_category' => ['nullable', Rule::in(array_keys(config('field_execution.unavailable_reasons')))], 'unavailable_detail' => 'nullable|string|max:5000', 'representative_name' => 'nullable|string|max:255', 'representative_role' => 'nullable|string|max:120', 'ack_unavailable_category' => ['nullable', Rule::in(array_keys(config('field_execution.ack_fallbacks')))], 'ack_unavailable_detail' => 'nullable|string|max:5000', 'no_photo_category' => ['nullable', Rule::in(array_keys(config('field_execution.no_photo_reasons')))], 'no_photo_detail' => 'nullable|string|max:5000']);
         $version = (int) $d['content_version'];
         unset($d['content_version']);
         if (! $flow->save($c, $d, $version, $r->user())) {
@@ -248,10 +248,11 @@ class ExecutionController extends Controller
     {
         $v = $this->writable($r, $visit);
         $c = $v->currentCloseout ?: $flow->draft($v, $r->user());
-        $d = $r->validate(['submission_token' => 'required|uuid', 'acknowledgment_confirmed' => 'sometimes|accepted']);
-        if (filled($c->representative_name) && ! $r->boolean('acknowledgment_confirmed')) {
+        $d = $r->validate(['submission_token' => 'required|uuid', 'acknowledgment_confirmed' => 'sometimes|accepted', 'signature_data' => ['nullable', 'string', 'max:1400000']]);
+        if (blank($c->ack_unavailable_category) && filled($c->representative_name) && ! $r->boolean('acknowledgment_confirmed')) {
             return back()->withErrors(['acknowledgment_confirmed' => 'Confirm the customer acknowledgment before submitting.']);
-        }$flow->submit($v, $c, $r->user(), $d['submission_token']);
+        }
+        $flow->submit($v, $c, $r->user(), $d['submission_token'], false, $d['signature_data'] ?? null);
 
         return back()->with('status', 'Closeout submitted for office review.');
     }

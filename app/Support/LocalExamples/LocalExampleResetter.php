@@ -71,6 +71,11 @@ final class LocalExampleResetter
                     $objects[$row->storage_disk][] = $row->storage_key;
                 });
         }
+        DB::table('closeout_acknowledgment_signatures')->where('organization_id', $organization->id)
+            ->select(['storage_disk', 'storage_key'])->get()
+            ->each(function (object $row) use (&$objects): void {
+                $objects[$row->storage_disk][] = $row->storage_key;
+            });
 
         foreach (DB::table('invoices')->where('organization_id', $organization->id)->whereNotNull('pdf_disk')->whereNotNull('pdf_key')->get(['pdf_disk', 'pdf_key']) as $row) {
             $objects[$row->pdf_disk][] = $row->pdf_key;

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\CloseoutAcknowledgmentSignatureController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
 use App\Http\Controllers\Field\TodayController;
@@ -75,6 +76,8 @@ Route::get('/receipts/{receipt}/{token}/brand', [PaymentReceiptController::class
 Route::middleware(['auth', 'active.organization', 'record.operational.failures'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
     Route::get('/organization-brand/{variant}', [OrganizationSettingsController::class, 'asset'])->whereIn('variant', ['full', 'mark'])->name('organization.brand.asset');
+    Route::get('/closeout-acknowledgment-signatures/{signature}', CloseoutAcknowledgmentSignatureController::class)
+        ->whereNumber('signature')->name('closeout-acknowledgment-signatures.show');
 
     Route::get('/', function (Request $request) {
         $membership = $request->attributes->get('membership');

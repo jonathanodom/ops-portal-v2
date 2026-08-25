@@ -35,7 +35,7 @@ final class LocalExampleInventory
         'customers', 'contacts', 'service_locations', 'customer_service_enrollments',
         'service_tickets', 'service_ticket_notes', 'service_ticket_reopens', 'service_ticket_files',
         'visits', 'visit_assignments', 'visit_time_entries', 'visit_media', 'visit_part_proposals',
-        'closeouts', 'closeout_reviews', 'closeout_review_adjustments', 'closeout_review_trip_charges',
+        'closeout_acknowledgment_signatures', 'closeouts', 'closeout_reviews', 'closeout_review_adjustments', 'closeout_review_trip_charges',
         'billing_handoffs', 'invoices', 'invoice_lines', 'invoice_closeouts', 'invoice_acknowledgments',
         'payment_attempts', 'payment_transactions', 'payment_receipts', 'payment_webhook_events',
         'projects', 'project_workstreams', 'project_tasks', 'project_milestones', 'project_notes',

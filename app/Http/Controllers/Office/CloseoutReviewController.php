@@ -45,7 +45,7 @@ class CloseoutReviewController extends Controller
         $closeout->load('returnVisit.returnOfVisit');
         $visit = $closeout->visit;
         $versions = Closeout::query()->where('organization_id', $closeout->organization_id)->where('visit_id', $visit->id)
-            ->with(['submittedBy', 'lastSavedBy', 'timeEntries.user', 'timeEntries.corrections.correctedBy', 'media', 'parts', 'reviews.reviewer', 'reviews.adjustments'])->orderBy('version')->get();
+            ->with(['submittedBy', 'lastSavedBy', 'timeEntries.user', 'timeEntries.corrections.correctedBy', 'media', 'parts', 'reviews.reviewer', 'reviews.adjustments', 'acknowledgmentSignature'])->orderBy('version')->get();
         $activeMedia = $versions->flatMap(fn (Closeout $version) => $version->media
             ->where('state', 'stored')
             ->sortBy([['created_at', 'asc'], ['id', 'asc']])
