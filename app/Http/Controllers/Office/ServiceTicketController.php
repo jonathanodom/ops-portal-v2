@@ -117,7 +117,7 @@ class ServiceTicketController extends Controller
             'reopens.reopenedBy',
             'originatingWorkItem.serviceTicket',
             'workItems' => fn ($query) => $query->with(['discoveredVisit.returnOfVisit', 'visits.returnOfVisit', 'followUpServiceTicket'])->orderBy('id'),
-            'visits' => fn ($query) => $query->with(['returnOfVisit', 'assignments.membership.user', 'timeEntries.user', 'timeEntries.workItem', 'timeEntries.allocationSets.allocatedBy', 'timeEntries.allocationSets.allocations.workItem', 'timeEntries.closeout.reviews', 'timeEntries.corrections.correctedBy', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer'])->orderBy('scheduled_start_at')->orderBy('ticket_visit_number'),
+            'visits' => fn ($query) => $query->with(['returnOfVisit', 'assignments.membership.user', 'timeEntries.user', 'timeEntries.workItem', 'timeEntries.allocationSets.allocatedBy', 'timeEntries.allocationSets.allocations.workItem', 'timeEntries.closeout.reviews', 'timeEntries.corrections.correctedBy', 'currentCloseout.lastSavedBy', 'currentCloseout.media', 'currentCloseout.parts', 'currentCloseout.reviews.reviewer', 'currentCloseout.acknowledgmentSignature'])->orderBy('scheduled_start_at')->orderBy('ticket_visit_number'),
         ]);
         $events = AuditEvent::query()->where('organization_id', $ticket->organization_id)
             ->with('actor')

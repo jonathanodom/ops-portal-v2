@@ -159,6 +159,68 @@ if (closeoutDialog) {
     if (closeoutDialog.dataset.autoOpen === 'true') open(launcher);
 }
 
+document.querySelectorAll('[data-signature-pad]').forEach((pad) => {
+    const canvas = pad.querySelector('[data-signature-canvas]');
+    const input = pad.querySelector('[data-signature-data]');
+    const clear = pad.querySelector('[data-signature-clear]');
+    const status = pad.querySelector('[data-signature-status]');
+    const form = pad.closest('form');
+    if (!canvas || !input || !form) return;
+    const context = canvas.getContext('2d');
+    let drawing = false;
+    let hasInk = false;
+    context.lineCap = 'round';
+    context.lineJoin = 'round';
+    context.lineWidth = 5;
+    context.strokeStyle = '#0f172a';
+    const point = (event) => {
+        const rect = canvas.getBoundingClientRect();
+        return {
+            x: (event.clientX - rect.left) * canvas.width / rect.width,
+            y: (event.clientY - rect.top) * canvas.height / rect.height,
+        };
+    };
+    canvas.addEventListener('pointerdown', (event) => {
+        event.preventDefault();
+        drawing = true;
+        hasInk = true;
+        canvas.setPointerCapture(event.pointerId);
+        const current = point(event);
+        context.beginPath();
+        context.moveTo(current.x, current.y);
+        context.lineTo(current.x + 0.1, current.y + 0.1);
+        context.stroke();
+        status.textContent = 'Signature captured. Clear it to start again.';
+    });
+    canvas.addEventListener('pointermove', (event) => {
+        if (!drawing) return;
+        const current = point(event);
+        context.lineTo(current.x, current.y);
+        context.stroke();
+    });
+    const stop = () => { drawing = false; };
+    canvas.addEventListener('pointerup', stop);
+    canvas.addEventListener('pointercancel', stop);
+    clear?.addEventListener('click', () => {
+        context.clearRect(0, 0, canvas.width, canvas.height);
+        hasInk = false;
+        input.value = '';
+        status.textContent = 'Signature cleared. Draw the POC signature before submitting.';
+        canvas.focus();
+    });
+    form.addEventListener('submit', (event) => {
+        if (!hasInk) {
+            event.preventDefault();
+            status.textContent = 'Draw the POC signature before submitting.';
+            canvas.setAttribute('aria-invalid', 'true');
+            canvas.focus();
+            return;
+        }
+        canvas.removeAttribute('aria-invalid');
+        input.value = canvas.toDataURL('image/png');
+    });
+});
+
 document.querySelectorAll('[data-dirty-form]').forEach((form) => {
     let dirty = false;
     form.addEventListener('input', () => dirty = true);

@@ -24,6 +24,7 @@ class FieldExecution
         private readonly TimeConflictDiagnostic $timeConflictDiagnostic,
         private readonly ServiceTicketWorkItemWorkflow $workItems,
         private readonly WorkItemTimeAttribution $attribution,
+        private readonly CloseoutAcknowledgmentSignatureCapture $signatureCapture,
     ) {}
 
     public function draft(Visit $visit, User $actor): Closeout
@@ -240,7 +241,7 @@ class FieldExecution
         });
     }
 
-    public function submit(Visit $v, Closeout $c, User $actor, string $token, bool $administrative = false): Closeout
+    public function submit(Visit $v, Closeout $c, User $actor, string $token, bool $administrative = false, ?string $signaturePayload = null): Closeout
     {
         if ($c->status === 'submitted' && $c->submitted_token === $token) {
             return $c;
@@ -255,33 +256,48 @@ class FieldExecution
             abort(403);
         }
 
-        return DB::transaction(function () use ($v, $c, $actor, $token, $executeAny, $manualCompletion) {
-            $c = Closeout::lockForUpdate()->findOrFail($c->id);
-            if ($c->status === 'submitted' && $c->submitted_token === $token) {
-                return $c;
-            }
-            if ($c->status !== 'draft') {
-                throw ValidationException::withMessages(['submit' => 'Already submitted.']);
-            }
-            $this->validateSubmission($c);
-            $c->timeEntries()->whereNull('ended_at')->update(['ended_at' => now(), 'active_user_id' => null, 'source' => 'system_auto']);
-            $return = null;
-            if ($c->outcome === 'needs_return_trip') {
-                $return = $c->return_visit_id ? Visit::query()->find($c->return_visit_id) : null;
-                $return ??= $this->visitCreator->create($v->serviceTicket, ['service_location_id' => $v->service_location_id, 'return_of_visit_id' => $v->id, 'status' => 'planned', 'timezone' => $v->timezone, 'return_reason' => $c->return_reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
-            } if ($c->outcome === 'on_hold') {
-                ServiceTicket::whereKey($v->service_ticket_id)->update(['status' => 'on_hold', 'status_reason' => $c->hold_reason, 'status_changed_at' => now(), 'status_changed_by_id' => $actor->id]);
-            } $c->update(['status' => 'submitted', 'submitted_token' => $token, 'submitted_by_id' => $actor->id, 'submitted_at' => now(), 'acknowledged_at' => filled($c->representative_name) ? ($c->acknowledged_at ?? now()) : null, 'return_visit_id' => $return?->id]);
-            $v->update(['status' => $c->outcome === 'customer_unavailable' ? 'customer_unavailable' : 'pending_closeout', 'updated_by_id' => $actor->id]);
-            $this->audit->record($v->serviceTicket->organization, $actor, 'closeout.submitted', $c, ['visit_id' => $v->id, 'outcome' => $c->outcome, 'return_visit_id' => $return?->id, 'execute_any_override' => $executeAny, 'administrative_override' => $manualCompletion]);
+        if (filled($c->ack_unavailable_category) && filled($signaturePayload)) {
+            throw ValidationException::withMessages(['signature_data' => 'Remove the signature when an acknowledgment fallback is selected.']);
+        }
+        $decodedSignature = filled($signaturePayload) ? $this->signatureCapture->decode($signaturePayload) : null;
+        $storedSignature = null;
+        try {
+            return DB::transaction(function () use ($v, $c, $actor, $token, $executeAny, $manualCompletion, $decodedSignature, &$storedSignature) {
+                $c = Closeout::lockForUpdate()->findOrFail($c->id);
+                if ($c->status === 'submitted' && $c->submitted_token === $token) {
+                    return $c;
+                }
+                if ($c->status !== 'draft') {
+                    throw ValidationException::withMessages(['submit' => 'Already submitted.']);
+                }
+                $this->validateSubmission($c, $decodedSignature !== null, ! $manualCompletion);
+                if ($decodedSignature) {
+                    $storedSignature = $this->signatureCapture->store($c, $actor, $decodedSignature);
+                }
+                $c->timeEntries()->whereNull('ended_at')->update(['ended_at' => now(), 'active_user_id' => null, 'source' => 'system_auto']);
+                $return = null;
+                if ($c->outcome === 'needs_return_trip') {
+                    $return = $c->return_visit_id ? Visit::query()->find($c->return_visit_id) : null;
+                    $return ??= $this->visitCreator->create($v->serviceTicket, ['service_location_id' => $v->service_location_id, 'return_of_visit_id' => $v->id, 'status' => 'planned', 'timezone' => $v->timezone, 'return_reason' => $c->return_reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
+                } if ($c->outcome === 'on_hold') {
+                    ServiceTicket::whereKey($v->service_ticket_id)->update(['status' => 'on_hold', 'status_reason' => $c->hold_reason, 'status_changed_at' => now(), 'status_changed_by_id' => $actor->id]);
+                } $c->update(['status' => 'submitted', 'submitted_token' => $token, 'submitted_by_id' => $actor->id, 'submitted_at' => now(), 'acknowledged_at' => filled($c->representative_name) ? ($c->acknowledged_at ?? now()) : null, 'return_visit_id' => $return?->id]);
+                $v->update(['status' => $c->outcome === 'customer_unavailable' ? 'customer_unavailable' : 'pending_closeout', 'updated_by_id' => $actor->id]);
+                $this->audit->record($v->serviceTicket->organization, $actor, 'closeout.submitted', $c, ['visit_id' => $v->id, 'outcome' => $c->outcome, 'return_visit_id' => $return?->id, 'execute_any_override' => $executeAny, 'administrative_override' => $manualCompletion]);
 
-            return $c->fresh();
-        });
+                return $c->fresh('acknowledgmentSignature');
+            });
+        } catch (\Throwable $exception) {
+            if ($storedSignature) {
+                $this->signatureCapture->deleteObject($storedSignature);
+            }
+            throw $exception;
+        }
     }
 
-    private function validateSubmission(Closeout $c): void
+    private function validateSubmission(Closeout $c, bool $signatureProvided, bool $requireSignature): void
     {
-        $errors = $this->readiness->errors($c);
+        $errors = $this->readiness->errors($c, $signatureProvided, $requireSignature);
         if ($errors) {
             throw ValidationException::withMessages($errors);
         }

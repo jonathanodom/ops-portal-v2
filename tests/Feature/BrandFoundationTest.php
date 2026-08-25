@@ -66,10 +66,12 @@ class BrandFoundationTest extends TestCase
             $this->assertStringContainsString($section, $field);
         }
 
-        $this->assertStringContainsString('Customer or point-of-contact name', $field);
+        $this->assertStringContainsString('POC or customer name', $field);
         $this->assertStringContainsString('aria-invalid="true"', $field);
         $this->assertStringContainsString('<x-field-error', $field);
-        $this->assertStringContainsString('Couldn’t obtain acknowledgment?', $field);
+        $this->assertStringContainsString('Acknowledgment fallback', $field);
+        $this->assertStringContainsString('POC role or title', $field);
+        $this->assertStringContainsString('data-signature-canvas', $field);
         $this->assertStringNotContainsString('Representative name', $field);
     }
 

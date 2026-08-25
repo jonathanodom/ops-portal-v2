@@ -6,8 +6,9 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['organization_id', 'visit_id', 'parent_closeout_id', 'version', 'status', 'content_version', 'outcome', 'diagnosis', 'work_performed', 'exceptions', 'recommendations', 'return_reason', 'unfinished_work', 'needed_equipment', 'hold_reason', 'unavailable_category', 'unavailable_detail', 'representative_name', 'acknowledged_at', 'ack_unavailable_category', 'ack_unavailable_detail', 'no_photo_category', 'no_photo_detail', 'submitted_token', 'submitted_by_id', 'submitted_at', 'return_visit_id', 'last_saved_by_id'])]
+#[Fillable(['organization_id', 'visit_id', 'parent_closeout_id', 'version', 'status', 'content_version', 'outcome', 'diagnosis', 'work_performed', 'exceptions', 'recommendations', 'return_reason', 'unfinished_work', 'needed_equipment', 'hold_reason', 'unavailable_category', 'unavailable_detail', 'representative_name', 'representative_role', 'acknowledged_at', 'ack_unavailable_category', 'ack_unavailable_detail', 'no_photo_category', 'no_photo_detail', 'submitted_token', 'submitted_by_id', 'submitted_at', 'return_visit_id', 'last_saved_by_id'])]
 class Closeout extends Model
 {
     protected function casts(): array
@@ -63,5 +64,10 @@ class Closeout extends Model
     public function submittedBy(): BelongsTo
     {
         return $this->belongsTo(User::class, 'submitted_by_id');
+    }
+
+    public function acknowledgmentSignature(): HasOne
+    {
+        return $this->hasOne(CloseoutAcknowledgmentSignature::class);
     }
 }

@@ -79,6 +79,7 @@ class FieldTestServiceTicketPurger
             DB::table('visit_time_entries')->whereIn('id', $ids['timeEntryIds'])->delete();
             DB::table('visit_media')->whereIn('id', $ids['mediaIds'])->delete();
             DB::table('visit_part_proposals')->whereIn('id', $ids['partIds'])->delete();
+            DB::table('closeout_acknowledgment_signatures')->whereIn('id', $ids['signatureIds'])->delete();
             DB::table('closeouts')->whereIn('id', $ids['closeoutIds'])->delete();
             DB::table('visit_assignments')->whereIn('id', $ids['assignmentIds'])->delete();
             DB::table('service_ticket_work_item_visit')->whereIn('id', $ids['workItemVisitIds'])->delete();

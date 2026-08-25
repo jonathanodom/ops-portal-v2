@@ -19,8 +19,8 @@ class CloseoutReviewWorkflow
     private const COPY_FIELDS = [
         'outcome', 'diagnosis', 'work_performed', 'exceptions', 'recommendations',
         'return_reason', 'unfinished_work', 'needed_equipment', 'hold_reason',
-        'unavailable_category', 'unavailable_detail', 'representative_name',
-        'acknowledged_at', 'ack_unavailable_category', 'ack_unavailable_detail',
+        'unavailable_category', 'unavailable_detail', 'representative_name', 'representative_role',
+        'ack_unavailable_category', 'ack_unavailable_detail',
         'no_photo_category', 'no_photo_detail', 'return_visit_id',
     ];
 
@@ -66,6 +66,7 @@ class CloseoutReviewWorkflow
                 'status' => 'draft',
                 'content_version' => 1,
                 'last_saved_by_id' => $actor->id,
+                'acknowledged_at' => null,
             ]);
             $closeout->parts()->whereNull('removed_at')->each(function (VisitPartProposal $part) use ($next): void {
                 $next->parts()->create(Arr::only($part->getAttributes(), [

@@ -9,6 +9,7 @@ use App\Models\AuditEvent;
 use App\Models\BillingHandoff;
 use App\Models\Capability;
 use App\Models\Closeout;
+use App\Models\CloseoutAcknowledgmentSignature;
 use App\Models\CloseoutReview;
 use App\Models\Customer;
 use App\Models\FieldTestPurgeCleanup;
@@ -176,9 +177,16 @@ class FieldTestServiceTicketPurgeTest extends TestCase
             'decision_token' => (string) Str::uuid(), 'decided_at' => now(),
         ]);
 
-        foreach (['ticket-file', 'visit-photo', 'invoice-pdf', 'receipt-pdf'] as $key) {
+        foreach (['ticket-file', 'visit-photo', 'ack-signature', 'invoice-pdf', 'receipt-pdf'] as $key) {
             Storage::disk('purge-test')->put($key, 'test');
         }
+        $signature = CloseoutAcknowledgmentSignature::query()->create([
+            'organization_id' => $organization->id, 'closeout_id' => $closeout->id,
+            'signer_name' => 'Test POC', 'statement_version' => 'service-closeout-v1',
+            'statement_snapshot' => 'Frozen test statement.', 'storage_disk' => 'purge-test',
+            'storage_key' => 'ack-signature', 'mime_type' => 'image/png', 'size_bytes' => 4,
+            'sha256' => hash('sha256', 'test'), 'signed_at' => now(), 'captured_by_id' => $admin->id,
+        ]);
         $file = ServiceTicketFile::query()->create([
             'organization_id' => $organization->id, 'service_ticket_id' => $ticket->id,
             'uploaded_by_id' => $admin->id, 'storage_disk' => 'purge-test', 'storage_key' => 'ticket-file',
@@ -279,6 +287,7 @@ class FieldTestServiceTicketPurgeTest extends TestCase
         $this->assertDatabaseMissing('payment_transactions', ['id' => $payment->id]);
         $this->assertDatabaseMissing('service_ticket_files', ['id' => $file->id]);
         $this->assertDatabaseMissing('visit_media', ['id' => $media->id]);
+        $this->assertDatabaseMissing('closeout_acknowledgment_signatures', ['id' => $signature->id]);
         $this->assertDatabaseMissing('service_ticket_work_items', ['id' => $workItem->id]);
         $this->assertDatabaseMissing('service_ticket_work_item_visit', ['service_ticket_work_item_id' => $workItem->id]);
         $this->assertDatabaseMissing('audit_events', ['event_type' => 'field_test.reference']);
@@ -288,7 +297,7 @@ class FieldTestServiceTicketPurgeTest extends TestCase
         $this->assertDatabaseHas('service_locations', ['id' => $location->id]);
         $this->assertDatabaseHas('projects', ['id' => $project->id]);
         $this->assertDatabaseHas('payment_provider_configurations', ['id' => $provider->id]);
-        foreach (['ticket-file', 'visit-photo', 'invoice-pdf', 'receipt-pdf'] as $key) {
+        foreach (['ticket-file', 'visit-photo', 'ack-signature', 'invoice-pdf', 'receipt-pdf'] as $key) {
             Storage::disk('purge-test')->assertMissing($key);
         }
         $this->assertDatabaseHas('field_test_purge_cleanups', ['organization_id' => $organization->id, 'status' => 'completed']);
