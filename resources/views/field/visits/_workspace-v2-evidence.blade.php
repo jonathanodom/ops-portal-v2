@@ -1,0 +1,33 @@
+<section id="field-v2-panel-evidence" role="tabpanel" aria-labelledby="field-v2-tab-evidence" tabindex="0" data-v2-panel="evidence" class="space-y-3">
+    <div class="surface p-5">
+        <div class="flex flex-wrap items-start justify-between gap-2"><div><h2 class="text-lg font-bold">Private photos</h2><p class="mt-1 text-sm text-slate-600">Keep a category selected, then capture repeatedly or choose several images.</p></div><span class="status-active" data-v2-media-count>{{ $activeMedia->count() }} photos</span></div>
+        @if($workspaceWritable)
+            <form action="{{ route('field.visits.media.store', $visit) }}" method="POST" enctype="multipart/form-data" class="mt-4" data-v2-upload-form>
+                @csrf
+                <fieldset><legend class="form-label">Photo category</legend><div class="mt-2 grid grid-cols-2 gap-2 sm:grid-cols-3">@foreach(config('field_execution.photo_categories') as $value => $label)<label class="field-v2-category"><input class="sr-only" type="radio" name="category" value="{{ $value }}" @checked($loop->first)><span>{{ $label }}</span></label>@endforeach</div></fieldset>
+                <div class="mt-4 grid grid-cols-2 gap-3">
+                    <label class="button-action cursor-pointer text-center" for="v2_photo_camera">Take photo</label>
+                    <input class="sr-only" id="v2_photo_camera" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" capture="environment" data-v2-photo-camera>
+                    <label class="button-secondary cursor-pointer text-center" for="v2_photo_gallery">Choose multiple</label>
+                    <input class="sr-only" id="v2_photo_gallery" type="file" accept="image/jpeg,image/png,image/webp,image/heic,image/heif" multiple data-v2-photo-gallery>
+                </div>
+                <label class="form-label mt-4" for="v2_photo_caption">Optional batch caption</label><input class="form-input mt-1" id="v2_photo_caption" name="caption" maxlength="255">
+                <p class="mt-3 text-sm font-semibold text-slate-700" role="status" aria-live="polite" data-v2-upload-summary>No uploads queued.</p>
+                <p class="mt-1 hidden rounded-lg border border-amber-300 bg-amber-50 p-3 text-sm font-semibold text-amber-950" role="alert" data-v2-upload-offline>Offline — reconnect, then explicitly retry queued photos.</p>
+                <ul class="mt-3 space-y-2" data-v2-upload-queue aria-label="Photo upload queue"></ul>
+            </form>
+        @endif
+        <div class="mt-4 space-y-2" data-v2-media-list>
+            @forelse($activeMedia as $media)
+                <article class="flex min-h-11 items-center justify-between gap-3 border-t border-slate-200 pt-3" data-v2-media-id="{{ $media->id }}"><div class="min-w-0"><a class="font-bold text-brand-blue" href="{{ route('field.media.show', $media) }}" target="_blank" rel="noopener">{{ Str::headline($media->category) }}</a>@if($media->caption)<p class="truncate text-xs text-slate-600">{{ $media->caption }}</p>@endif</div>@if($workspaceWritable)<form method="POST" action="{{ route('field.visits.media.remove', [$visit, $media]) }}" data-v2-media-remove>@csrf @method('DELETE')<button class="button-secondary">Remove</button></form>@endif</article>
+            @empty<p class="text-sm text-slate-500" data-v2-media-empty>No photos uploaded.</p>@endforelse
+        </div>
+        @if($inheritedMedia->isNotEmpty())<div class="mt-4 rounded-lg border border-slate-200 bg-slate-50 p-3"><p class="text-sm font-bold">Inherited read-only evidence</p><div class="mt-2 flex flex-wrap gap-2">@foreach($inheritedMedia as $media)<a class="button-secondary" href="{{ route('field.media.show', $media) }}">{{ Str::headline($media->category) }}</a>@endforeach</div></div>@endif
+    </div>
+
+    <div class="surface p-5">
+        <div class="flex flex-wrap items-start justify-between gap-3"><div><h2 class="text-lg font-bold">Parts &amp; equipment</h2><p class="mt-1 text-sm text-slate-600">Catalog items and custom proposals use the same Closeout as classic Field.</p></div>@if($workspaceWritable && $activeMembership->hasCapability('catalog.use'))<x-catalog-picker :id="'field-v2-catalog-'.$visit->id" :action="route('field.visits.catalog-items.store', $visit)" :services="$catalogServices ?? collect()" :products="$catalogProducts ?? collect()" :packages="$catalogPackages ?? collect()" :field-mode="true" />@endif</div>
+        <div class="mt-4 space-y-2">@forelse($activeParts as $part)<article class="flex min-h-11 items-center justify-between gap-3 border-t border-slate-200 pt-3"><p><span class="font-semibold">{{ $part->catalog_name_snapshot ?: $part->description }}</span><br><span class="text-sm text-slate-600">{{ $part->catalog_quantity_millis ? rtrim(rtrim(number_format($part->catalog_quantity_millis / 1000, 3, '.', ''), '0'), '.') : $part->quantity }} {{ $part->unit }} · {{ Str::headline($part->billing_treatment) }}</span></p>@if($workspaceWritable)<form method="POST" action="{{ route('field.visits.parts.remove', [$visit, $part]) }}">@csrf @method('DELETE')<button class="button-secondary">Remove</button></form>@endif</article>@empty<p class="text-sm text-slate-500">No parts or equipment proposed.</p>@endforelse</div>
+        @if($workspaceWritable)<details class="mt-4 rounded-lg border border-slate-200 p-4"><summary class="min-h-11 cursor-pointer py-2 font-bold text-brand-blue">Add custom proposal</summary><form method="POST" action="{{ route('field.visits.parts.store', $visit) }}" class="mt-3 space-y-3">@csrf<label class="form-label" for="v2_part_description">Description</label><input class="form-input" id="v2_part_description" name="description" required><div class="grid grid-cols-2 gap-3"><div><label class="form-label" for="v2_part_quantity">Quantity</label><input class="form-input" id="v2_part_quantity" type="number" step=".01" name="quantity" required></div><div><label class="form-label" for="v2_part_unit">Unit</label><input class="form-input" id="v2_part_unit" name="unit"></div></div><label class="form-label" for="v2_part_serial">Serial / MAC</label><input class="form-input" id="v2_part_serial" name="serial_mac"><label class="form-label" for="v2_part_treatment">Billing treatment</label><select class="form-input" id="v2_part_treatment" name="billing_treatment">@foreach(config('field_execution.billing_treatments') as $value => $label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select><label class="form-label" for="v2_part_note">Technician note</label><textarea class="form-textarea" id="v2_part_note" name="technician_note"></textarea><button class="button-secondary w-full">Add proposal</button></form></details>@endif
+    </div>
+</section>

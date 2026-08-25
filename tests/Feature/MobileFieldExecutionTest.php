@@ -21,7 +21,9 @@ use App\Models\VisitTimeEntry;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
 use Tests\TestCase;
@@ -448,6 +450,149 @@ class MobileFieldExecutionTest extends TestCase
         $event = AuditEvent::query()->where('event_type', 'visit_time.corrected')->firstOrFail();
         $this->assertSame(['started_at', 'ended_at'], $event->metadata['changed_fields']);
         $this->assertStringNotContainsString('Private correction explanation', json_encode($event->metadata));
+    }
+
+    public function test_opt_in_workspace_v2_preserves_classic_default_policy_and_shared_visit(): void
+    {
+        [$organization, $visit, $lead] = $this->executionGraph('on_site');
+
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('Try new Visit workspace')
+            ->assertSee(route('field.visits.workspace-v2', $visit), false);
+
+        $this->actingAs($lead)->get(route('field.visits.workspace-v2', $visit))
+            ->assertOk()
+            ->assertSee('Switch to classic workspace')
+            ->assertSee(route('field.visits.show', $visit), false)
+            ->assertSee('data-field-workspace-v2', false)
+            ->assertSee('data-v2-tab="overview"', false)
+            ->assertSee('data-v2-tab="closeout"', false)
+            ->assertSee('data-v2-photo-camera', false)
+            ->assertSee('data-v2-photo-gallery', false)
+            ->assertSee('multiple', false);
+
+        [$outsider] = $this->userWithRole('technician');
+        $this->actingAs($outsider)->get(route('field.visits.workspace-v2', $visit))->assertNotFound();
+        $this->assertDatabaseHas('audit_events', ['organization_id' => $outsider->memberships()->firstOrFail()->organization_id, 'event_type' => 'security.cross_organization_record_denied']);
+        $this->assertFalse(Schema::hasTable('field_visit_workspaces'));
+        $this->assertSame($organization->id, $visit->organization_id);
+    }
+
+    public function test_workspace_v2_json_draft_and_photo_are_safe_and_visible_in_classic(): void
+    {
+        Storage::fake('local');
+        [, $visit, $lead] = $this->executionGraph('on_site');
+
+        $draft = $this->actingAs($lead)->postJson(route('field.visits.draft', $visit), $this->resolvedDraft());
+        $draft->assertOk()->assertJsonPath('message', 'Draft saved.')->assertJsonPath('content_version', 2);
+
+        $photo = UploadedFile::fake()->image('workspace.jpg');
+        $response = $this->actingAs($lead)->post(route('field.visits.media.store', $visit), [
+            'photo' => $photo,
+            'category' => 'after',
+            'caption' => 'Workspace evidence',
+        ], ['Accept' => 'application/json']);
+        $response->assertCreated()->assertJsonStructure(['id', 'category', 'caption', 'show_url', 'remove_url', 'readiness_errors']);
+        $this->assertArrayNotHasKey('storage_key', $response->json());
+        $this->assertArrayNotHasKey('storage_disk', $response->json());
+        $this->assertArrayNotHasKey('path', $response->json());
+
+        $this->actingAs($lead)->get(route('field.visits.show', $visit->fresh()))
+            ->assertOk()->assertSee(route('field.media.show', $response->json('id')), false);
+        $this->actingAs($lead)->get(route('field.visits.workspace-v2', $visit->fresh()))
+            ->assertOk()->assertSee('Workspace evidence');
+    }
+
+    public function test_workspace_v2_and_classic_share_work_time_parts_and_conflict_semantics(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->postJson(route('field.visits.draft', $visit), [
+            'content_version' => 1,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Initial diagnosis',
+        ])->assertOk()->assertJsonPath('content_version', 2);
+
+        $this->actingAs($lead)->postJson(route('field.visits.draft', $visit), [
+            'content_version' => 1,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Stale overwrite',
+        ])->assertConflict()->assertJsonPath('content_version', 2);
+        $this->assertSame('Initial diagnosis', $visit->fresh()->currentCloseout->diagnosis);
+
+        $this->actingAs($lead)->from(route('field.visits.workspace-v2', $visit))->post(route('field.visits.work-items.store', $visit), [
+            'title' => 'Replace damaged patch lead',
+            'detail' => 'Discovered at the rack',
+            'work_note' => 'Replacement installed',
+        ])->assertRedirect(route('field.visits.workspace-v2', $visit));
+        $this->actingAs($lead)->post(route('field.visits.parts.store', $visit), [
+            'description' => 'Patch lead', 'quantity' => 1, 'unit' => 'each', 'billing_treatment' => 'billable',
+        ])->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.timer', $visit), ['action' => 'start', 'category' => 'on_site'])->assertRedirect();
+
+        foreach (['field.visits.show', 'field.visits.workspace-v2'] as $route) {
+            $this->actingAs($lead)->get(route($route, $visit->fresh()))
+                ->assertOk()
+                ->assertSee('Replace damaged patch lead')
+                ->assertSee('Patch lead')
+                ->assertSee('running', false);
+        }
+    }
+
+    public function test_workspace_v2_read_only_states_hide_mutations_and_json_remove_keeps_classic_compatibility(): void
+    {
+        Storage::fake('local');
+        Queue::fake();
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->postJson(route('field.visits.draft', $visit), $this->resolvedDraft())->assertOk();
+        $upload = $this->actingAs($lead)->post(route('field.visits.media.store', $visit), [
+            'photo' => UploadedFile::fake()->image('remove.jpg'), 'category' => 'after',
+        ], ['Accept' => 'application/json'])->assertCreated();
+        $mediaId = $upload->json('id');
+
+        $this->actingAs($lead)->deleteJson(route('field.visits.media.remove', [$visit, $mediaId]))
+            ->assertOk()->assertJsonPath('id', $mediaId)->assertJsonStructure(['readiness_errors']);
+        $this->assertDatabaseHas('visit_media', ['id' => $mediaId, 'state' => 'removed']);
+
+        $visit->update(['status' => 'canceled']);
+        $this->actingAs($lead)->get(route('field.visits.workspace-v2', $visit))
+            ->assertOk()->assertSee('Canceled Visit · read-only')->assertDontSee('data-v2-upload-form', false)->assertDontSee('data-v2-finish-dialog', false);
+    }
+
+    public function test_workspace_v2_query_load_stays_close_to_classic(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->postJson(route('field.visits.draft', $visit), $this->resolvedDraft())->assertOk();
+
+        $measure = function (string $route) use ($visit): array {
+            DB::flushQueryLog();
+            DB::enableQueryLog();
+            $started = hrtime(true);
+            $this->get(route($route, $visit))->assertOk();
+            $elapsed = (hrtime(true) - $started) / 1_000_000;
+            $queries = count(DB::getQueryLog());
+            DB::disableQueryLog();
+
+            return [$queries, $elapsed];
+        };
+
+        [$v1Queries] = $measure('field.visits.show');
+        [$v2Queries] = $measure('field.visits.workspace-v2');
+        $v1Times = [];
+        $v2Times = [];
+        for ($run = 0; $run < 10; $run++) {
+            [, $v1Times[]] = $measure('field.visits.show');
+            [, $v2Times[]] = $measure('field.visits.workspace-v2');
+        }
+        sort($v1Times);
+        sort($v2Times);
+        $v1P95 = $v1Times[9];
+        $v2P95 = $v2Times[9];
+
+        $this->assertLessThanOrEqual($v1Queries + 5, $v2Queries, "V1 {$v1Queries} queries; V2 {$v2Queries} queries.");
+        if (env('WORKSPACE_BENCHMARK_REPORT')) {
+            fwrite(STDOUT, sprintf("\nWorkspace benchmark: V1 %d queries / %.1f ms p95; V2 %d queries / %.1f ms p95\n", $v1Queries, $v1P95, $v2Queries, $v2P95));
+        }
     }
 
     /** @return array{Organization, Visit, User, User} */

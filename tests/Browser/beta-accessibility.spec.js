@@ -1118,6 +1118,78 @@ test.describe('mobile beta', () => {
         await context.setOffline(false);
     });
 
+    test('opt-in Field Visit Workspace V2 is reversible, accessible, and uploads a retryable multi-photo queue without reload', async ({ page }) => {
+        test.setTimeout(120_000);
+        await login(page, 'technician');
+        await page.goto('/field');
+        await page.getByRole('link', { name: /BETA A:/ }).first().click();
+        if (await page.getByRole('button', { name: 'Start En Route' }).count()) await page.getByRole('button', { name: 'Start En Route' }).click();
+        if (await page.getByRole('button', { name: 'Mark On Site' }).count()) await page.getByRole('button', { name: 'Mark On Site' }).click();
+        await page.getByRole('link', { name: 'Try new Visit workspace' }).click();
+        await expect(page).toHaveURL(/\/field\/visits\/\d+\/workspace-v2/);
+        await expect(page.getByRole('link', { name: 'Switch to classic workspace' })).toBeVisible();
+
+        const tabs = page.getByRole('tablist', { name: 'Visit workspace' });
+        await expect(tabs.getByRole('tab', { name: /Overview/ })).toHaveAttribute('aria-selected', 'true');
+        await tabs.getByRole('tab', { name: /Work/ }).click();
+        await expect(page).toHaveURL(/#work$/);
+        await expect(page.locator('[data-v2-panel="work"]')).toBeVisible();
+        await expect(page.locator('[data-v2-panel="overview"]')).toBeHidden();
+
+        await tabs.getByRole('tab', { name: /Evidence/ }).click();
+        await page.locator('[data-v2-upload-form] label').filter({ hasText: /^After$/ }).click();
+        let failedOnce = false;
+        await page.route('**/field/visits/*/media', async (route) => {
+            if (route.request().method() === 'POST' && !failedOnce) {
+                failedOnce = true;
+                await route.fulfill({ status: 500, contentType: 'application/json', body: JSON.stringify({ message: 'Simulated weak-connection failure.' }) });
+                return;
+            }
+            await route.continue();
+        });
+        const tinyPng = Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=', 'base64');
+        const currentUrl = page.url();
+        await page.getByLabel('Choose multiple').setInputFiles([
+            { name: 'workspace-a.png', mimeType: 'image/png', buffer: tinyPng },
+            { name: 'workspace-b.png', mimeType: 'image/png', buffer: tinyPng },
+        ]);
+        await expect(page.locator('[data-v2-upload-summary]')).toContainText('1 uploaded');
+        await expect(page.locator('[data-v2-upload-summary]')).toContainText('1 need retry');
+        await page.getByRole('button', { name: 'Retry' }).click();
+        await expect(page.locator('[data-v2-upload-summary]')).toContainText('2 uploaded');
+        expect(page.url()).toBe(currentUrl);
+        await expect(page.getByLabel('Choose multiple')).toHaveValue('');
+
+        await page.getByRole('button', { name: 'Finish Visit' }).first().click();
+        const finish = page.getByRole('dialog', { name: 'Finish Visit' });
+        await expect(finish).toBeVisible();
+        await finish.getByText('Needs return trip', { exact: true }).click();
+        await finish.getByRole('button', { name: '2 Work' }).click();
+        await expect(finish.getByLabel('Return reason')).toBeVisible();
+        await expect(finish.getByLabel('Exceptions')).toBeHidden();
+        await finish.getByRole('button', { name: '1 Outcome' }).click();
+        await finish.getByText('Resolved', { exact: true }).click();
+        await finish.getByRole('button', { name: '2 Work' }).click();
+        await expect(finish.getByLabel('Exceptions')).toBeVisible();
+        await expect(finish.getByLabel('Return reason')).toBeHidden();
+        await finish.getByRole('button', { name: 'Close' }).click();
+
+        await page.getByRole('link', { name: 'Switch to classic workspace' }).click();
+        await expect(page.getByRole('link', { name: 'Try new Visit workspace' })).toBeVisible();
+        await page.getByRole('link', { name: 'Try new Visit workspace' }).click();
+        await expect(page.locator('[data-v2-media-list]')).toContainText('After');
+
+        for (const viewport of [
+            { width: 390, height: 844 }, { width: 430, height: 932 }, { width: 768, height: 1024 },
+            { width: 1280, height: 900 }, { width: 1440, height: 900 }, { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await captureFieldTest(page, `field-workspace-v2-${viewport.width}x${viewport.height}.png`);
+        }
+    });
+
     test('issued invoice presentation is customer-safe at phone width', async ({ page }) => {
         await login(page, 'super_admin');
         await page.goto('/office/settings/organization');
