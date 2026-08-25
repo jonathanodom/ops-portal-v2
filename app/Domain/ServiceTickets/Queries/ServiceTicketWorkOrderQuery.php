@@ -23,7 +23,7 @@ final class ServiceTicketWorkOrderQuery
                 'serviceLocation:id,name,timezone',
                 'returnOfVisit:id,ticket_visit_number',
                 'assignments.membership.user:id,name',
-                'timeEntries:id,visit_id,category,started_at,ended_at',
+                'timeEntries:id,visit_id,category,started_at,ended_at,corrected_started_at,corrected_ended_at',
                 'currentCloseout' => function ($closeouts) use ($includeCloseoutEvidence): void {
                     if (! $includeCloseoutEvidence) {
                         $closeouts->select('id', 'visit_id', 'status');

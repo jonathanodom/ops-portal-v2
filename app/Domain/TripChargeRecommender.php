@@ -65,7 +65,7 @@ class TripChargeRecommender
             ->where('category', 'travel')
             ->whereNotNull('ended_at')
             ->orderBy('started_at')
-            ->get(['started_at', 'ended_at']);
+            ->get(['started_at', 'ended_at', 'corrected_started_at', 'corrected_ended_at']);
         if ($entries->isEmpty()) {
             return 0;
         }
@@ -73,8 +73,8 @@ class TripChargeRecommender
         $windowStart = $visit->en_route_at;
         $windowEnd = $visit->on_site_at;
         $intervals = $entries->map(function ($entry) use ($windowStart, $windowEnd): ?array {
-            $start = $entry->started_at;
-            $end = $entry->ended_at;
+            $start = $entry->effective_started_at;
+            $end = $entry->effective_ended_at;
             if ($windowStart && $start->lt($windowStart)) {
                 $start = $windowStart;
             }

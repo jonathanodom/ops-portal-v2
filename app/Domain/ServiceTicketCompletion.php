@@ -112,11 +112,11 @@ class ServiceTicketCompletion
 
         return (int) $visit->timeEntries()->get()->sum(function ($entry) use ($adjustments): int {
             $adjustment = $adjustments->get($entry->id);
-            if ($adjustment?->excluded || ! $entry->ended_at) {
+            if ($adjustment?->excluded || ! $entry->effective_ended_at) {
                 return 0;
             }
 
-            return $adjustment?->approved_minutes ?? (int) ceil($entry->started_at->diffInSeconds($entry->ended_at) / 60);
+            return $adjustment?->approved_minutes ?? (int) ceil($entry->effectiveDurationSeconds() / 60);
         });
     }
 

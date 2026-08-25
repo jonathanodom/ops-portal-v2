@@ -244,9 +244,12 @@ class FieldExecution
         $overlap = VisitTimeEntry::query()
             ->where('user_id', $userId)
             ->when($exceptId, fn ($query) => $query->whereKeyNot($exceptId))
-            ->where('started_at', '<', $end)
-            ->where(fn ($query) => $query->whereNull('ended_at')->orWhere('ended_at', '>', $start))
-            ->orderBy('started_at')
+            ->whereRaw('COALESCE(corrected_started_at, started_at) < ?', [$end])
+            ->where(function ($query) use ($start): void {
+                $query->whereRaw('COALESCE(corrected_ended_at, ended_at) IS NULL')
+                    ->orWhereRaw('COALESCE(corrected_ended_at, ended_at) > ?', [$start]);
+            })
+            ->orderByRaw('COALESCE(corrected_started_at, started_at)')
             ->orderBy('id')
             ->lockForUpdate()
             ->first();

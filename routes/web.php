@@ -41,6 +41,7 @@ use App\Http\Controllers\Office\ServiceTicketFileController;
 use App\Http\Controllers\Office\ServiceTicketPrintController;
 use App\Http\Controllers\Office\SquareConnectionController;
 use App\Http\Controllers\Office\StripeConnectionController;
+use App\Http\Controllers\Office\SubmittedVisitTimeCorrectionController;
 use App\Http\Controllers\Office\TicketCustomerController;
 use App\Http\Controllers\Office\UnitOfMeasureController;
 use App\Http\Controllers\Office\VisitArchiveController;
@@ -236,6 +237,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/visits/{visit}/execution/timer', [VisitExecutionController::class, 'timer'])->whereNumber('visit')->name('visits.execution.timer');
             Route::post('/visits/{visit}/execution/time', [VisitExecutionController::class, 'storeTime'])->whereNumber('visit')->name('visits.execution.time.store');
             Route::put('/visits/{visit}/execution/time/{entry}', [VisitExecutionController::class, 'updateTime'])->whereNumber(['visit', 'entry'])->name('visits.execution.time.update');
+            Route::put('/visit-time-entries/{entry}/submitted-correction', [SubmittedVisitTimeCorrectionController::class, 'update'])->whereNumber('entry')->name('visit-time-entries.submitted-correction.update');
             Route::get('/operations/health', [OperationalHealthController::class, 'index'])
                 ->middleware('capability:operations.health.view')->name('operations.health');
             Route::post('/operations/incidents/{incident}/resolve', [OperationalHealthController::class, 'resolve'])

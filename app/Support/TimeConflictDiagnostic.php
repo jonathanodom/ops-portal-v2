@@ -23,8 +23,8 @@ class TimeConflictDiagnostic
         $visit = $conflict->visit;
         $ticket = $visit?->serviceTicket;
         $timezone = $this->timezone($visit?->timezone, $ticket?->organization?->timezone);
-        $start = $conflict->started_at?->copy()->timezone($timezone);
-        $end = $conflict->ended_at?->copy()->timezone($timezone);
+        $start = $conflict->effective_started_at?->copy()->timezone($timezone);
+        $end = $conflict->effective_ended_at?->copy()->timezone($timezone);
         $user = $conflict->user?->name ?: 'This user';
         $category = $this->categoryLabel($conflict->category);
         $source = $this->sourceLabel($conflict->source);

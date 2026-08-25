@@ -20,6 +20,7 @@ use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Models\VisitAssignment;
+use App\Models\VisitTimeEntry;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -135,5 +136,24 @@ class BetaScenarioSeeder extends Seeder
         $draftHandoff = BillingHandoff::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $draftTicket->id, 'visit_id' => $draftVisit->id, 'closeout_id' => $draftCloseout->id, 'status' => 'ready', 'created_by_id' => $memberships['super_admin']->user_id]);
         $draftInvoice = $workflow->createFromHandoff($draftHandoff, $memberships['super_admin']->user, (string) Str::uuid());
         $workflow->addLine($draftInvoice, $memberships['super_admin']->user, ['line_type' => 'service_charge', 'description' => 'Draft invoice workspace fixture', 'quantity_millis' => 1000, 'unit' => 'service', 'unit_price_cents' => 8500, 'included' => true, 'taxable' => true, 'override_reason' => 'Synthetic beta fixture']);
+
+        $correctableCloseout = Closeout::query()
+            ->where('organization_id', $organization->id)
+            ->where('status', 'submitted')
+            ->whereDoesntHave('reviews')
+            ->whereHas('visit.serviceTicket', fn ($query) => $query->where('status', 'open'))
+            ->whereDoesntHave('visit.serviceTicket.billingHandoff')
+            ->latest('submitted_at')
+            ->firstOrFail();
+        VisitTimeEntry::query()->create([
+            'organization_id' => $organization->id,
+            'visit_id' => $correctableCloseout->visit_id,
+            'closeout_id' => $correctableCloseout->id,
+            'user_id' => $memberships['technician']->user_id,
+            'category' => 'on_site',
+            'started_at' => now()->subHours(2),
+            'ended_at' => now()->subHour(),
+            'source' => 'timer',
+        ]);
     }
 }

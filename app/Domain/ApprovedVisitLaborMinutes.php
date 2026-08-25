@@ -22,12 +22,12 @@ class ApprovedVisitLaborMinutes
             ->whereIn('category', ['on_site', 'other'])
             ->sum(function ($entry) use ($adjustments): int {
                 $adjustment = $adjustments->get($entry->id);
-                if ($adjustment?->excluded || ! $entry->ended_at) {
+                if ($adjustment?->excluded || ! $entry->effective_ended_at) {
                     return 0;
                 }
 
                 return $adjustment?->approved_minutes
-                    ?? (int) ceil($entry->started_at->diffInSeconds($entry->ended_at) / 60);
+                    ?? (int) ceil($entry->effectiveDurationSeconds() / 60);
             });
     }
 }

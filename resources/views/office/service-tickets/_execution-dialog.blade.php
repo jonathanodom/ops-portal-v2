@@ -2,7 +2,7 @@
     $activeTimer = $visit->timeEntries->first(fn ($entry) => $entry->active_user_id === auth()->id());
     $canManageCrewTime = $activeMembership->hasCapability('visits.execute_any');
     $timeOwners = $visit->assignments->pluck('membership.user')->push(auth()->user())->unique('id')->sortBy('name');
-    $timeSeconds = $visit->timeEntries->sum(fn ($entry) => $entry->ended_at ? $entry->started_at->diffInSeconds($entry->ended_at) : 0);
+    $timeSeconds = $visit->timeEntries->sum(fn ($entry) => $entry->effectiveDurationSeconds());
 @endphp
 <dialog id="execution-visit-{{ $visit->id }}" data-execution-dialog data-visit-id="{{ $visit->id }}" aria-labelledby="execution-title-{{ $visit->id }}" class="m-0 h-dvh w-dvw max-h-none max-w-none bg-canvas p-0 text-ink sm:m-auto sm:h-[92dvh] sm:w-[96vw] sm:rounded-xl sm:border sm:border-slate-300">
     <div class="flex h-full min-h-0 flex-col">
@@ -25,12 +25,13 @@
                     @endif
                     <section class="surface p-5">
                         <div class="flex flex-wrap items-center justify-between gap-2"><h3 class="font-bold">Time entries</h3><span class="text-sm font-bold">Total {{ number_format($timeSeconds / 3600, 2) }} hours</span></div>
-                        @forelse($visit->timeEntries->sortBy('started_at') as $entry)
-                            <article class="mt-4 border-t border-slate-200 pt-4 text-sm"><p class="font-semibold">{{ $entry->user->name }} · {{ ucfirst(str_replace('_', ' ', $entry->category)) }}</p><p class="mt-1 text-slate-600"><x-local-time :value="$entry->started_at" :timezone="$visit->timezone" format="M j, g:i A T" /> – @if($entry->ended_at)<x-local-time :value="$entry->ended_at" :timezone="$visit->timezone" format="M j, g:i A T" />@else<span class="font-bold text-brand-orange">Running</span>@endif</p>
+                        @forelse($visit->timeEntries->sortBy('effective_started_at') as $entry)
+                            <article class="mt-4 border-t border-slate-200 pt-4 text-sm"><p class="font-semibold">{{ $entry->user->name }} · {{ ucfirst(str_replace('_', ' ', $entry->category)) }} @if($entry->hasSubmittedCorrection())<span class="status-active ml-2">Corrected</span>@endif</p><p class="mt-1 text-slate-600"><x-local-time :value="$entry->effective_started_at" :timezone="$visit->timezone" format="M j, g:i A T" /> – @if($entry->effective_ended_at)<x-local-time :value="$entry->effective_ended_at" :timezone="$visit->timezone" format="M j, g:i A T" />@else<span class="font-bold text-brand-orange">Running</span>@endif</p>
                                 @if($entry->ended_at && $entry->closeout?->status === 'draft' && ($entry->user_id === auth()->id() || $canManageCrewTime))
                                     @php($correctionForm = 'correction-'.$entry->id)
                                     <details class="mt-2" @if($errors->has('time') && old('time_form') === $correctionForm) open @endif><summary class="min-h-11 cursor-pointer py-3 font-bold text-brand-blue">Correct entry</summary><form method="POST" action="{{ route('office.visits.execution.time.update', [$visit, $entry]) }}" class="space-y-3" data-modal-form>@csrf @method('PUT')<input type="hidden" name="time_form" value="{{ $correctionForm }}"><label class="form-label" for="office_started_{{ $entry->id }}">Started</label><input class="form-input" id="office_started_{{ $entry->id }}" name="started_at" type="datetime-local" value="{{ old('time_form') === $correctionForm ? old('started_at') : $entry->started_at->timezone($visit->timezone)->format('Y-m-d\TH:i') }}" required><label class="form-label" for="office_ended_{{ $entry->id }}">Ended</label><input class="form-input" id="office_ended_{{ $entry->id }}" name="ended_at" type="datetime-local" value="{{ old('time_form') === $correctionForm ? old('ended_at') : $entry->ended_at->timezone($visit->timezone)->format('Y-m-d\TH:i') }}" required><label class="form-label" for="office_reason_{{ $entry->id }}">Correction reason</label><textarea class="form-textarea" id="office_reason_{{ $entry->id }}" name="correction_reason" required>{{ old('time_form') === $correctionForm ? old('correction_reason') : '' }}</textarea><button class="button-secondary w-full">Save correction</button></form></details>
                                 @endif
+                                @include('office.service-tickets._submitted-time-correction', ['context' => 'ticket', 'reviewCloseoutId' => null])
                             </article>
                         @empty<p class="mt-3 text-sm text-slate-500">No time captured.</p>@endforelse
                     </section>
