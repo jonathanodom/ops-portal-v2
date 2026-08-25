@@ -6,6 +6,7 @@ use App\Http\Controllers\Auth\PasswordResetLinkController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
 use App\Http\Controllers\Field\TodayController;
+use App\Http\Controllers\Field\VisitWorkItemController;
 use App\Http\Controllers\InvoicePresentationController;
 use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
@@ -39,6 +40,7 @@ use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\ServiceTicketFileController;
 use App\Http\Controllers\Office\ServiceTicketPrintController;
+use App\Http\Controllers\Office\ServiceTicketWorkItemController;
 use App\Http\Controllers\Office\SquareConnectionController;
 use App\Http\Controllers\Office\StripeConnectionController;
 use App\Http\Controllers\Office\SubmittedVisitTimeCorrectionController;
@@ -139,6 +141,9 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::delete('/service-tickets/{serviceTicket}/files/{file}', [ServiceTicketFileController::class, 'destroy'])->whereNumber(['serviceTicket', 'file'])->name('service-tickets.files.destroy');
                 Route::post('/service-tickets/{serviceTicket}/transition', [ServiceTicketController::class, 'transition'])->whereNumber('serviceTicket')->name('service-tickets.transition');
                 Route::post('/service-tickets/{serviceTicket}/reopen', [ServiceTicketController::class, 'reopen'])->whereNumber('serviceTicket')->name('service-tickets.reopen');
+                Route::post('/service-tickets/{serviceTicket}/work-items', [ServiceTicketWorkItemController::class, 'store'])->whereNumber('serviceTicket')->name('service-tickets.work-items.store');
+                Route::put('/service-tickets/{serviceTicket}/work-items/{workItem}', [ServiceTicketWorkItemController::class, 'update'])->whereNumber(['serviceTicket', 'workItem'])->name('service-tickets.work-items.update');
+                Route::post('/service-tickets/{serviceTicket}/work-items/{workItem}/transfer', [ServiceTicketWorkItemController::class, 'transfer'])->whereNumber(['serviceTicket', 'workItem'])->name('service-tickets.work-items.transfer');
                 Route::get('/service-tickets/{serviceTicket}/visits/create', [VisitController::class, 'create'])->whereNumber('serviceTicket')->name('service-tickets.visits.create');
                 Route::post('/service-tickets/{serviceTicket}/visits', [VisitController::class, 'store'])->whereNumber('serviceTicket')->name('service-tickets.visits.store');
                 Route::get('/visits/{visit}/edit', [VisitController::class, 'edit'])->whereNumber('visit')->name('visits.edit');
@@ -338,6 +343,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/visits/{visit}/media', [ExecutionController::class, 'upload'])->name('visits.media.store');
             Route::delete('/visits/{visit}/media/{media}', [ExecutionController::class, 'removeMedia'])->name('visits.media.remove');
             Route::post('/visits/{visit}/submit', [ExecutionController::class, 'submit'])->name('visits.submit');
+            Route::post('/visits/{visit}/work-items', [VisitWorkItemController::class, 'store'])->name('visits.work-items.store');
+            Route::put('/visits/{visit}/work-items/{workItem}', [VisitWorkItemController::class, 'update'])->whereNumber('workItem')->name('visits.work-items.update');
             Route::middleware('capability:customers.view')->group(function (): void {
                 Route::get('/customers', [FieldCustomerDirectoryController::class, 'index'])->name('customers.index');
                 Route::get('/customers/{customer}', [FieldCustomerDirectoryController::class, 'showCustomer'])->whereNumber('customer')->name('customers.show');

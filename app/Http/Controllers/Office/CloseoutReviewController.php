@@ -61,12 +61,15 @@ class CloseoutReviewController extends Controller
             'timeEntries.user',
             'timeEntries.closeout.reviews',
             'timeEntries.corrections.correctedBy',
+            'workItems' => fn ($query) => $query->with('followUpServiceTicket')->orderBy('id'),
+            'serviceTicket.workItems' => fn ($query) => $query->whereIn('status', ['open', 'needs_follow_up'])->orderBy('id'),
         ]);
         $completionBlockingVisits = $visit->serviceTicket->visits
             ->where('id', '!=', $visit->id)
             ->whereNotIn('status', ['approved', 'canceled', 'customer_unavailable'])
             ->sortBy('ticket_visit_number')
             ->values();
+        $outstandingWorkItems = $visit->serviceTicket->workItems;
         $events = AuditEvent::query()->where('organization_id', $closeout->organization_id)
             ->where(function ($query) use ($visit): void {
                 $query->where(fn ($q) => $q->where('subject_type', $visit->getMorphClass())->where('subject_id', $visit->id))
@@ -77,7 +80,7 @@ class CloseoutReviewController extends Controller
         $canCorrectSubmittedTime = $membership->roles->contains('key', 'super_admin')
             && $membership->hasCapability('visit_time.correct_submitted');
 
-        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'activeMedia', 'events', 'completionBlockingVisits', 'tripChargeRecommendation', 'canCorrectSubmittedTime'));
+        return view('office.closeout-reviews.show', compact('closeout', 'visit', 'versions', 'activeMedia', 'events', 'completionBlockingVisits', 'outstandingWorkItems', 'tripChargeRecommendation', 'canCorrectSubmittedTime'));
     }
 
     public function approve(Request $request, string $closeout, CloseoutReviewWorkflow $workflow, AuditRecorder $audit): RedirectResponse

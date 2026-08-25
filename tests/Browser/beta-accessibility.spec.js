@@ -189,6 +189,45 @@ test.describe('Projects V1', () => {
 test.describe('desktop beta', () => {
     test.skip(({ isMobile }) => isMobile);
 
+    test('Service Ticket Work Items remain responsive and accessible across Office and Review', async ({ page }) => {
+        test.setTimeout(120_000);
+        await login(page, 'super_admin');
+        await page.goto('/office');
+        await page.getByRole('link', { name: /BETA Camera C-14 remains offline/ }).click();
+        const ticketUrl = page.url();
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto(ticketUrl);
+            await expect(page.getByRole('heading', { name: 'Work Items' })).toBeVisible();
+            await expect(page.getByText('BETA Camera C-14 remains offline', { exact: true })).toBeVisible();
+            await expect(page.getByText('Create follow-up Service Ticket', { exact: true })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+        }
+
+        await page.goto('/office/closeout-reviews');
+        const reviewLinks = await page.locator('a[href*="/office/closeout-reviews/"]:visible').evaluateAll((links) => links.map((link) => link.href));
+        let workItemReview = null;
+        for (const reviewLink of reviewLinks) {
+            await page.goto(reviewLink);
+            if (await page.getByText('BETA Camera C-14 remains offline', { exact: true }).count()) {
+                workItemReview = reviewLink;
+                break;
+            }
+        }
+        expect(workItemReview).not.toBeNull();
+        await expect(page.getByRole('heading', { name: 'Work Items handled this Visit' })).toBeVisible();
+        await expect(page.getByText('Approval will not close the Service Ticket yet.')).toBeVisible();
+        await expectAccessible(page);
+    });
+
     test('Super Admin submitted-time correction remains responsive and accessible', async ({ page }) => {
         test.setTimeout(120_000);
         await login(page, 'super_admin');
@@ -881,6 +920,32 @@ test.describe('desktop beta', () => {
             .map((element) => `${element.tagName.toLowerCase()}#${element.id}:${element.getBoundingClientRect().height}`));
         expect(shortControls).toEqual([]);
         await expectAccessible(page);
+    });
+});
+
+test.describe('field Work Items', () => {
+    test('assigned technician sees additional Work Item context without overflow', async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name !== 'desktop', 'One browser project loops through all required widths.');
+        test.setTimeout(120_000);
+        await login(page, 'technician');
+        await page.getByRole('link', { name: /BETA A: Resolved with photo and acknowledgment/ }).click();
+        const visitUrl = page.url();
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto(visitUrl);
+            await expect(page.getByRole('heading', { name: 'Primary scope' })).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'Work Items' })).toBeVisible();
+            await expect(page.getByText('BETA AP-07 restored', { exact: true })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+        }
     });
 });
 

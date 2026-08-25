@@ -18,6 +18,7 @@ use App\Models\PaymentProviderConfiguration;
 use App\Models\Role;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\User;
 use App\Models\VisitAssignment;
 use App\Models\VisitTimeEntry;
@@ -99,6 +100,29 @@ class BetaScenarioSeeder extends Seeder
                 'organization_membership_id' => $memberships['technician']->id, 'is_lead' => true,
                 'assigned_by_id' => $memberships['dispatcher']->user_id,
             ]);
+            if ($offset === 0) {
+                $workItem = ServiceTicketWorkItem::query()->create([
+                    'organization_id' => $organization->id,
+                    'service_ticket_id' => $ticket->id,
+                    'discovered_visit_id' => $visit->id,
+                    'origin' => 'field_discovered',
+                    'title' => 'BETA AP-07 restored',
+                    'detail' => 'Synthetic additional work retained with the Service Ticket.',
+                    'work_note' => 'Connectivity restored and verified.',
+                    'status' => 'completed',
+                    'created_by_id' => $memberships['technician']->user_id,
+                    'updated_by_id' => $memberships['technician']->user_id,
+                    'status_changed_by_id' => $memberships['technician']->user_id,
+                    'status_changed_at' => now(),
+                ]);
+                $workItem->visits()->attach($visit->id, [
+                    'organization_id' => $organization->id,
+                    'first_touched_by_id' => $memberships['technician']->user_id,
+                    'first_touched_at' => now(),
+                    'last_touched_by_id' => $memberships['technician']->user_id,
+                    'last_touched_at' => now(),
+                ]);
+            }
         }
 
         $this->call(BetaVolumeSeeder::class);
@@ -154,6 +178,27 @@ class BetaScenarioSeeder extends Seeder
             'started_at' => now()->subHours(2),
             'ended_at' => now()->subHour(),
             'source' => 'timer',
+        ]);
+        $workItem = ServiceTicketWorkItem::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $correctableCloseout->visit->service_ticket_id,
+            'discovered_visit_id' => $correctableCloseout->visit_id,
+            'origin' => 'field_discovered',
+            'title' => 'BETA Camera C-14 remains offline',
+            'detail' => 'Synthetic additional work for Work Item workflow validation.',
+            'work_note' => 'Requires a separate office-planned follow-up.',
+            'status' => 'needs_follow_up',
+            'created_by_id' => $memberships['technician']->user_id,
+            'updated_by_id' => $memberships['technician']->user_id,
+            'status_changed_by_id' => $memberships['technician']->user_id,
+            'status_changed_at' => now(),
+        ]);
+        $workItem->visits()->attach($correctableCloseout->visit_id, [
+            'organization_id' => $organization->id,
+            'first_touched_by_id' => $memberships['technician']->user_id,
+            'first_touched_at' => now(),
+            'last_touched_by_id' => $memberships['technician']->user_id,
+            'last_touched_at' => now(),
         ]);
     }
 }

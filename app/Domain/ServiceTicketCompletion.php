@@ -7,6 +7,7 @@ use App\Models\BillingHandoff;
 use App\Models\Closeout;
 use App\Models\CloseoutReview;
 use App\Models\ServiceTicket;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\User;
 use App\Models\Visit;
 use App\Support\AuditRecorder;
@@ -24,6 +25,10 @@ class ServiceTicketCompletion
                 return $ticket->billingHandoff;
             }
             if (! in_array($ticket->status, ['open', 'on_hold'], true) || $ticket->visits()->whereNotIn('status', ['approved', 'canceled', 'customer_unavailable'])->exists()) {
+                return null;
+            }
+            if (ServiceTicketWorkItem::query()->where('service_ticket_id', $ticket->id)
+                ->whereIn('status', ServiceTicketWorkItem::BLOCKING_STATUSES)->exists()) {
                 return null;
             }
 

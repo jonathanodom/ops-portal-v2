@@ -3,6 +3,7 @@
 namespace App\Domain;
 
 use App\Models\Closeout;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\VisitMedia;
 
 class CloseoutReadiness
@@ -11,6 +12,14 @@ class CloseoutReadiness
     public function errors(Closeout $closeout): array
     {
         $errors = [];
+        if (ServiceTicketWorkItem::query()
+            ->where('organization_id', $closeout->organization_id)
+            ->where('service_ticket_id', $closeout->visit->service_ticket_id)
+            ->where('status', 'open')
+            ->whereHas('visits', fn ($query) => $query->whereKey($closeout->visit_id))
+            ->exists()) {
+            $errors['work_items'] = 'Choose Completed or Needs follow-up for every Work Item handled during this Visit.';
+        }
         if (! $closeout->outcome) {
             $errors['outcome'] = 'Choose an outcome.';
         }

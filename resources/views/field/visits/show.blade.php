@@ -11,6 +11,9 @@
         $closeoutFieldError = fn (string $field) => $errors->first($field) ?: $closeoutMissing->get($field);
         $showCloseoutAction = in_array($visit->status, ['on_site', 'returned_for_correction'], true) && (! $closeout || $closeout->status === 'draft');
         $canSubmitCloseout = $activeMembership->hasCapability('visits.execute_any') || $visit->assignments->contains(fn ($assignment) => $assignment->membership->user_id === auth()->id() && $assignment->is_lead);
+        $workItemWritable = in_array($visit->serviceTicket->status, ['open', 'on_hold'], true)
+            && in_array($visit->status, ['on_site', 'returned_for_correction'], true)
+            && $closeout?->status === 'draft';
     @endphp
 
     @if (session('status'))
@@ -69,6 +72,7 @@
     @can('execute', $visit)
         <nav class="field-section-nav mt-4 flex gap-1 overflow-x-auto rounded-lg border border-slate-200 bg-white p-1" aria-label="Visit workspace sections">
             <a class="field-section-link" href="#visit-time">Time</a>
+            <a class="field-section-link" href="#visit-work">Work</a>
             @if($visit->status !== 'canceled')<a class="field-section-link" href="#visit-closeout">Notes &amp; outcome</a>@endif
             @if($visit->status !== 'canceled' && (! $closeout || $closeout->status === 'draft'))
                 <a class="field-section-link" href="#visit-photos">Photos</a>
@@ -96,11 +100,62 @@
     </section>
 
     <section class="surface mt-4 p-5">
-        <h2 class="font-bold">Work scope</h2>
+        <h2 class="font-bold">Primary scope</h2>
+        <p class="mt-2 font-semibold">{{ $visit->serviceTicket->title }}</p>
         <p class="mt-3 whitespace-pre-line">{{ $visit->serviceTicket->description }}</p>
         @if ($visit->serviceTicket->customer_visible_summary)
             <h3 class="mt-4 text-sm font-bold text-slate-700">Customer-visible summary</h3>
             <p class="whitespace-pre-line">{{ $visit->serviceTicket->customer_visible_summary }}</p>
+        @endif
+    </section>
+
+    <section id="visit-work" class="surface mt-4 scroll-mt-24 p-5">
+        <div class="flex flex-wrap items-center justify-between gap-2">
+            <div><p class="text-xs font-bold uppercase tracking-wide text-slate-500">Additional work</p><h2 class="text-lg font-bold">Work Items</h2></div>
+            <span class="status-active">{{ $visit->serviceTicket->workItems->count() }} recorded</span>
+        </div>
+        @if($closeoutMissing->has('work_items'))
+            <div class="mt-4 rounded-lg border border-red-400 bg-red-50 p-4 text-sm font-semibold text-red-900" role="alert" id="work-items-error">{{ $closeoutMissing->get('work_items') }}</div>
+        @endif
+        <div class="mt-4 space-y-4">
+            @forelse($visit->serviceTicket->workItems as $workItem)
+                @php($touchedHere = $workItem->visits->contains('id', $visit->id))
+                <article class="rounded-lg border border-slate-200 p-4">
+                    <div class="flex flex-wrap items-start justify-between gap-2"><h3 class="min-w-0 break-words font-bold">{{ $workItem->title }}</h3><span class="status-active">{{ Str::headline($workItem->status) }}</span></div>
+                    <p class="mt-1 text-xs font-semibold text-slate-500">{{ $workItem->origin === 'field_discovered' ? 'Field discovered' : 'Office added' }}@if($touchedHere) · Handled this Visit @endif</p>
+                    @if($workItem->detail)<p class="mt-3 whitespace-pre-line break-words text-sm text-slate-700">{{ $workItem->detail }}</p>@endif
+                    @if($workItem->work_note)<p class="mt-3 whitespace-pre-line break-words rounded-lg bg-slate-50 p-3 text-sm"><strong>Work note:</strong> {{ $workItem->work_note }}</p>@endif
+                    @if($workItem->followUpServiceTicket)<p class="mt-3 text-sm font-semibold">Transferred to {{ $workItem->followUpServiceTicket->ticket_number }}</p>@endif
+                    @if($workItemWritable && $workItem->status !== 'transferred')
+                        <form method="POST" action="{{ route('field.visits.work-items.update', [$visit, $workItem]) }}" class="mt-4 space-y-3 border-t border-slate-200 pt-4">
+                            @csrf @method('PUT')
+                            <label class="form-label" for="field_work_item_status_{{ $workItem->id }}">Disposition</label>
+                            <select class="form-input" id="field_work_item_status_{{ $workItem->id }}" name="status" required>
+                                @foreach(['open' => 'Open', 'completed' => 'Completed', 'needs_follow_up' => 'Needs follow-up'] as $value => $label)<option value="{{ $value }}" @selected($workItem->status === $value)>{{ $label }}</option>@endforeach
+                            </select>
+                            <label class="form-label" for="field_work_item_note_{{ $workItem->id }}">Work note</label>
+                            <textarea class="form-textarea" id="field_work_item_note_{{ $workItem->id }}" name="work_note" maxlength="10000">{{ $workItem->work_note }}</textarea>
+                            <button class="button-secondary w-full">Save Work Item</button>
+                        </form>
+                    @endif
+                </article>
+            @empty
+                <p class="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">No additional Work Items have been recorded.</p>
+            @endforelse
+        </div>
+        @if($workItemWritable)
+            <details class="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4" @if($errors->hasAny(['title', 'detail', 'work_note'])) open @endif>
+                <summary class="min-h-11 cursor-pointer py-2 font-bold text-brand-blue">Add discovered work</summary>
+                <form method="POST" action="{{ route('field.visits.work-items.store', $visit) }}" class="mt-3 space-y-3">
+                    @csrf
+                    <label class="form-label" for="field_work_item_title">Title</label><input class="form-input" id="field_work_item_title" name="title" value="{{ old('title') }}" required maxlength="255">
+                    <label class="form-label" for="field_work_item_detail">Detail</label><textarea class="form-textarea" id="field_work_item_detail" name="detail" maxlength="10000">{{ old('detail') }}</textarea>
+                    <label class="form-label" for="field_work_item_work_note">Work note</label><textarea class="form-textarea" id="field_work_item_work_note" name="work_note" maxlength="10000">{{ old('work_note') }}</textarea>
+                    <button class="button-primary w-full">Add Work Item</button>
+                </form>
+            </details>
+        @else
+            @can('execute', $visit)<p class="mt-4 text-sm text-slate-500">Additional work can be recorded after the Visit is On Site and while its Closeout is a draft.</p>@endcan
         @endif
     </section>
 
