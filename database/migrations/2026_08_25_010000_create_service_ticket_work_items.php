@@ -32,12 +32,12 @@ return new class extends Migration
 
         Schema::create('service_ticket_work_item_visit', function (Blueprint $table): void {
             $table->id();
-            $table->foreignId('organization_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('service_ticket_work_item_id')->constrained()->cascadeOnDelete();
-            $table->foreignId('visit_id')->constrained()->restrictOnDelete();
-            $table->foreignId('first_touched_by_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('organization_id')->constrained(indexName: 'stwi_visit_org_fk')->cascadeOnDelete();
+            $table->foreignId('service_ticket_work_item_id')->constrained(indexName: 'stwi_visit_item_fk')->cascadeOnDelete();
+            $table->foreignId('visit_id')->constrained(indexName: 'stwi_visit_visit_fk')->restrictOnDelete();
+            $table->foreignId('first_touched_by_id')->nullable()->constrained('users', indexName: 'stwi_visit_first_actor_fk')->nullOnDelete();
             $table->timestamp('first_touched_at');
-            $table->foreignId('last_touched_by_id')->nullable()->constrained('users')->nullOnDelete();
+            $table->foreignId('last_touched_by_id')->nullable()->constrained('users', indexName: 'stwi_visit_last_actor_fk')->nullOnDelete();
             $table->timestamp('last_touched_at');
             $table->timestamps();
 
