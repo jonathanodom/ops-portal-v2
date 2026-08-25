@@ -66,6 +66,9 @@ final class ServiceTicketWorkItemWorkflow
                 $this->reject('status', 'Field users may choose Open, Completed, or Needs follow-up.');
             }
             $oldStatus = $item->status;
+            if ($status !== $oldStatus) {
+                $this->assertNoActiveTimerForTerminalStatus($item, $status);
+            }
             $item->update([
                 'work_note' => $data['work_note'] ?? null,
                 'status' => $status,
@@ -120,6 +123,9 @@ final class ServiceTicketWorkItemWorkflow
                 $this->reject('status', 'Choose a valid Office Work Item status.');
             }
             $oldStatus = $item->status;
+            if ($status !== $oldStatus) {
+                $this->assertNoActiveTimerForTerminalStatus($item, $status);
+            }
             $changed = collect(['title', 'detail', 'work_note', 'status'])
                 ->filter(fn (string $field): bool => ($item->{$field} ?? null) !== ($data[$field] ?? null))->values()->all();
             $item->update([
@@ -150,6 +156,7 @@ final class ServiceTicketWorkItemWorkflow
             if ($item->status !== 'needs_follow_up') {
                 $this->reject('work_item', 'Only a Needs follow-up Work Item can create a follow-up Service Ticket.');
             }
+            $this->assertNoActiveTimerForTerminalStatus($item, 'transferred');
 
             $description = collect([$item->detail, $item->work_note])->filter(fn ($value) => filled($value))->join("\n\n");
             $followUp = $this->ticketCreator->create($organization, $actor, [
@@ -178,7 +185,7 @@ final class ServiceTicketWorkItemWorkflow
         });
     }
 
-    private function touch(ServiceTicketWorkItem $item, Visit $visit, User $actor): void
+    public function touch(ServiceTicketWorkItem $item, Visit $visit, User $actor): void
     {
         $now = now();
         $existing = DB::table('service_ticket_work_item_visit')
@@ -195,6 +202,13 @@ final class ServiceTicketWorkItemWorkflow
             'first_touched_by_id' => $actor->id, 'first_touched_at' => $now,
             'last_touched_by_id' => $actor->id, 'last_touched_at' => $now, 'created_at' => $now, 'updated_at' => $now,
         ]);
+    }
+
+    private function assertNoActiveTimerForTerminalStatus(ServiceTicketWorkItem $item, string $status): void
+    {
+        if ($status !== 'open' && $item->timeEntries()->whereNotNull('active_user_id')->exists()) {
+            $this->reject('status', "Switch or stop the active timer before changing this Work Item's status.");
+        }
     }
 
     private function assertFieldWritable(Visit $visit, ServiceTicket $ticket): void

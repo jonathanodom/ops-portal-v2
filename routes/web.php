@@ -49,6 +49,7 @@ use App\Http\Controllers\Office\UnitOfMeasureController;
 use App\Http\Controllers\Office\VisitArchiveController;
 use App\Http\Controllers\Office\VisitController;
 use App\Http\Controllers\Office\VisitExecutionController;
+use App\Http\Controllers\Office\VisitTimeAllocationController;
 use App\Http\Controllers\PaymentReceiptController;
 use App\Http\Controllers\PaymentReturnController;
 use App\Http\Controllers\PaymentWebhookController;
@@ -243,6 +244,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/visits/{visit}/execution/time', [VisitExecutionController::class, 'storeTime'])->whereNumber('visit')->name('visits.execution.time.store');
             Route::put('/visits/{visit}/execution/time/{entry}', [VisitExecutionController::class, 'updateTime'])->whereNumber(['visit', 'entry'])->name('visits.execution.time.update');
             Route::put('/visit-time-entries/{entry}/submitted-correction', [SubmittedVisitTimeCorrectionController::class, 'update'])->whereNumber('entry')->name('visit-time-entries.submitted-correction.update');
+            Route::post('/visit-time-entries/{entry}/allocations', [VisitTimeAllocationController::class, 'store'])->whereNumber('entry')->name('visit-time-entries.allocations.store');
             Route::get('/operations/health', [OperationalHealthController::class, 'index'])
                 ->middleware('capability:operations.health.view')->name('operations.health');
             Route::post('/operations/incidents/{incident}/resolve', [OperationalHealthController::class, 'resolve'])
@@ -336,6 +338,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/visits/{visit}/transition', [TodayController::class, 'transition'])->whereNumber('visit')->name('visits.transition');
             Route::post('/visits/{visit}/draft', [ExecutionController::class, 'save'])->name('visits.draft');
             Route::post('/visits/{visit}/timer', [ExecutionController::class, 'timer'])->name('visits.timer');
+            Route::post('/visits/{visit}/work-focus', [ExecutionController::class, 'switchWorkFocus'])->name('visits.work-focus');
             Route::put('/visits/{visit}/time/{entry}', [ExecutionController::class, 'updateTime'])->name('visits.time.update');
             Route::post('/visits/{visit}/parts', [ExecutionController::class, 'addPart'])->name('visits.parts.store');
             Route::post('/visits/{visit}/catalog-items', [ExecutionController::class, 'addCatalogItem'])->middleware('capability:catalog.use')->name('visits.catalog-items.store');

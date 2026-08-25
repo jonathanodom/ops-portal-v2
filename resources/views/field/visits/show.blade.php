@@ -14,6 +14,7 @@
         $workItemWritable = in_array($visit->serviceTicket->status, ['open', 'on_hold'], true)
             && in_array($visit->status, ['on_site', 'returned_for_correction'], true)
             && $closeout?->status === 'draft';
+        $activeTimer = $closeout?->timeEntries?->first(fn ($entry) => $entry->active_user_id === auth()->id());
     @endphp
 
     @if (session('status'))
@@ -172,6 +173,7 @@
             @forelse ($closeout?->timeEntries ?? collect() as $entry)
                 <div class="mt-3 border-t border-slate-200 pt-3 text-sm">
                     <p>{{ $entry->user->name }} · {{ ucfirst($entry->category) }} · <x-local-time :value="$entry->effective_started_at" :timezone="$visit->timezone" format="g:i A T" />–@if($entry->effective_ended_at)<x-local-time :value="$entry->effective_ended_at" :timezone="$visit->timezone" format="g:i A T" />@else running @endif @if($entry->hasSubmittedCorrection())<span class="status-active ml-2">Corrected by office</span>@endif</p>
+                    <p class="mt-1 text-slate-600"><strong>Work focus:</strong> {{ $entry->workItem?->title ?? 'Primary Ticket scope' }}</p>
                     @if ($closeout?->status === 'draft' && $entry->user_id === auth()->id() && $entry->ended_at)
                         @php($correctionForm = 'field-correction-'.$entry->id)
                         <details class="mt-2" @if($errors->has('time') && old('time_form') === $correctionForm) open @endif>
@@ -194,11 +196,23 @@
                 <p class="mt-2 text-sm text-slate-500">No time captured.</p>
             @endforelse
             @if ($visit->status !== 'canceled' && (! $closeout || $closeout->status === 'draft'))
+                @if($activeTimer?->category === 'on_site')
+                    <div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4"><p class="font-bold">Current work focus</p><div class="mt-3 grid gap-2">
+                        @foreach(collect([null])->merge($visit->serviceTicket->workItems->whereIn('status',['open','needs_follow_up'])->pluck('id')) as $workItemId)
+                            @php($focusItem = $workItemId ? $visit->serviceTicket->workItems->firstWhere('id',$workItemId) : null)
+                            <form method="POST" action="{{ route('field.visits.work-focus', $visit) }}">@csrf
+                                @if($workItemId)<input type="hidden" name="work_item_id" value="{{ $workItemId }}">@endif
+                                <button class="button-secondary w-full">{{ $focusItem?->title ?? 'Primary Ticket scope' }}</button>
+                            </form>
+                        @endforeach
+                    </div></div>
+                @endif
                 <form method="POST" action="{{ route('field.visits.timer', $visit) }}" class="mt-4 grid grid-cols-2 gap-2">
                     @csrf
                     <select class="form-input col-span-2" name="category" aria-label="Time category">
                         <option value="travel">Travel</option><option value="on_site">On site</option><option value="other">Other</option>
                     </select>
+                    <select class="form-input col-span-2" name="work_item_id" aria-label="Work focus"><option value="">Primary Ticket scope</option>@foreach($visit->serviceTicket->workItems->whereIn('status',['open','needs_follow_up']) as $item)<option value="{{ $item->id }}">{{ $item->title }}</option>@endforeach</select>
                     <button class="button-secondary" name="action" value="start">Start</button>
                     <button class="button-secondary" name="action" value="stop">Stop</button>
                 </form>

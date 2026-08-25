@@ -22,6 +22,7 @@ final class SubmittedVisitTimeCorrection
     public function __construct(
         private readonly AuditRecorder $audit,
         private readonly TimeConflictDiagnostic $timeConflictDiagnostic,
+        private readonly WorkItemTimeAttribution $attribution,
     ) {}
 
     public function correct(
@@ -88,6 +89,7 @@ final class SubmittedVisitTimeCorrection
             }
 
             $this->assertNoOverlap($visit, $entry->user_id, $start, $end, $entry->id);
+            $this->attribution->assertFits($entry, (int) $start->diffInSeconds($end));
             $sequence = ((int) $entry->corrections()->max('sequence')) + 1;
             $changedFields = collect([
                 'corrected_started_at' => ! $previousStart->equalTo($start),

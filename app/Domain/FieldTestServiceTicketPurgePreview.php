@@ -48,6 +48,8 @@ final class FieldTestServiceTicketPurgePreview
         $fileIds = ServiceTicketFile::query()->where('service_ticket_id', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $mediaIds = VisitMedia::query()->whereIn('visit_id', $visitIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $timeEntryIds = VisitTimeEntry::query()->whereIn('visit_id', $visitIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $allocationSetIds = DB::table('visit_time_allocation_sets')->whereIn('visit_time_entry_id', $timeEntryIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $allocationIds = DB::table('visit_time_allocations')->whereIn('visit_time_allocation_set_id', $allocationSetIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $partIds = VisitPartProposal::query()->whereIn('visit_id', $visitIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $lineIds = InvoiceLine::query()->whereIn('invoice_id', $invoiceIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $invoiceCloseoutIds = InvoiceCloseout::query()->whereIn('invoice_id', $invoiceIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
@@ -79,7 +81,7 @@ final class FieldTestServiceTicketPurgePreview
             'visitIds', 'closeoutIds', 'reviewIds', 'handoffIds', 'invoiceIds', 'attemptIds', 'transactionIds',
             'receiptIds', 'fileIds', 'mediaIds', 'timeEntryIds', 'partIds', 'lineIds', 'invoiceCloseoutIds',
             'acknowledgmentIds', 'assignmentIds', 'adjustmentIds', 'tripChargeIds', 'noteIds', 'reopenIds', 'projectLinkIds',
-            'workItemIds', 'workItemVisitIds'
+            'workItemIds', 'workItemVisitIds', 'allocationSetIds', 'allocationIds'
         );
         $ids['ticketIds'] = [$ticketId];
         $auditIds = $this->referencingAuditIds((int) $ticket->organization_id, $ids);
@@ -114,6 +116,7 @@ final class FieldTestServiceTicketPurgePreview
             'receipt_pdfs' => count(array_filter($storage, fn (array $object): bool => $object['kind'] === 'receipt_pdf')),
             'operational_incidents' => count($incidentIds), 'private_objects' => count($storage),
             'work_items' => count($workItemIds), 'work_item_visit_touches' => count($workItemVisitIds),
+            'time_allocation_sets' => count($allocationSetIds), 'time_allocations' => count($allocationIds),
         ];
 
         return ['ids' => $ids, 'counts' => $counts, 'storage' => $storage, 'blockers' => [
