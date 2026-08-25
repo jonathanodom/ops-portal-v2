@@ -8,6 +8,7 @@ use App\Domain\FieldExecution;
 use App\Http\Controllers\Controller;
 use App\Jobs\DeleteRemovedVisitMedia;
 use App\Models\Closeout;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\Visit;
 use App\Models\VisitMedia;
 use App\Models\VisitPartProposal;
@@ -72,7 +73,7 @@ class ExecutionController extends Controller
                 'serviceTicket.workItems' => fn ($query) => $query->with(['discoveredVisit.returnOfVisit', 'visits.returnOfVisit', 'followUpServiceTicket'])->orderBy('id'),
                 'serviceTicket.visits' => fn ($query) => $query->select(['id', 'service_ticket_id', 'ticket_visit_number', 'return_of_visit_id', 'status', 'scheduled_start_at', 'timezone'])->with('returnOfVisit:id,ticket_visit_number')->orderBy('ticket_visit_number'),
                 'serviceLocation.primaryContact', 'assignments.membership.user',
-                'currentCloseout.lastSavedBy', 'currentCloseout.timeEntries.user', 'currentCloseout.media', 'currentCloseout.parts',
+                'currentCloseout.lastSavedBy', 'currentCloseout.timeEntries.user', 'currentCloseout.timeEntries.workItem', 'currentCloseout.media', 'currentCloseout.parts',
                 'workItems.followUpServiceTicket',
             ]);
 
@@ -93,7 +94,7 @@ class ExecutionController extends Controller
     {
         $v = $this->writable($r, $visit);
         $c = $flow->draft($v, $r->user());
-        $d = $r->validate(['action' => 'required|in:start,stop', 'category' => 'nullable|in:travel,on_site,other']);
+        $d = $r->validate(['action' => 'required|in:start,stop', 'category' => 'nullable|in:travel,on_site,other', 'work_item_id' => 'nullable|integer']);
         $active = VisitTimeEntry::where('active_user_id', $r->user()->id)->first();
         if ($d['action'] === 'stop') {
             if (! $active || $active->visit_id !== $v->id) {
@@ -102,10 +103,19 @@ class ExecutionController extends Controller
         } else {
             if ($active) {
                 return back()->withErrors(['time' => 'Stop your active timer first.']);
-            }$flow->startTimer($v, $c, $r->user(), $d['category'] ?? 'other');
+            }$flow->startTimer($v, $c, $r->user(), $d['category'] ?? 'other', $this->workItem($v, $d['work_item_id'] ?? null));
         }
 
         return back()->with('status', 'Time updated.');
+    }
+
+    public function switchWorkFocus(Request $request, string $visit, FieldExecution $flow): RedirectResponse
+    {
+        $visit = $this->writable($request, $visit);
+        $data = $request->validate(['work_item_id' => ['nullable', 'integer']]);
+        $flow->switchWorkFocus($visit, $request->user(), $this->workItem($visit, $data['work_item_id'] ?? null));
+
+        return back()->with('status', 'Work focus switched.');
     }
 
     public function updateTime(Request $r, string $visit, string $entry, AuditRecorder $audit, ScheduleWindow $scheduleWindow): RedirectResponse
@@ -251,5 +261,15 @@ class ExecutionController extends Controller
         [$whole, $decimal] = array_pad(explode('.', $value, 2), 2, '');
 
         return ((int) $whole * 1000) + (int) str_pad(substr($decimal, 0, 3), 3, '0');
+    }
+
+    private function workItem(Visit $visit, mixed $id): ?ServiceTicketWorkItem
+    {
+        if (! filled($id)) {
+            return null;
+        }
+
+        return ServiceTicketWorkItem::query()->where('organization_id', $visit->organization_id)
+            ->where('service_ticket_id', $visit->service_ticket_id)->findOrFail((int) $id);
     }
 }

@@ -15,6 +15,7 @@ class AccessControlSeeder extends Seeder
         'visits.execute_assigned' => 'Execute assigned visits',
         'visits.execute_any' => 'Execute any visit for approved testing',
         'visit_time.correct_submitted' => 'Correct submitted Visit time entries',
+        'visit_time.allocate_work' => 'Allocate Visit time across Work Items',
         'visits.archive.manage' => 'Archive, restore, and purge eligible visits',
         'dispatch.manage' => 'Schedule and assign visits',
         'closeouts.review' => 'Review and return closeouts',

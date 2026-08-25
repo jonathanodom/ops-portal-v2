@@ -6,6 +6,7 @@ use App\Domain\FieldExecution;
 use App\Domain\ServiceTicketWorkflow;
 use App\Http\Controllers\Controller;
 use App\Models\OrganizationMembership;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitTimeEntry;
@@ -35,6 +36,7 @@ class VisitExecutionController extends Controller
         $data = $request->validate([
             'action' => ['required', Rule::in(['start', 'stop'])],
             'category' => ['nullable', Rule::in(['travel', 'on_site', 'other'])],
+            'work_item_id' => ['nullable', 'integer'],
         ]);
         $active = VisitTimeEntry::query()->where('active_user_id', $request->user()->id)->first();
         if ($data['action'] === 'stop') {
@@ -47,7 +49,7 @@ class VisitExecutionController extends Controller
                 throw ValidationException::withMessages(['time' => 'Stop your active timer first.']);
             }
             $closeout = $execution->draft($visit, $request->user());
-            $execution->startTimer($visit, $closeout, $request->user(), $data['category'] ?? 'other');
+            $execution->startTimer($visit, $closeout, $request->user(), $data['category'] ?? 'other', $this->workItem($visit, $data['work_item_id'] ?? null));
         }
 
         return $this->backToVisit($visit, 'Time updated.');
@@ -65,11 +67,12 @@ class VisitExecutionController extends Controller
             'started_at' => ['required', 'date_format:Y-m-d\TH:i'],
             'ended_at' => ['required', 'date_format:Y-m-d\TH:i'],
             'correction_reason' => ['required', 'string', 'max:1000'],
+            'work_item_id' => ['nullable', 'integer'],
         ]);
         $owner = $this->timeOwner($request, $visit, (int) $data['user_id']);
         $window = $windows->fromLocal($data['started_at'], $data['ended_at'], $visit->timezone);
         $closeout = $execution->draft($visit, $request->user());
-        $execution->createManualTime($visit, $closeout, $owner, $request->user(), $data['category'], $window['start'], $window['end'], $data['correction_reason']);
+        $execution->createManualTime($visit, $closeout, $owner, $request->user(), $data['category'], $window['start'], $window['end'], $data['correction_reason'], $this->workItem($visit, $data['work_item_id'] ?? null));
 
         return $this->backToVisit($visit, 'Manual time entry added.');
     }
@@ -132,6 +135,16 @@ class VisitExecutionController extends Controller
         if ($visit->status === 'canceled') {
             throw ValidationException::withMessages(['visit' => 'Canceled visits are read-only.']);
         }
+    }
+
+    private function workItem(Visit $visit, mixed $id): ?ServiceTicketWorkItem
+    {
+        if (! filled($id)) {
+            return null;
+        }
+
+        return ServiceTicketWorkItem::query()->where('organization_id', $visit->organization_id)
+            ->where('service_ticket_id', $visit->service_ticket_id)->findOrFail((int) $id);
     }
 
     private function backToVisit(Visit $visit, string $status): RedirectResponse

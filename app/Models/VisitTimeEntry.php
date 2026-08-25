@@ -7,7 +7,7 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['organization_id', 'visit_id', 'closeout_id', 'user_id', 'active_user_id', 'category', 'started_at', 'ended_at', 'corrected_started_at', 'corrected_ended_at', 'source', 'note', 'correction_reason'])]
+#[Fillable(['organization_id', 'visit_id', 'closeout_id', 'service_ticket_work_item_id', 'user_id', 'active_user_id', 'category', 'started_at', 'ended_at', 'corrected_started_at', 'corrected_ended_at', 'source', 'note', 'correction_reason'])]
 class VisitTimeEntry extends Model
 {
     protected function casts(): array
@@ -60,5 +60,15 @@ class VisitTimeEntry extends Model
     public function corrections(): HasMany
     {
         return $this->hasMany(VisitTimeEntryCorrection::class)->orderBy('sequence');
+    }
+
+    public function workItem(): BelongsTo
+    {
+        return $this->belongsTo(ServiceTicketWorkItem::class, 'service_ticket_work_item_id');
+    }
+
+    public function allocationSets(): HasMany
+    {
+        return $this->hasMany(VisitTimeAllocationSet::class)->orderBy('sequence');
     }
 }

@@ -74,6 +74,8 @@ class FieldTestServiceTicketPurger
             DB::table('visits')->whereIn('id', $ids['visitIds'])->update(['current_closeout_id' => null, 'return_of_visit_id' => null]);
             DB::table('closeouts')->whereIn('id', $ids['closeoutIds'])->update(['parent_closeout_id' => null, 'return_visit_id' => null]);
             DB::table('visit_part_proposals')->whereIn('id', $ids['partIds'])->update(['source_proposal_id' => null]);
+            DB::table('visit_time_allocations')->whereIn('id', $ids['allocationIds'])->delete();
+            DB::table('visit_time_allocation_sets')->whereIn('id', $ids['allocationSetIds'])->delete();
             DB::table('visit_time_entries')->whereIn('id', $ids['timeEntryIds'])->delete();
             DB::table('visit_media')->whereIn('id', $ids['mediaIds'])->delete();
             DB::table('visit_part_proposals')->whereIn('id', $ids['partIds'])->delete();

@@ -206,6 +206,7 @@ test.describe('desktop beta', () => {
             await page.setViewportSize(viewport);
             await page.goto(ticketUrl);
             await expect(page.getByRole('heading', { name: 'Work Items' })).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'Work Time Attribution' })).toBeVisible();
             await expect(page.getByText('BETA Camera C-14 remains offline', { exact: true })).toBeVisible();
             await expect(page.getByText('Create follow-up Service Ticket', { exact: true })).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
@@ -224,6 +225,7 @@ test.describe('desktop beta', () => {
         }
         expect(workItemReview).not.toBeNull();
         await expect(page.getByRole('heading', { name: 'Work Items handled this Visit' })).toBeVisible();
+        await expect(page.getByText('Allocation explains what recorded time was spent on.')).toBeVisible();
         await expect(page.getByText('Approval will not close the Service Ticket yet.')).toBeVisible();
         await expectAccessible(page);
     });
@@ -942,6 +944,7 @@ test.describe('field Work Items', () => {
             await page.goto(visitUrl);
             await expect(page.getByRole('heading', { name: 'Primary scope' })).toBeVisible();
             await expect(page.getByRole('heading', { name: 'Work Items' })).toBeVisible();
+            await expect(page.getByRole('combobox', { name: 'Work focus' })).toBeVisible();
             await expect(page.getByText('BETA AP-07 restored', { exact: true })).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             await expectAccessible(page);

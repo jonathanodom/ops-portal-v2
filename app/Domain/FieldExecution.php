@@ -5,6 +5,7 @@ namespace App\Domain;
 use App\Models\Closeout;
 use App\Models\OrganizationMembership;
 use App\Models\ServiceTicket;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitTimeEntry;
@@ -21,6 +22,8 @@ class FieldExecution
         private readonly VisitCreator $visitCreator,
         private readonly CloseoutReadiness $readiness,
         private readonly TimeConflictDiagnostic $timeConflictDiagnostic,
+        private readonly ServiceTicketWorkItemWorkflow $workItems,
+        private readonly WorkItemTimeAttribution $attribution,
     ) {}
 
     public function draft(Visit $visit, User $actor): Closeout
@@ -57,7 +60,7 @@ class FieldExecution
         return $c;
     }
 
-    public function startTimer(Visit $v, Closeout $c, User $u, string $category): VisitTimeEntry
+    public function startTimer(Visit $v, Closeout $c, User $u, string $category, ?ServiceTicketWorkItem $workItem = null): VisitTimeEntry
     {
         if ($c->status !== 'draft') {
             throw ValidationException::withMessages(['time' => 'Closeout is submitted.']);
@@ -73,11 +76,16 @@ class FieldExecution
         if (VisitTimeEntry::query()->where('active_user_id', $u->id)->exists()) {
             throw ValidationException::withMessages(['time' => 'Stop your active timer first.']);
         }
+        $this->assertWorkItemTarget($v, $category, $workItem);
 
-        $entry = VisitTimeEntry::create(['organization_id' => $v->organization_id, 'visit_id' => $v->id, 'closeout_id' => $c->id, 'user_id' => $u->id, 'active_user_id' => $u->id, 'category' => $category, 'started_at' => now(), 'source' => 'timer']);
+        $entry = VisitTimeEntry::create(['organization_id' => $v->organization_id, 'visit_id' => $v->id, 'closeout_id' => $c->id, 'service_ticket_work_item_id' => $workItem?->id, 'user_id' => $u->id, 'active_user_id' => $u->id, 'category' => $category, 'started_at' => now(), 'source' => 'timer']);
+        if ($workItem) {
+            $this->workItems->touch($workItem, $v, $u);
+        }
         $this->audit->record($v->serviceTicket->organization, $u, 'visit_time.started', $entry, [
             'visit_id' => $v->id,
             'category' => $category,
+            'work_item_id' => $workItem?->id,
         ]);
 
         return $entry;
@@ -115,17 +123,20 @@ class FieldExecution
         CarbonInterface $start,
         CarbonInterface $end,
         string $reason,
+        ?ServiceTicketWorkItem $workItem = null,
     ): VisitTimeEntry {
-        return DB::transaction(function () use ($visit, $closeout, $owner, $actor, $category, $start, $end, $reason): VisitTimeEntry {
+        return DB::transaction(function () use ($visit, $closeout, $owner, $actor, $category, $start, $end, $reason, $workItem): VisitTimeEntry {
             $closeout = Closeout::query()->lockForUpdate()->findOrFail($closeout->id);
             if ($closeout->status !== 'draft') {
                 throw ValidationException::withMessages(['time' => 'Submitted closeout time is immutable.']);
             }
             $this->assertNoOverlap($visit, $owner->id, $start, $end);
+            $this->assertWorkItemTarget($visit, $category, $workItem);
             $entry = VisitTimeEntry::query()->create([
                 'organization_id' => $visit->organization_id,
                 'visit_id' => $visit->id,
                 'closeout_id' => $closeout->id,
+                'service_ticket_work_item_id' => $workItem?->id,
                 'user_id' => $owner->id,
                 'category' => $category,
                 'started_at' => $start,
@@ -133,11 +144,15 @@ class FieldExecution
                 'source' => 'manual',
                 'correction_reason' => $reason,
             ]);
+            if ($workItem) {
+                $this->workItems->touch($workItem, $visit, $actor);
+            }
             $this->audit->record($visit->serviceTicket->organization, $actor, 'visit_time.created_manually', $entry, [
                 'visit_id' => $visit->id,
                 'owner_id' => $owner->id,
                 'category' => $category,
                 'changed_fields' => ['started_at', 'ended_at', 'category'],
+                'work_item_id' => $workItem?->id,
             ]);
 
             return $entry;
@@ -160,6 +175,7 @@ class FieldExecution
                 throw ValidationException::withMessages(['time' => 'Stop the timer before correcting it.']);
             }
             $this->assertNoOverlap($entry->visit, $entry->user_id, $start, $end, $entry->id);
+            $this->attribution->assertFits($entry, (int) $start->diffInSeconds($end));
             $changed = collect(['started_at', 'ended_at'])->filter(function (string $field) use ($entry, $start, $end): bool {
                 $value = $field === 'started_at' ? $start : $end;
 
@@ -189,7 +205,39 @@ class FieldExecution
             'visit_id' => $e->visit_id,
             'category' => $e->category,
             'source' => $source,
+            'work_item_id' => $e->service_ticket_work_item_id,
         ]);
+    }
+
+    public function switchWorkFocus(Visit $visit, User $actor, ?ServiceTicketWorkItem $target): VisitTimeEntry
+    {
+        return DB::transaction(function () use ($visit, $actor, $target): VisitTimeEntry {
+            $visit = Visit::query()->lockForUpdate()->with('currentCloseout')->findOrFail($visit->id);
+            $active = VisitTimeEntry::query()->where('active_user_id', $actor->id)->lockForUpdate()->first();
+            if (! $active || (int) $active->visit_id !== (int) $visit->id || $active->category !== 'on_site') {
+                throw ValidationException::withMessages(['time' => 'An active on-site timer is required to switch work focus.']);
+            }
+            $this->assertWorkItemTarget($visit, 'on_site', $target);
+            if ((int) ($active->service_ticket_work_item_id ?? 0) === (int) ($target?->id ?? 0)) {
+                return $active;
+            }
+            $boundary = now();
+            $active->update(['ended_at' => $boundary, 'active_user_id' => null]);
+            $next = VisitTimeEntry::query()->create([
+                'organization_id' => $active->organization_id, 'visit_id' => $active->visit_id, 'closeout_id' => $active->closeout_id,
+                'service_ticket_work_item_id' => $target?->id, 'user_id' => $active->user_id, 'active_user_id' => $active->user_id,
+                'category' => 'on_site', 'started_at' => $boundary, 'source' => 'timer',
+            ]);
+            if ($target) {
+                $this->workItems->touch($target, $visit, $actor);
+            }
+            $this->audit->record($visit->serviceTicket->organization, $actor, 'visit_time.work_focus_switched', $next, [
+                'visit_id' => $visit->id, 'ended_entry_id' => $active->id, 'started_entry_id' => $next->id,
+                'from_work_item_id' => $active->service_ticket_work_item_id, 'to_work_item_id' => $target?->id,
+            ]);
+
+            return $next;
+        });
     }
 
     public function submit(Visit $v, Closeout $c, User $actor, string $token, bool $administrative = false): Closeout
@@ -255,6 +303,24 @@ class FieldExecution
             ->first();
         if ($overlap) {
             throw ValidationException::withMessages(['time' => $this->timeConflictDiagnostic->message($overlap, $contextVisit)]);
+        }
+    }
+
+    private function assertWorkItemTarget(Visit $visit, string $category, ?ServiceTicketWorkItem $workItem): void
+    {
+        if (! $workItem) {
+            return;
+        }
+        if ($category === 'travel') {
+            throw ValidationException::withMessages(['work_item' => 'Travel time must remain on Primary Ticket scope.']);
+        }
+        abort_unless((int) $workItem->organization_id === (int) $visit->organization_id
+            && (int) $workItem->service_ticket_id === (int) $visit->service_ticket_id, 404);
+        if (! in_array($workItem->status, ['open', 'needs_follow_up'], true)) {
+            throw ValidationException::withMessages(['work_item' => 'Choose an Open or Needs follow-up Work Item.']);
+        }
+        if (! $visit->currentCloseout || $visit->currentCloseout->status !== 'draft') {
+            throw ValidationException::withMessages(['work_item' => 'A current draft Closeout is required.']);
         }
     }
 }
