@@ -2,7 +2,7 @@
 
 namespace App\Http\Controllers\Office;
 
-use App\Domain\ServiceTickets\Queries\ServiceTicketWorkOrderQuery;
+use App\Domain\ServiceTickets\Documents\TechnicianWorkOrderProjection;
 use App\Http\Controllers\Controller;
 use App\Models\ServiceTicket;
 use Illuminate\Http\Request;
@@ -11,18 +11,14 @@ use Symfony\Component\HttpFoundation\Response;
 
 final class ServiceTicketPrintController extends Controller
 {
-    public function __invoke(Request $request, string $serviceTicket, ServiceTicketWorkOrderQuery $query): Response
+    public function __invoke(Request $request, string $serviceTicket, TechnicianWorkOrderProjection $projection): Response
     {
         $organization = $request->attributes->get('organization');
         $ticket = ServiceTicket::query()->forOrganization($organization->id)->findOrFail($serviceTicket);
         Gate::authorize('view', $ticket);
-        $membership = $request->attributes->get('membership');
 
-        return response()->view('office.service-tickets.print', $query->build(
-            $organization,
-            $ticket,
-            $membership->hasCapability('closeouts.inspect'),
-        ))->withHeaders($this->privateHeaders());
+        return response()->view('office.service-tickets.documents.technician-work-order', $projection->build($organization, $ticket))
+            ->withHeaders($this->privateHeaders());
     }
 
     private function privateHeaders(): array

@@ -608,6 +608,15 @@ body:has(dialog[data-payment-overlay][open]) {
 .print-internal-label { display: inline-block; border: 2px solid #334155; padding: 0.25rem 0.5rem; font-weight: 800; }
 .print-cover > h2 { margin: 1.5rem 0 1rem; font-size: 22pt; font-weight: 800; }
 .print-document-footer { display: flex; justify-content: space-between; gap: 0.75rem; margin-top: 1rem; border-top: 1px solid #475569; padding-top: 0.5rem; font-size: 8pt; color: #334155; }
+.print-field-notes > div { min-height: 1.5in; border: 1px solid #94a3b8; }
+.print-signature-block, .print-acknowledgment { break-inside: avoid; }
+.print-paper-lines { margin-top: 0.75rem; line-height: 2.25; }
+.print-acknowledgment { margin-top: 0.75rem; border: 1px solid #94a3b8; padding: 0.65rem; }
+.print-signature-image { display: block; width: auto; max-width: 3.5in; height: auto; max-height: 1.25in; margin-top: 0.5rem; object-fit: contain; object-position: left center; }
+.print-visit-report { break-before: auto; margin-top: 1rem; border-top: 2px solid #475569; padding-top: 0.75rem; }
+.print-visit-report > .print-record-heading { break-after: avoid; }
+.print-time-table { margin-top: 0.65rem; }
+.print-sheet-compact { font-size: 10pt; }
 
 @page {
     size: Letter portrait;
