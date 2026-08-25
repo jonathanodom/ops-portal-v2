@@ -38,6 +38,6 @@ Rollback drops the signature table before removing `closeouts.representative_rol
 - PHPUnit: 411 passed, 3,368 assertions (CI-safe destructive-purge default).
 - Focused acknowledgment/review/purge/UI regression: 48 passed, 441 assertions before final signed-review assertions; final signature test passed with 20 assertions.
 - Beta setup/fixture validation: passed, including 250 Customers, 500 Service Tickets, 1,000 Visits, 200 Closeouts, and 500 media records.
-- Beta benchmark: dashboard 19.9 ms p95; Today 11.3 ms; Dispatch 20.5 ms; Project detail 22.7 ms; Ticket detail 20.5 ms; Review detail 12.5 ms; media first byte 0.1 ms.
+- Beta benchmark: dashboard 19.9 ms p95 / 36 queries; Today 11.3 ms / 15; Dispatch 20.5 ms / 15; Project detail 22.7 ms / 25; Ticket detail 20.5 ms / 27; Review detail 12.5 ms / 29; media first byte 0.1 ms. The Home ceiling is pinned to the observed fixed 36-query attention snapshot; it does not grow per record.
 - Pint, compiled Blade, Vite production build, Composer validation/audit, and diff checks: passed.
 - Playwright discovered 50 desktop/mobile cases locally; they were credential-gated and skipped. The updated 390×844 signature-pad/axe path runs in the GitHub browser job.

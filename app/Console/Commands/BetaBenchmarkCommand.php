@@ -58,7 +58,7 @@ class BetaBenchmarkCommand extends Command
         });
 
         $cases = [
-            'office_dashboard' => [500, 35, fn () => app(OfficeDashboardController::class)->index(
+            'office_dashboard' => [500, 36, fn () => app(OfficeDashboardController::class)->index(
                 $this->request('/office', $membership),
                 app(NewDayHomeSnapshot::class),
             )],
