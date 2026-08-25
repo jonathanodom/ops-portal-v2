@@ -22,6 +22,9 @@
                     <p class="mt-1 text-sm">An Invoice outside this Ticket aggregate references its operational records. Remove or correct that relationship before purging.</p>
                 </div>
             @endif
+            @if($preview['blockers']['external_follow_up_work_item_ids'])
+                <div class="rounded-lg border border-red-300 bg-red-50 p-4 text-red-950" role="alert"><p class="font-bold">Purge blocked</p><p class="mt-1 text-sm">Another Ticket retains this Ticket as its Work Item follow-up provenance. That external relationship must remain intact.</p></div>
+            @endif
 
             <div>
                 <h2 class="font-bold text-slate-950">Current dependency inventory</h2>
@@ -51,7 +54,7 @@
                 <x-field-error field="acknowledge" />
                 <div class="flex flex-col-reverse gap-3 sm:flex-row sm:justify-end">
                     <a class="button-secondary" href="{{ route('office.service-tickets.show', $ticket) }}">Cancel</a>
-                    <button class="inline-flex min-h-11 items-center justify-center rounded-lg bg-red-700 px-4 py-2 font-bold text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50" @disabled($preview['blockers']['external_invoice_ids'])>Permanently purge test data</button>
+                    <button class="inline-flex min-h-11 items-center justify-center rounded-lg bg-red-700 px-4 py-2 font-bold text-white hover:bg-red-800 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 disabled:opacity-50" @disabled($preview['blockers']['external_invoice_ids'] || $preview['blockers']['external_follow_up_work_item_ids'])>Permanently purge test data</button>
                 </div>
             </form>
         </div>

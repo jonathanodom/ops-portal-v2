@@ -9,6 +9,7 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\SoftDeletes;
 
@@ -77,6 +78,13 @@ class Visit extends Model
     public function timeEntries(): HasMany
     {
         return $this->hasMany(VisitTimeEntry::class);
+    }
+
+    public function workItems(): BelongsToMany
+    {
+        return $this->belongsToMany(ServiceTicketWorkItem::class, 'service_ticket_work_item_visit')
+            ->withPivot(['organization_id', 'first_touched_by_id', 'first_touched_at', 'last_touched_by_id', 'last_touched_at'])
+            ->withTimestamps();
     }
 
     public function archivedBy(): BelongsTo

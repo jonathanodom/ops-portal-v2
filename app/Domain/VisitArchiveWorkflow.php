@@ -4,6 +4,7 @@ namespace App\Domain;
 
 use App\Models\BillingHandoff;
 use App\Models\Closeout;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\User;
 use App\Models\Visit;
 use App\Support\AuditRecorder;
@@ -118,6 +119,9 @@ class VisitArchiveWorkflow
         }
         if (Closeout::query()->where('return_visit_id', $visit->id)->exists()) {
             $blockers[] = 'closeout_return_reference';
+        }
+        if ($visit->workItems()->exists() || ServiceTicketWorkItem::query()->where('discovered_visit_id', $visit->id)->exists()) {
+            $blockers[] = 'work_item_provenance';
         }
 
         return $blockers;

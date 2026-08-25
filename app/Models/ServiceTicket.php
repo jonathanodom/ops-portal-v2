@@ -75,6 +75,16 @@ class ServiceTicket extends Model
         return $this->hasMany(ServiceTicketFile::class);
     }
 
+    public function workItems(): HasMany
+    {
+        return $this->hasMany(ServiceTicketWorkItem::class);
+    }
+
+    public function originatingWorkItem(): HasOne
+    {
+        return $this->hasOne(ServiceTicketWorkItem::class, 'follow_up_service_ticket_id');
+    }
+
     public function projects(): BelongsToMany
     {
         return $this->belongsToMany(Project::class, 'project_service_ticket')->withPivot(['organization_id', 'linked_by_id', 'linked_at'])->withTimestamps();

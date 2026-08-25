@@ -39,6 +39,11 @@ class FieldTestServiceTicketPurger
                     'service_ticket' => 'Purge is blocked because an Invoice outside this Ticket aggregate references its operational records.',
                 ]);
             }
+            if ($graph['blockers']['external_follow_up_work_item_ids'] !== []) {
+                throw ValidationException::withMessages([
+                    'service_ticket' => 'Purge is blocked because another Ticket retains this Ticket as Work Item follow-up provenance.',
+                ]);
+            }
 
             $cleanup = FieldTestPurgeCleanup::query()->create([
                 'public_id' => (string) Str::uuid(),
@@ -74,6 +79,8 @@ class FieldTestServiceTicketPurger
             DB::table('visit_part_proposals')->whereIn('id', $ids['partIds'])->delete();
             DB::table('closeouts')->whereIn('id', $ids['closeoutIds'])->delete();
             DB::table('visit_assignments')->whereIn('id', $ids['assignmentIds'])->delete();
+            DB::table('service_ticket_work_item_visit')->whereIn('id', $ids['workItemVisitIds'])->delete();
+            DB::table('service_ticket_work_items')->whereIn('id', $ids['workItemIds'])->delete();
             DB::table('visits')->whereIn('id', $ids['visitIds'])->delete();
             DB::table('service_ticket_files')->whereIn('id', $ids['fileIds'])->delete();
             DB::table('service_ticket_notes')->whereIn('id', $ids['noteIds'])->delete();

@@ -19,6 +19,7 @@ final class ServiceTicketWorkOrderQuery
             'contact:id,organization_id,customer_id,name,role,phone,email',
             'projects' => fn ($query) => $query->select('projects.id', 'projects.project_number', 'projects.name', 'projects.status')->orderBy('projects.project_number')->limit(25),
             'files' => fn ($query) => $query->where('state', 'stored')->with('uploader:id,name')->latest()->limit(100),
+            'workItems' => fn ($query) => $query->with(['discoveredVisit:id,ticket_visit_number,return_of_visit_id', 'followUpServiceTicket:id,ticket_number'])->orderBy('id')->limit(200),
             'visits' => fn ($query) => $query->with([
                 'serviceLocation:id,name,timezone',
                 'returnOfVisit:id,ticket_visit_number',

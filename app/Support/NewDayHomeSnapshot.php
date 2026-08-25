@@ -7,6 +7,7 @@ use App\Models\BillingHandoff;
 use App\Models\Closeout;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
+use App\Models\ServiceTicketWorkItem;
 use Illuminate\Support\Collection;
 
 final class NewDayHomeSnapshot
@@ -56,6 +57,23 @@ final class NewDayHomeSnapshot
         foreach ($portal['follow_up'] ?? [] as $item) {
             $ticket = $item['ticket'];
             $items->push($this->item(3, 'portal', 'service_follow_up', $ticket->ticket_number.' · '.$ticket->title, $ticket->customer->display_name, implode(' · ', $item['labels']), 'attention', $ticket->created_at, route('office.service-tickets.show', $ticket), $ticket->id));
+        }
+
+        if ($membership->hasCapability('service_tickets.view')) {
+            ServiceTicketWorkItem::query()->forOrganization($organization->id)->where('status', 'needs_follow_up')
+                ->with('serviceTicket:id,organization_id,ticket_number')->oldest('status_changed_at')->orderBy('id')->limit(3)->get()
+                ->each(fn (ServiceTicketWorkItem $workItem) => $items->push($this->item(
+                    3,
+                    'portal',
+                    'work_item_follow_up',
+                    $workItem->serviceTicket->ticket_number.' · '.$workItem->title,
+                    'Additional Work Item',
+                    'Work Item needs follow-up',
+                    'attention',
+                    $workItem->status_changed_at ?? $workItem->updated_at,
+                    route('office.service-tickets.show', $workItem->serviceTicket).'#work-items',
+                    $workItem->id,
+                )));
         }
 
         if ($membership->hasCapability('closeouts.inspect')) {

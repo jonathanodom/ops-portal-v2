@@ -28,6 +28,7 @@ use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\ServiceTicketFile;
 use App\Models\ServiceTicketNote;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\User;
 use App\Models\Visit;
 use App\Models\VisitAssignment;
@@ -136,6 +137,23 @@ class FieldTestServiceTicketPurgeTest extends TestCase
         VisitAssignment::query()->create([
             'organization_id' => $organization->id, 'visit_id' => $visit->id,
             'organization_membership_id' => $membership->id, 'is_lead' => true,
+        ]);
+        $workItem = ServiceTicketWorkItem::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $ticket->id,
+            'discovered_visit_id' => $visit->id,
+            'origin' => 'field_discovered',
+            'title' => 'Synthetic purge Work Item',
+            'status' => 'completed',
+            'created_by_id' => $admin->id,
+            'updated_by_id' => $admin->id,
+        ]);
+        $workItem->visits()->attach($visit->id, [
+            'organization_id' => $organization->id,
+            'first_touched_by_id' => $admin->id,
+            'first_touched_at' => now(),
+            'last_touched_by_id' => $admin->id,
+            'last_touched_at' => now(),
         ]);
         $closeout = Closeout::query()->create([
             'organization_id' => $organization->id, 'visit_id' => $visit->id, 'version' => 1,
@@ -261,6 +279,8 @@ class FieldTestServiceTicketPurgeTest extends TestCase
         $this->assertDatabaseMissing('payment_transactions', ['id' => $payment->id]);
         $this->assertDatabaseMissing('service_ticket_files', ['id' => $file->id]);
         $this->assertDatabaseMissing('visit_media', ['id' => $media->id]);
+        $this->assertDatabaseMissing('service_ticket_work_items', ['id' => $workItem->id]);
+        $this->assertDatabaseMissing('service_ticket_work_item_visit', ['service_ticket_work_item_id' => $workItem->id]);
         $this->assertDatabaseMissing('audit_events', ['event_type' => 'field_test.reference']);
         $this->assertDatabaseMissing('audit_events', ['event_type' => 'field_test.metadata_reference']);
         $this->assertDatabaseHas('service_tickets', ['id' => $unrelated->id]);
@@ -277,6 +297,32 @@ class FieldTestServiceTicketPurgeTest extends TestCase
             'ticket_number' => $ticket->ticket_number, 'acknowledge' => '1',
         ])->assertNotFound();
         $this->assertDatabaseHas('service_tickets', ['id' => $unrelated->id]);
+    }
+
+    public function test_external_work_item_follow_up_provenance_blocks_target_ticket_purge(): void
+    {
+        config()->set('field_test.destructive_service_ticket_purge_enabled', true);
+        [$organization, $source] = $this->ticketGraph();
+        [, $target] = $this->ticketGraph($organization, 'NDT-ST-2026-9998');
+        [$admin] = $this->userWithRole('super_admin', $organization);
+        $item = ServiceTicketWorkItem::query()->create([
+            'organization_id' => $organization->id,
+            'service_ticket_id' => $source->id,
+            'origin' => 'office_added',
+            'title' => 'Transferred test work',
+            'status' => 'transferred',
+            'follow_up_service_ticket_id' => $target->id,
+            'created_by_id' => $admin->id,
+            'updated_by_id' => $admin->id,
+        ]);
+
+        $this->actingAs($admin)->post(route('office.service-tickets.field-test-purge.destroy', $target), [
+            'ticket_number' => $target->ticket_number,
+            'acknowledge' => '1',
+        ])->assertSessionHasErrors('service_ticket');
+
+        $this->assertDatabaseHas('service_tickets', ['id' => $target->id]);
+        $this->assertDatabaseHas('service_ticket_work_items', ['id' => $item->id, 'follow_up_service_ticket_id' => $target->id]);
     }
 
     public function test_storage_failure_is_surfaced_and_cleanup_can_be_retried(): void

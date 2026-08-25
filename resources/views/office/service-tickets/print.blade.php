@@ -35,6 +35,15 @@
             @if($ticket->customer_visible_summary)<div class="print-prose"><h3>Customer-visible summary</h3><p>{{ $ticket->customer_visible_summary }}</p></div>@endif
         </section>
 
+        <section class="print-section" aria-labelledby="work-items-heading">
+            <h2 id="work-items-heading">Additional Work Items</h2>
+            @if($ticket->workItems->isNotEmpty())
+                <table class="print-table"><thead><tr><th>Work Item</th><th>Status / Origin</th><th>Provenance</th></tr></thead><tbody>
+                    @foreach($ticket->workItems as $workItem)<tr><td><strong>{{ $workItem->title }}</strong>@if($workItem->detail)<br><span class="print-preserve-lines">{{ $workItem->detail }}</span>@endif @if($workItem->work_note)<br><em class="print-preserve-lines">Work note: {{ $workItem->work_note }}</em>@endif</td><td>{{ Str::headline($workItem->status) }}<br>{{ $workItem->origin === 'field_discovered' ? 'Field discovered' : 'Office added' }}</td><td>@if($workItem->discoveredVisit)Discovered {{ $workItem->discoveredVisit->displayNumber() }}@endif @if($workItem->followUpServiceTicket)<br>Transferred to {{ $workItem->followUpServiceTicket->ticket_number }}@endif</td></tr>@endforeach
+                </tbody></table>
+            @else<p class="print-empty">No additional Work Items have been recorded.</p>@endif
+        </section>
+
         @if($ticket->projects->isNotEmpty())
             <section class="print-section" aria-labelledby="projects-heading"><h2 id="projects-heading">Related Project Context</h2><table class="print-table"><thead><tr><th>Project</th><th>Name</th><th>Status</th></tr></thead><tbody>@foreach($ticket->projects as $project)<tr><td>{{ $project->project_number }}</td><td>{{ $project->name }}</td><td>{{ Str::headline($project->status) }}</td></tr>@endforeach</tbody></table></section>
         @endif

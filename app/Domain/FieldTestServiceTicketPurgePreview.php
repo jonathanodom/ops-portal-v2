@@ -20,6 +20,7 @@ use App\Models\ServiceTicket;
 use App\Models\ServiceTicketFile;
 use App\Models\ServiceTicketNote;
 use App\Models\ServiceTicketReopen;
+use App\Models\ServiceTicketWorkItem;
 use App\Models\Visit;
 use App\Models\VisitAssignment;
 use App\Models\VisitMedia;
@@ -57,6 +58,10 @@ final class FieldTestServiceTicketPurgePreview
         $noteIds = ServiceTicketNote::query()->where('service_ticket_id', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $reopenIds = ServiceTicketReopen::query()->where('service_ticket_id', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
         $projectLinkIds = DB::table('project_service_ticket')->where('service_ticket_id', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $workItemIds = ServiceTicketWorkItem::query()->where('service_ticket_id', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $workItemVisitIds = DB::table('service_ticket_work_item_visit')->whereIn('service_ticket_work_item_id', $workItemIds)->pluck('id')->map(fn ($id) => (int) $id)->all();
+        $externalFollowUpWorkItemIds = ServiceTicketWorkItem::query()->where('follow_up_service_ticket_id', $ticketId)
+            ->where('service_ticket_id', '!=', $ticketId)->pluck('id')->map(fn ($id) => (int) $id)->all();
 
         $externalInvoiceIds = InvoiceCloseout::query()
             ->where(fn ($query) => $query->whereIn('visit_id', $visitIds)->orWhereIn('closeout_id', $closeoutIds))
@@ -73,7 +78,8 @@ final class FieldTestServiceTicketPurgePreview
         $ids = compact(
             'visitIds', 'closeoutIds', 'reviewIds', 'handoffIds', 'invoiceIds', 'attemptIds', 'transactionIds',
             'receiptIds', 'fileIds', 'mediaIds', 'timeEntryIds', 'partIds', 'lineIds', 'invoiceCloseoutIds',
-            'acknowledgmentIds', 'assignmentIds', 'adjustmentIds', 'tripChargeIds', 'noteIds', 'reopenIds', 'projectLinkIds'
+            'acknowledgmentIds', 'assignmentIds', 'adjustmentIds', 'tripChargeIds', 'noteIds', 'reopenIds', 'projectLinkIds',
+            'workItemIds', 'workItemVisitIds'
         );
         $ids['ticketIds'] = [$ticketId];
         $auditIds = $this->referencingAuditIds((int) $ticket->organization_id, $ids);
@@ -107,10 +113,12 @@ final class FieldTestServiceTicketPurgePreview
             'invoice_pdfs' => count(array_filter($storage, fn (array $object): bool => $object['kind'] === 'invoice_pdf')),
             'receipt_pdfs' => count(array_filter($storage, fn (array $object): bool => $object['kind'] === 'receipt_pdf')),
             'operational_incidents' => count($incidentIds), 'private_objects' => count($storage),
+            'work_items' => count($workItemIds), 'work_item_visit_touches' => count($workItemVisitIds),
         ];
 
         return ['ids' => $ids, 'counts' => $counts, 'storage' => $storage, 'blockers' => [
             'external_invoice_ids' => $externalInvoiceIds,
+            'external_follow_up_work_item_ids' => $externalFollowUpWorkItemIds,
         ]];
     }
 
@@ -150,6 +158,7 @@ final class FieldTestServiceTicketPurgePreview
             InvoiceLine::class => 'lineIds', InvoiceCloseout::class => 'invoiceCloseoutIds',
             InvoiceAcknowledgment::class => 'acknowledgmentIds', PaymentAttempt::class => 'attemptIds',
             PaymentTransaction::class => 'transactionIds', PaymentReceipt::class => 'receiptIds', ServiceTicketFile::class => 'fileIds',
+            ServiceTicketWorkItem::class => 'workItemIds',
         ];
         $subjects = [];
         foreach ($mapping as $class => $key) {
@@ -192,6 +201,7 @@ final class FieldTestServiceTicketPurgePreview
             'proposal_id' => 'partIds', 'source_part_proposal_id' => 'partIds',
             'time_entry_id' => 'timeEntryIds', 'visit_time_entry_id' => 'timeEntryIds', 'source_time_entry_id' => 'timeEntryIds',
             'assignment_id' => 'assignmentIds', 'assignment_ids' => 'assignmentIds', 'reopen_id' => 'reopenIds',
+            'work_item_id' => 'workItemIds', 'service_ticket_work_item_id' => 'workItemIds',
         ];
         foreach ($metadata as $key => $value) {
             if (isset($keys[$key]) && is_numeric($value) && in_array((int) $value, $ids[$keys[$key]] ?? [], true)) {

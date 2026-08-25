@@ -6,10 +6,59 @@
         <div><p class="font-bold text-brand-blue">{{ $ticket->ticket_number }}</p><h1 class="mt-1 text-3xl font-bold text-slate-950">{{ $ticket->title }}</h1><p class="mt-2 text-sm text-slate-500">{{ ucfirst($ticket->priority) }} priority · {{ ucfirst(str_replace('_',' ',$ticket->status)) }}</p><p class="mt-1 text-sm font-semibold text-slate-700">{{ $purposes[$ticket->purpose] ?? ucfirst(str_replace('_',' ',$ticket->purpose)) }} · {{ $billingDispositions[$ticket->billing_disposition] ?? ucfirst(str_replace('_',' ',$ticket->billing_disposition)) }}</p></div>
         <div class="flex flex-wrap gap-2"><a href="{{ route('office.service-tickets.print', $ticket) }}" class="button-secondary">Print Work Order</a>@if($activeMembership->hasCapability('dispatch.manage'))<a href="{{ route('office.service-tickets.edit', $ticket) }}" class="button-secondary">Edit ticket</a>@if(in_array($ticket->status, ['open', 'on_hold'], true))<a href="{{ route('office.service-tickets.visits.create', $ticket) }}" class="button-primary">Add visit</a>@endif @endif</div>
     </div>
+    @if($ticket->originatingWorkItem)
+        <div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">Created from Work Item on <a class="font-bold underline" href="{{ route('office.service-tickets.show', $ticket->originatingWorkItem->serviceTicket) }}#work-items">{{ $ticket->originatingWorkItem->serviceTicket->ticket_number }}</a>.</div>
+    @endif
     <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
         <div class="space-y-6">
             <section class="surface p-5"><h2 class="text-lg font-bold">Customer & location</h2><p class="mt-3 font-bold">{{ $ticket->customer->display_name }}</p><a class="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-brand-blue" href="{{ route('office.locations.show', $ticket->serviceLocation) }}">{{ $ticket->serviceLocation->name }} · {{ $ticket->serviceLocation->formattedAddress() }}</a>@if($ticket->contact)<p class="mt-2 text-sm text-slate-600">Contact: {{ $ticket->contact->name }} @if($ticket->contact->phone)· {{ $ticket->contact->phone }}@endif</p>@endif</section>
             <section class="surface p-5"><h2 class="text-lg font-bold">Work scope</h2><p class="mt-3 whitespace-pre-line text-slate-700">{{ $ticket->description ?: 'No work scope recorded.' }}</p><div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2"><div><p class="text-xs font-bold uppercase tracking-[.1em] text-slate-500">Purpose</p><p class="mt-1 font-semibold">{{ $purposes[$ticket->purpose] ?? ucfirst(str_replace('_',' ',$ticket->purpose)) }}</p></div><div><p class="text-xs font-bold uppercase tracking-[.1em] text-slate-500">Billing disposition</p><p class="mt-1 font-semibold">{{ $billingDispositions[$ticket->billing_disposition] ?? ucfirst(str_replace('_',' ',$ticket->billing_disposition)) }}</p></div></div>@if($ticket->customer_visible_summary)<h3 class="mt-5 text-sm font-bold uppercase tracking-[.1em] text-slate-500">Customer-visible summary</h3><p class="mt-2 whitespace-pre-line text-slate-700">{{ $ticket->customer_visible_summary }}</p>@endif</section>
+            <section id="work-items" class="surface scroll-mt-6 p-5">
+                <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-wide text-slate-500">Additional work</p><h2 class="text-lg font-bold">Work Items</h2></div><span class="status-active">{{ $ticket->workItems->count() }} recorded</span></div>
+                <div class="mt-5 space-y-4">
+                    @forelse($ticket->workItems as $workItem)
+                        <article class="rounded-lg border border-slate-200 p-4">
+                            <div class="flex flex-wrap items-start justify-between gap-2"><h3 class="min-w-0 break-words font-bold">{{ $workItem->title }}</h3><span class="status-active">{{ Str::headline($workItem->status) }}</span></div>
+                            <p class="mt-1 text-xs font-semibold text-slate-500">{{ $workItem->origin === 'field_discovered' ? 'Field discovered' : 'Office added' }}@if($workItem->discoveredVisit) · {{ $workItem->discoveredVisit->displayLabel() }} @endif</p>
+                            @if($workItem->detail)<p class="mt-3 whitespace-pre-line break-words text-sm text-slate-700">{{ $workItem->detail }}</p>@endif
+                            @if($workItem->work_note)<p class="mt-3 whitespace-pre-line break-words rounded-lg bg-slate-50 p-3 text-sm"><strong>Work note:</strong> {{ $workItem->work_note }}</p>@endif
+                            <p class="mt-3 text-xs font-semibold text-slate-500">Visits touched: {{ $workItem->visits->map->displayNumber()->join(', ') ?: 'None' }}</p>
+                            @if($workItem->followUpServiceTicket)<a class="mt-3 inline-flex min-h-11 items-center font-bold text-brand-blue" href="{{ route('office.service-tickets.show', $workItem->followUpServiceTicket) }}">Transferred to {{ $workItem->followUpServiceTicket->ticket_number }}</a>@endif
+                            @if($activeMembership->hasCapability('dispatch.manage') && in_array($ticket->status, ['open', 'on_hold'], true) && $workItem->status !== 'transferred')
+                                <details class="mt-4 border-t border-slate-200 pt-3"><summary class="min-h-11 cursor-pointer py-3 font-bold text-brand-blue">Edit Work Item</summary>
+                                    <form method="POST" action="{{ route('office.service-tickets.work-items.update', [$ticket, $workItem]) }}" class="space-y-3">@csrf @method('PUT')
+                                        <label class="form-label" for="office_work_item_title_{{ $workItem->id }}">Title</label><input class="form-input" id="office_work_item_title_{{ $workItem->id }}" name="title" value="{{ $workItem->title }}" required maxlength="255">
+                                        <label class="form-label" for="office_work_item_detail_{{ $workItem->id }}">Detail</label><textarea class="form-textarea" id="office_work_item_detail_{{ $workItem->id }}" name="detail" maxlength="10000">{{ $workItem->detail }}</textarea>
+                                        <label class="form-label" for="office_work_item_note_{{ $workItem->id }}">Work note</label><textarea class="form-textarea" id="office_work_item_note_{{ $workItem->id }}" name="work_note" maxlength="10000">{{ $workItem->work_note }}</textarea>
+                                        <label class="form-label" for="office_work_item_status_{{ $workItem->id }}">Status</label><select class="form-input" id="office_work_item_status_{{ $workItem->id }}" name="status">@foreach(['open'=>'Open','completed'=>'Completed','needs_follow_up'=>'Needs follow-up','canceled'=>'Canceled'] as $value=>$label)<option value="{{ $value }}" @selected($workItem->status===$value)>{{ $label }}</option>@endforeach</select>
+                                        <button class="button-secondary w-full">Save Work Item</button>
+                                    </form>
+                                </details>
+                                @if($workItem->status === 'needs_follow_up')
+                                    <details class="mt-3 rounded-lg border border-orange-200 bg-orange-50 p-3"><summary class="min-h-11 cursor-pointer py-2 font-bold text-orange-900">Create follow-up Service Ticket</summary>
+                                        <form method="POST" action="{{ route('office.service-tickets.work-items.transfer', [$ticket, $workItem]) }}" class="mt-3 space-y-3">@csrf
+                                            <label class="form-label" for="transfer_priority_{{ $workItem->id }}">Priority</label><select class="form-input" id="transfer_priority_{{ $workItem->id }}" name="priority">@foreach($priorities as $value=>$label)<option value="{{ $value }}" @selected($ticket->priority===$value)>{{ $label }}</option>@endforeach</select>
+                                            <label class="form-label" for="transfer_purpose_{{ $workItem->id }}">Purpose</label><select class="form-input" id="transfer_purpose_{{ $workItem->id }}" name="purpose">@foreach($purposes as $value=>$label)<option value="{{ $value }}" @selected($value==='service_call')>{{ $label }}</option>@endforeach</select>
+                                            <label class="form-label" for="transfer_billing_{{ $workItem->id }}">Billing disposition</label><select class="form-input" id="transfer_billing_{{ $workItem->id }}" name="billing_disposition" required><option value="">Choose billing disposition</option>@foreach($billingDispositions as $value=>$label)<option value="{{ $value }}">{{ $label }}</option>@endforeach</select>
+                                            <button class="button-action w-full">Create follow-up Ticket</button>
+                                        </form>
+                                    </details>
+                                @endif
+                            @endif
+                        </article>
+                    @empty<p class="rounded-lg border border-dashed border-slate-300 p-4 text-sm text-slate-500">No additional Work Items have been recorded.</p>@endforelse
+                </div>
+                @if($activeMembership->hasCapability('dispatch.manage') && in_array($ticket->status, ['open', 'on_hold'], true))
+                    <details class="mt-5 rounded-lg border border-blue-200 bg-blue-50 p-4"><summary class="min-h-11 cursor-pointer py-2 font-bold text-brand-blue">Add Work Item</summary>
+                        <form method="POST" action="{{ route('office.service-tickets.work-items.store', $ticket) }}" class="mt-3 space-y-3">@csrf<input type="hidden" name="status" value="open">
+                            <label class="form-label" for="office_new_work_item_title">Title</label><input class="form-input" id="office_new_work_item_title" name="title" value="{{ old('title') }}" required maxlength="255">
+                            <label class="form-label" for="office_new_work_item_detail">Detail</label><textarea class="form-textarea" id="office_new_work_item_detail" name="detail" maxlength="10000">{{ old('detail') }}</textarea>
+                            <label class="form-label" for="office_new_work_item_note">Work note</label><textarea class="form-textarea" id="office_new_work_item_note" name="work_note" maxlength="10000">{{ old('work_note') }}</textarea>
+                            <button class="button-primary w-full">Add Work Item</button>
+                        </form>
+                    </details>
+                @endif
+            </section>
             <section class="surface p-5" data-ticket-files>
                 <div>
                     <h2 class="text-lg font-bold">Ticket files</h2>
