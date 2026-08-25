@@ -75,6 +75,11 @@ class Visit extends Model
         return $this->belongsTo(Closeout::class, 'current_closeout_id');
     }
 
+    public function closeouts(): HasMany
+    {
+        return $this->hasMany(Closeout::class)->orderBy('version');
+    }
+
     public function timeEntries(): HasMany
     {
         return $this->hasMany(VisitTimeEntry::class);

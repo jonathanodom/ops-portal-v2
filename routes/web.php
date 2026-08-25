@@ -39,6 +39,8 @@ use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ProjectWorkbookPrintController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
+use App\Http\Controllers\Office\ServiceTicketDocumentController;
+use App\Http\Controllers\Office\ServiceTicketDocumentSignatureController;
 use App\Http\Controllers\Office\ServiceTicketFileController;
 use App\Http\Controllers\Office\ServiceTicketPrintController;
 use App\Http\Controllers\Office\ServiceTicketWorkItemController;
@@ -130,6 +132,13 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/field-test-purge-cleanups/{cleanup}', [FieldTestServiceTicketPurgeController::class, 'showCleanup'])->name('field-test-purge-cleanups.show');
                 Route::post('/field-test-purge-cleanups/{cleanup}/retry', [FieldTestServiceTicketPurgeController::class, 'retryCleanup'])->name('field-test-purge-cleanups.retry');
                 Route::get('/service-tickets/{serviceTicket}/print', ServiceTicketPrintController::class)->whereNumber('serviceTicket')->name('service-tickets.print');
+                Route::prefix('/service-tickets/{serviceTicket}/documents')->whereNumber('serviceTicket')->name('service-tickets.documents.')->group(function (): void {
+                    Route::get('/technician-work-order', [ServiceTicketDocumentController::class, 'technician'])->name('technician-work-order');
+                    Route::get('/completion-summary', [ServiceTicketDocumentController::class, 'completion'])->name('completion-summary');
+                    Route::get('/customer-service-record', [ServiceTicketDocumentController::class, 'customer'])->name('customer-service-record');
+                    Route::get('/detailed-service-report', [ServiceTicketDocumentController::class, 'detailed'])->name('detailed-service-report');
+                    Route::get('/signatures/{signature}', ServiceTicketDocumentSignatureController::class)->whereNumber('signature')->name('signature');
+                });
                 Route::get('/service-ticket-files/{file}', [ServiceTicketFileController::class, 'show'])->whereNumber('file')->name('service-ticket-files.show');
                 Route::get('/dispatch', [DispatchController::class, 'index'])->name('dispatch.index');
             });

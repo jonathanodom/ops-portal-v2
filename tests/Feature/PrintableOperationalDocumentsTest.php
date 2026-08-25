@@ -57,8 +57,9 @@ class PrintableOperationalDocumentsTest extends TestCase
         $queryCount = count(DB::getQueryLog());
 
         $response->assertOk()->assertHeader('cache-control', 'no-store, private')->assertHeader('x-content-type-options', 'nosniff')->assertHeader('x-robots-tag', 'noindex, nofollow')
-            ->assertSee('SERVICE WORK ORDER')->assertSee($ticket->ticket_number)->assertSee('Acme Dental')->assertSee('Main Office')->assertSee('Jordan Customer')->assertSee('Replace network switch')
-            ->assertSee('NDT-PRJ-2026-0042')->assertSee($visit->displayLabel())->assertSee('Lead: '.$admin->name)->assertSee('Connectivity restored')->assertSee('Cat6 patch cable')->assertSee('rack-plan.pdf')
+            ->assertSee('TECHNICIAN WORK ORDER')->assertSee($ticket->ticket_number)->assertSee('Acme Dental')->assertSee('Main Office')->assertSee('Jordan Customer')->assertSee('Replace network switch')
+            ->assertSee($visit->displayLabel())->assertSee('Lead: '.$admin->name)->assertSee('Cat6 patch cable')->assertSee('Hard-Copy Customer Acknowledgment')->assertSee('Field Notes')
+            ->assertDontSee('NDT-PRJ-2026-0042')->assertDontSee('Connectivity restored')->assertDontSee('rack-plan.pdf')
             ->assertDontSee('secret/ticket-file-key.pdf')->assertDontSee('secret/photo-key.jpg')->assertDontSee('AUDIT-ONLY-SECRET')->assertDontSee('Invoice balance')->assertDontSee('Office navigation');
         $this->assertLessThanOrEqual(28, $queryCount, "Work Order used {$queryCount} queries");
         $this->assertSame($before, [$ticket->fresh()->updated_at->toISOString(), $visit->fresh()->updated_at->toISOString(), $project->fresh()->updated_at->toISOString()]);
@@ -72,7 +73,7 @@ class PrintableOperationalDocumentsTest extends TestCase
         [, $technician] = $this->member('technician', $organization);
         [$ticket] = $this->ticketScenario($organization, $admin, $membership);
 
-        $this->actingAs($billing)->get(route('office.service-tickets.print', $ticket))->assertOk()->assertSee('Detailed field evidence is restricted')->assertDontSee('Connectivity restored');
+        $this->actingAs($billing)->get(route('office.service-tickets.print', $ticket))->assertOk()->assertSee('TECHNICIAN WORK ORDER')->assertDontSee('Connectivity restored');
         $this->actingAs($technician)->get(route('office.service-tickets.print', $ticket))->assertForbidden();
         $this->actingAs($otherAdmin)->get(route('office.service-tickets.print', $ticket))->assertNotFound();
         $this->assertNotSame($organization->id, $otherOrganization->id);
@@ -123,7 +124,7 @@ class PrintableOperationalDocumentsTest extends TestCase
         [$ticket] = $this->plainTicket($organization);
         $project = Project::factory()->create(['organization_id' => $organization->id, 'project_number' => 'NDT-PRJ-2026-0100']);
 
-        $this->actingAs($reviewer)->get(route('office.service-tickets.show', $ticket))->assertOk()->assertSee('Print Work Order')->assertDontSee('Edit ticket');
+        $this->actingAs($reviewer)->get(route('office.service-tickets.show', $ticket))->assertOk()->assertSee('Documents')->assertSee('Technician Work Order')->assertSee('Completion Summary')->assertSee('Customer Service Record')->assertSee('Detailed Service Report')->assertDontSee('Edit ticket');
         $this->actingAs($reviewer)->get(route('office.projects.show', $project))->assertOk()->assertSee('Print Project Workbook')->assertDontSee('Edit Project');
     }
 

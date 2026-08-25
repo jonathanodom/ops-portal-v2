@@ -76,19 +76,27 @@ test.describe('Printable operational documents', () => {
             expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
             await page.emulateMedia({ media: 'screen' });
 
-            await page.goto('/office/service-tickets');
-            await page.getByRole('link', { name: /^NDT-ST-/ }).first().click();
-            await page.getByRole('link', { name: 'Print Work Order' }).click();
-            await expect(page.getByText('SERVICE WORK ORDER', { exact: true })).toBeVisible();
-            await expect(page.getByRole('button', { name: 'Print' })).toBeVisible();
-            await expect(page.locator('nav[aria-label="Office"]')).toHaveCount(0);
-            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
-            await expectAccessible(page);
-            await capturePrintDocument(page, `service-work-order-${viewport.width}x${viewport.height}.png`);
-            await page.emulateMedia({ media: 'print' });
-            await expect(page.locator('.print-toolbar')).toBeHidden();
-            expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
-            await page.emulateMedia({ media: 'screen' });
+            for (const profile of [
+                ['Technician Work Order', 'TECHNICIAN WORK ORDER', 'technician-work-order'],
+                ['Completion Summary', 'COMPLETION SUMMARY', 'completion-summary'],
+                ['Customer Service Record', 'CUSTOMER SERVICE RECORD', 'customer-service-record'],
+                ['Detailed Service Report', 'DETAILED SERVICE REPORT', 'detailed-service-report'],
+            ]) {
+                await page.goto('/office/service-tickets');
+                await page.getByRole('link', { name: /^NDT-ST-/ }).first().click();
+                await page.getByText('Documents', { exact: true }).click();
+                await page.getByRole('link', { name: new RegExp(`^${profile[0]}`) }).click();
+                await expect(page.getByText(profile[1], { exact: true })).toBeVisible();
+                await expect(page.getByRole('button', { name: 'Print / Save as PDF' })).toBeVisible();
+                await expect(page.locator('nav[aria-label="Office"]')).toHaveCount(0);
+                expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+                await expectAccessible(page);
+                await capturePrintDocument(page, `${profile[2]}-${viewport.width}x${viewport.height}.png`);
+                await page.emulateMedia({ media: 'print' });
+                await expect(page.locator('.print-toolbar')).toBeHidden();
+                expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
+                await page.emulateMedia({ media: 'screen' });
+            }
         }
     });
 });
