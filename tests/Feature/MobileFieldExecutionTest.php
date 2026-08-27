@@ -479,6 +479,30 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertSame($organization->id, $visit->organization_id);
     }
 
+    public function test_workspace_v2_saved_acknowledgment_fallback_cannot_be_blocked_by_hidden_signature_controls(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+
+        $this->actingAs($lead)->postJson(route('field.visits.draft', $visit), $this->resolvedDraft())
+            ->assertOk();
+
+        $response = $this->actingAs($lead)->get(route('field.visits.workspace-v2', $visit->fresh()))
+            ->assertOk()
+            ->assertSee('Acknowledgment fallback selected');
+
+        $this->assertMatchesRegularExpression(
+            '/<input(?=[^>]*data-v2-acknowledgment-confirmation)(?=[^>]*\bdisabled\b)(?![^>]*\brequired\b)[^>]*>/',
+            $response->getContent(),
+        );
+
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), [
+            'submission_token' => (string) Str::uuid(),
+        ])->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('submitted', $visit->fresh()->currentCloseout->status);
+        $this->assertSame('pending_closeout', $visit->fresh()->status);
+    }
+
     public function test_workspace_v2_json_draft_and_photo_are_safe_and_visible_in_classic(): void
     {
         Storage::fake('local');

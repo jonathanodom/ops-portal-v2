@@ -70,8 +70,21 @@ document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
             group.hidden = !group.dataset.v2Outcomes.split(' ').includes(outcome);
         });
         const fallback = closeoutForm?.querySelector('[name="ack_unavailable_category"]')?.value;
-        root.querySelector('[data-v2-signature-path]')?.classList.toggle('hidden', Boolean(fallback));
-        root.querySelector('[data-v2-fallback-path]')?.classList.toggle('hidden', !fallback);
+        const signaturePath = root.querySelector('[data-v2-signature-path]');
+        const fallbackPath = root.querySelector('[data-v2-fallback-path]');
+        const signatureRequired = ['resolved', 'needs_return_trip', 'on_hold'].includes(outcome) && !fallback;
+        const confirmation = signaturePath?.querySelector('[data-v2-acknowledgment-confirmation]');
+
+        if (signaturePath) {
+            signaturePath.hidden = !signatureRequired;
+            signaturePath.classList.toggle('hidden', !signatureRequired);
+            signaturePath.querySelectorAll('input, button').forEach((control) => control.disabled = !signatureRequired);
+        }
+        if (confirmation) confirmation.required = signatureRequired;
+        if (fallbackPath) {
+            fallbackPath.hidden = !fallback;
+            fallbackPath.classList.toggle('hidden', !fallback);
+        }
     };
     closeoutForm?.addEventListener('change', updateOutcome);
     updateOutcome();

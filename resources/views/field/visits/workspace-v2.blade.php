@@ -8,6 +8,7 @@
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
         $inheritedMedia = ($versions ?? collect())->where('id', '!=', $closeout?->id)->flatMap->media->where('state', 'stored');
         $closeoutMissing = collect($closeoutReadinessErrors ?? ['outcome' => 'Choose an outcome.']);
+        $signaturePath = $closeout && blank($closeout->ack_unavailable_category) && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true);
         $activeTimer = $closeout?->timeEntries?->first(fn ($entry) => $entry->active_user_id === auth()->id());
         $workItemWritable = in_array($visit->serviceTicket->status, ['open', 'on_hold'], true)
             && in_array($visit->status, ['on_site', 'returned_for_correction'], true)
