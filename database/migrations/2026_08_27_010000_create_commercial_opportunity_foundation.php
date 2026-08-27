@@ -39,7 +39,7 @@ return new class extends Migration
             $table->boolean('active')->default(true);
             $table->timestamps();
             $table->unique(['organization_id', 'semantic_kind']);
-            $table->index(['organization_id', 'active', 'sort_order']);
+            $table->index(['organization_id', 'active', 'sort_order'], 'opp_stage_org_active_sort_idx');
         });
 
         Schema::create('opportunities', function (Blueprint $table): void {
@@ -68,9 +68,9 @@ return new class extends Migration
             $table->foreignId('updated_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
             $table->unique(['organization_id', 'opportunity_number']);
-            $table->index(['organization_id', 'stage_id', 'updated_at']);
-            $table->index(['organization_id', 'owner_user_id', 'estimated_close_on']);
-            $table->index(['organization_id', 'customer_id']);
+            $table->index(['organization_id', 'stage_id', 'updated_at'], 'opp_org_stage_updated_idx');
+            $table->index(['organization_id', 'owner_user_id', 'estimated_close_on'], 'opp_org_owner_close_idx');
+            $table->index(['organization_id', 'customer_id'], 'opp_org_customer_idx');
         });
 
         Schema::create('opportunity_tasks', function (Blueprint $table): void {
@@ -86,8 +86,8 @@ return new class extends Migration
             $table->foreignId('created_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->foreignId('updated_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
-            $table->index(['organization_id', 'assigned_to_user_id', 'status', 'due_on']);
-            $table->index(['organization_id', 'opportunity_id', 'status']);
+            $table->index(['organization_id', 'assigned_to_user_id', 'status', 'due_on'], 'opp_task_org_assignee_status_due_idx');
+            $table->index(['organization_id', 'opportunity_id', 'status'], 'opp_task_org_opp_status_idx');
         });
 
         Schema::create('opportunity_activities', function (Blueprint $table): void {
@@ -99,7 +99,7 @@ return new class extends Migration
             $table->text('body')->nullable();
             $table->timestamp('occurred_at');
             $table->timestamps();
-            $table->index(['organization_id', 'opportunity_id', 'occurred_at']);
+            $table->index(['organization_id', 'opportunity_id', 'occurred_at'], 'opp_activity_org_opp_occurred_idx');
         });
 
         Schema::create('opportunity_attachments', function (Blueprint $table): void {
@@ -117,7 +117,7 @@ return new class extends Migration
             $table->timestamp('removed_at')->nullable();
             $table->foreignId('removed_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
-            $table->index(['organization_id', 'opportunity_id', 'state']);
+            $table->index(['organization_id', 'opportunity_id', 'state'], 'opp_attachment_org_opp_state_idx');
         });
 
         Schema::create('commercial_user_preferences', function (Blueprint $table): void {
