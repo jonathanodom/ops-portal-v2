@@ -1172,6 +1172,15 @@ test.describe('mobile beta', () => {
         await finish.getByRole('button', { name: '2 Work' }).click();
         await expect(finish.getByLabel('Exceptions')).toBeVisible();
         await expect(finish.getByLabel('Return reason')).toBeHidden();
+        await finish.getByRole('button', { name: '4 Acknowledgment' }).click();
+        const acknowledgmentConfirmation = finish.locator('[data-v2-acknowledgment-confirmation]');
+        await expect(acknowledgmentConfirmation).toBeEnabled();
+        await expect(acknowledgmentConfirmation).toHaveAttribute('required', '');
+        await finish.locator('[name="ack_unavailable_category"]').selectOption('remote_service');
+        await expect(acknowledgmentConfirmation).toBeDisabled();
+        await expect(acknowledgmentConfirmation).not.toHaveAttribute('required', '');
+        expect(await finish.locator('[data-v2-submit-form]').evaluate((form) => form.checkValidity())).toBeTruthy();
+        await finish.locator('[name="ack_unavailable_category"]').selectOption('');
         await finish.getByRole('button', { name: 'Close' }).click();
 
         await page.getByRole('link', { name: 'Switch to classic workspace' }).click();
