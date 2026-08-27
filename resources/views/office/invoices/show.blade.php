@@ -7,6 +7,15 @@
 
     @include('office.invoices._billing-summary')
 
+    @if(! $invoice->isDirect())
+        @include('invoices._service-details', [
+            'serviceContext' => $serviceContext,
+            'serviceContextMode' => $serviceContextMode,
+            'capturedAt' => $invoice->serviceSnapshot?->captured_at,
+            'ticketUrl' => route('office.service-tickets.show', $invoice->service_ticket_id),
+        ])
+    @endif
+
     <div class="invoice-workspace" data-invoice-workspace>
         @include('office.invoices._line-workspace')
         @include('office.invoices._lower-section')

@@ -18,7 +18,7 @@ class InvoicePresentationController extends Controller
 {
     public function show(Request $request, string $invoice): View
     {
-        $invoice = $this->invoice($request, $invoice)->load(['organization', 'serviceTicket', 'serviceLocation', 'lines', 'acknowledgments', 'sellerLogoAsset', 'paymentAttempts', 'paymentTransactions.receipt']);
+        $invoice = $this->invoice($request, $invoice)->load(['organization', 'serviceTicket', 'serviceLocation', 'serviceSnapshot', 'lines', 'acknowledgments', 'sellerLogoAsset', 'paymentAttempts', 'paymentTransactions.receipt']);
         Gate::authorize('present', $invoice);
         abort_unless($invoice->status === 'issued', 404);
 

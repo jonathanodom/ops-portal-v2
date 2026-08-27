@@ -94,7 +94,7 @@ final class LocalExampleResetter
             'ServiceTicketNote', 'ServiceTicketReopen', 'ServiceTicketFile', 'Visit', 'VisitAssignment',
             'VisitTimeEntry', 'VisitMedia', 'VisitPartProposal', 'Closeout', 'CloseoutReview',
             'CloseoutReviewAdjustment', 'CloseoutReviewTripCharge', 'BillingHandoff', 'Invoice',
-            'InvoiceLine', 'InvoiceAcknowledgment', 'PaymentAttempt', 'PaymentTransaction',
+            'InvoiceLine', 'InvoiceAcknowledgment', 'InvoiceServiceSnapshot', 'PaymentAttempt', 'PaymentTransaction',
             'PaymentReceipt', 'Project', 'ProjectWorkstream', 'ProjectTask', 'ProjectMilestone', 'ProjectNote',
         ];
         AuditEvent::query()->where('organization_id', $organization->id)
