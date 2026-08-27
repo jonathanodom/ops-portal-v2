@@ -162,6 +162,8 @@ Release Candidate V1.0 validation, data-preservation evidence, lifecycle changes
 
 The next additive product track connects Customers and Catalog to Opportunities, revisioned Quotes, customer-facing Proposals, acceptance, Change Orders, Project conversion, material/labor planning, and milestone Billing. The approved product decisions, bounded-context rules, proposed schema, authorization model, calculation order, implementation checkpoints, and field-test isolation requirements are documented in [Commercial Operations V1 Architecture](docs/COMMERCIAL_OPERATIONS_V1_ARCHITECTURE.md). The document is an implementation contract only; it does not authorize deployment or change the current field lifecycle.
 
+The implemented Opportunity foundation and its Phase 1 owner acceptance gate are documented in [Commercial Operations Phase 1](docs/COMMERCIAL_OPERATIONS_PHASE_1.md).
+
 ## Quality commands
 
 ```powershell

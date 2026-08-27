@@ -22,6 +22,7 @@ use App\Http\Controllers\Office\CatalogServiceAddonController;
 use App\Http\Controllers\Office\CatalogServiceController;
 use App\Http\Controllers\Office\CatalogServiceVariantController;
 use App\Http\Controllers\Office\CloseoutReviewController;
+use App\Http\Controllers\Office\CommercialSettingsController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\CustomerServiceEnrollmentController;
@@ -31,6 +32,8 @@ use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\OfficeSearchController;
 use App\Http\Controllers\Office\OperationalHealthController;
+use App\Http\Controllers\Office\OpportunityAttachmentController;
+use App\Http\Controllers\Office\OpportunityController;
 use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
@@ -102,6 +105,19 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->group(function (): void {
             Route::get('/', [OfficeDashboardController::class, 'index'])->name('home');
             Route::get('/search', OfficeSearchController::class)->middleware('capability:customers.view')->name('search');
+            Route::prefix('opportunities')->name('opportunities.')->middleware('capability:opportunities.view')->group(function (): void {
+                Route::get('/', [OpportunityController::class, 'index'])->name('index');
+                Route::get('/create', [OpportunityController::class, 'create'])->middleware('capability:opportunities.manage')->name('create');
+                Route::post('/', [OpportunityController::class, 'store'])->middleware('capability:opportunities.manage')->name('store');
+                Route::get('/{opportunity}', [OpportunityController::class, 'show'])->whereNumber('opportunity')->name('show');
+                Route::put('/{opportunity}', [OpportunityController::class, 'update'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('update');
+                Route::post('/{opportunity}/tasks', [OpportunityController::class, 'storeTask'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('tasks.store');
+                Route::put('/{opportunity}/tasks/{task}', [OpportunityController::class, 'updateTask'])->whereNumber(['opportunity', 'task'])->middleware('capability:opportunities.manage')->name('tasks.update');
+                Route::post('/{opportunity}/activities', [OpportunityController::class, 'storeActivity'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('activities.store');
+                Route::post('/{opportunity}/attachments', [OpportunityAttachmentController::class, 'store'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('attachments.store');
+                Route::get('/{opportunity}/attachments/{attachment}', [OpportunityAttachmentController::class, 'show'])->whereNumber(['opportunity', 'attachment'])->name('attachments.show');
+                Route::delete('/{opportunity}/attachments/{attachment}', [OpportunityAttachmentController::class, 'destroy'])->whereNumber(['opportunity', 'attachment'])->middleware('capability:opportunities.manage')->name('attachments.destroy');
+            });
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');
                 Route::get('/create', [ProjectController::class, 'create'])->middleware('capability:projects.manage')->name('create');
@@ -219,6 +235,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/invoices/{invoice}/receipts/{receipt}/link', [PaymentController::class, 'receiptLink'])->whereNumber(['invoice', 'receipt'])->name('invoices.receipts.link');
             Route::post('/invoices/{invoice}/receipts/{receipt}/retry', [PaymentController::class, 'retryReceipt'])->whereNumber(['invoice', 'receipt'])->name('invoices.receipts.retry');
             Route::get('/settings', [OrganizationSettingsController::class, 'index'])->name('settings.index');
+            Route::get('/settings/commercial', [CommercialSettingsController::class, 'edit'])->middleware('capability:opportunities.admin')->name('settings.commercial.edit');
+            Route::put('/settings/commercial', [CommercialSettingsController::class, 'update'])->middleware('capability:opportunities.admin')->name('settings.commercial.update');
             Route::get('/settings/billing', [BillingSettingsController::class, 'edit'])->name('settings.billing.edit');
             Route::post('/settings/billing/payments/square/connect', [SquareConnectionController::class, 'start'])->name('settings.billing.square.connect');
             Route::get('/settings/billing/payments/square/callback', [SquareConnectionController::class, 'callback'])->name('settings.billing.square.callback');

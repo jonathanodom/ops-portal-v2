@@ -55,6 +55,9 @@ class AccessControlSeeder extends Seeder
         'projects.manage' => 'Create and update Projects, Workstreams, and Milestones',
         'projects.tasks.manage' => 'Create and update Project Tasks and internal notes',
         'projects.admin' => 'Administer Project relationships and history',
+        'opportunities.view' => 'View the Commercial Opportunity pipeline',
+        'opportunities.manage' => 'Create and manage Opportunities, follow-ups, activity, and files',
+        'opportunities.admin' => 'Configure the Opportunity pipeline and perform protected lifecycle overrides',
     ];
 
     private const ROLES = [
@@ -72,6 +75,7 @@ class AccessControlSeeder extends Seeder
                 'catalog.view', 'catalog.use',
                 'subscriptions.view', 'subscriptions.manage',
                 'projects.view', 'projects.manage', 'projects.tasks.manage', 'projects.admin',
+                'opportunities.view', 'opportunities.manage',
             ],
         ],
         'technician' => [

@@ -50,6 +50,11 @@ class Customer extends Model
         return $this->hasMany(Project::class);
     }
 
+    public function opportunities(): HasMany
+    {
+        return $this->hasMany(Opportunity::class);
+    }
+
     public function invoices(): HasMany
     {
         return $this->hasMany(Invoice::class);

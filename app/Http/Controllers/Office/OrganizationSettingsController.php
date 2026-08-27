@@ -30,6 +30,9 @@ class OrganizationSettingsController extends Controller
         if ($membership->hasCapability('payments.view')) {
             return redirect()->route('office.settings.billing.edit');
         }
+        if ($membership->hasCapability('opportunities.admin')) {
+            return redirect()->route('office.settings.commercial.edit');
+        }
 
         abort(403);
     }
