@@ -678,6 +678,9 @@ test.describe('desktop beta', () => {
 
             await page.goto('/office/invoices/1');
             await expect(page.locator('[data-office-width="workspace"]')).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'Service Details — locked at issuance' })).toBeVisible();
+            await page.locator('summary').filter({ hasText: 'View service details' }).click();
+            await expect(page.getByRole('heading', { name: 'Visit history' })).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             await expect(page.locator('[data-invoice-command-bar]')).toBeVisible();
             const columns = await page.locator('[data-invoice-workspace]').evaluate((element) => getComputedStyle(element).gridTemplateColumns.split(' ').length);
@@ -1205,10 +1208,19 @@ test.describe('mobile beta', () => {
         await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
         await page.getByRole('link', { name: 'Customer view' }).click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Service Details' })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'Visit history' })).toBeVisible();
         await expect(page.getByText('Invoice acknowledgment')).toBeVisible();
         await expect(page.getByText('Internal billing note')).toHaveCount(0);
-        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
-        await expectAccessible(page);
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+        ]) {
+            await page.setViewportSize(viewport);
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+        }
         await expect(page.locator('#contact_name')).toHaveCSS('min-height', '44px');
         const shortControls = await page.locator('button, input, a.button-primary, a.button-secondary').evaluateAll((elements) => elements
             .filter((element) => element.offsetParent !== null)

@@ -37,6 +37,7 @@ class UnissuedInvoiceDeletionWorkflow
             && ! $invoice->paymentTransactions()->exists()
             && ! PaymentReceipt::query()->where('invoice_id', $invoice->id)->exists()
             && ! $invoice->acknowledgments()->exists()
+            && ! $invoice->serviceSnapshot()->exists()
             && ! Invoice::query()->where('reissue_of_invoice_id', $invoice->id)->exists();
     }
 

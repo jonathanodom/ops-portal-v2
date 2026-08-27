@@ -31,6 +31,7 @@ class InvoiceWorkflow
         private readonly LaborServiceResolver $laborServices,
         private readonly CatalogLineSnapshotFactory $catalogSnapshots,
         private readonly ApprovedVisitLaborMinutes $approvedLaborMinutes,
+        private readonly InvoiceServiceSnapshotFactory $serviceSnapshots,
         private readonly AuditRecorder $audit,
     ) {}
 
@@ -525,6 +526,7 @@ class InvoiceWorkflow
             $this->calculator->recalculate($invoice);
             $this->refreshLegacyLaborDescriptions($invoice);
             $this->validateForIssue($invoice);
+            $this->serviceSnapshots->createForIssue($invoice, $actor);
             $invoice->update([
                 'status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $actor->id, 'issue_token' => $token,
                 'due_on' => $invoice->payment_terms === 'due_on_receipt' ? today($invoice->organization->timezone) : $invoice->due_on,

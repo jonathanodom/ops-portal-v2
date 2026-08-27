@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Office;
 
 use App\Domain\ApprovedVisitLaborWorkflow;
 use App\Domain\CatalogLineSnapshotFactory;
+use App\Domain\InvoiceServiceContextProjection;
 use App\Domain\InvoiceWorkflow;
 use App\Domain\UnissuedInvoiceDeletionWorkflow;
 use App\Http\Controllers\Controller;
@@ -192,12 +193,24 @@ class InvoiceController extends Controller
         string $invoice,
         UnissuedInvoiceDeletionWorkflow $deletion,
         ApprovedVisitLaborWorkflow $visitLabor,
+        InvoiceServiceContextProjection $serviceContextProjection,
     ): View {
         $invoice = $this->invoice($request, $invoice);
         Gate::authorize('view', $invoice);
-        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'lines.catalogSelectedBy', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'closeoutLinks.review.tripCharge.selectedBy', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
+        $invoice->load(['serviceTicket.customer', 'serviceLocation', 'organization', 'serviceSnapshot', 'lines.laborRate', 'lines.sourceVisit.returnOfVisit', 'lines.catalogSelectedBy', 'closeoutLinks.visit.returnOfVisit', 'closeoutLinks.visit.timeEntries', 'closeoutLinks.closeout.parts', 'closeoutLinks.review.adjustments', 'closeoutLinks.review.tripCharge.selectedBy', 'acknowledgments.presentedBy', 'reissueOf', 'paymentAttempts.configuration', 'paymentTransactions.receipt']);
+        $serviceContextMode = null;
+        $serviceContext = null;
+        if (! $invoice->isDirect()) {
+            if (in_array($invoice->status, ['issued', 'void'], true)) {
+                $serviceContextMode = $invoice->serviceSnapshot ? 'locked' : 'legacy';
+                $serviceContext = $invoice->serviceSnapshot?->snapshot_json;
+            } else {
+                $serviceContextMode = 'live';
+                $serviceContext = $serviceContextProjection->build($invoice);
+            }
+        }
         if (! $request->attributes->get('membership')->hasCapability('invoices.manage')) {
-            return view('office.invoices.summary', compact('invoice'));
+            return view('office.invoices.summary', compact('invoice', 'serviceContext', 'serviceContextMode'));
         }
         $rates = BillingLaborRate::query()->forOrganization($invoice->organization_id)->where('active', true)->orderByDesc('is_default')->orderBy('name')->get();
         $paymentProviders = PaymentProviderConfiguration::query()->forOrganization($invoice->organization_id)->whereIn('provider', ['square', 'stripe'])->get()->keyBy('provider');
@@ -233,7 +246,7 @@ class InvoiceController extends Controller
             ->latest('occurred_at')
             ->get();
 
-        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'visitLaborCandidates', 'canDeleteDraft', 'auditEvents'));
+        return view('office.invoices.show', compact('invoice', 'rates', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider', 'canUseCatalog', 'catalogServices', 'catalogProducts', 'catalogPackages', 'visitLaborCandidates', 'canDeleteDraft', 'auditEvents', 'serviceContext', 'serviceContextMode'));
     }
 
     public function update(Request $request, string $invoice, InvoiceWorkflow $workflow): RedirectResponse

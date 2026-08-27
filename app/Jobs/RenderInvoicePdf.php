@@ -20,7 +20,7 @@ class RenderInvoicePdf implements ShouldQueue
 
     public function handle(IncidentRecorder $incidents): void
     {
-        $invoice = Invoice::query()->with(['organization', 'serviceTicket', 'lines', 'sellerLogoAsset'])->findOrFail($this->invoiceId);
+        $invoice = Invoice::query()->with(['organization', 'serviceTicket', 'serviceLocation', 'serviceSnapshot', 'lines', 'sellerLogoAsset'])->findOrFail($this->invoiceId);
         if ($invoice->status !== 'issued' || ($invoice->pdf_status === 'ready' && $invoice->pdf_key)) {
             return;
         }

@@ -75,6 +75,7 @@ class OpsBackupCommand extends Command
             'invoice_ticket' => ['invoices', 'service_tickets', 'SELECT COUNT(*) FROM invoices child LEFT JOIN service_tickets parent ON parent.id = child.service_ticket_id WHERE child.service_ticket_id IS NOT NULL AND parent.id IS NULL'],
             'invoice_handoff' => ['invoices', 'billing_handoffs', 'SELECT COUNT(*) FROM invoices child LEFT JOIN billing_handoffs parent ON parent.id = child.billing_handoff_id WHERE child.billing_handoff_id IS NOT NULL AND parent.id IS NULL'],
             'invoice_line' => ['invoice_lines', 'invoices', 'SELECT COUNT(*) FROM invoice_lines child LEFT JOIN invoices parent ON parent.id = child.invoice_id WHERE parent.id IS NULL'],
+            'invoice_service_snapshot' => ['invoice_service_snapshots', 'invoices', 'SELECT COUNT(*) FROM invoice_service_snapshots child LEFT JOIN invoices parent ON parent.id = child.invoice_id WHERE parent.id IS NULL'],
         ];
         foreach ($checks as $name => [$child, $parent, $sql]) {
             if (in_array($child, $tables, true) && in_array($parent, $tables, true)) {
@@ -90,7 +91,7 @@ class OpsBackupCommand extends Command
                 'ticket_context' => ($counts['service_tickets'] ?? 0) === 0 || (($relationships['ticket_customer'] ?? 0) === 0 && ($relationships['ticket_location'] ?? 0) === 0),
                 'closeout_visit' => ($counts['closeouts'] ?? 0) === 0 || ($relationships['closeout_visit'] ?? 0) === 0,
                 'handoff_ticket' => ($counts['billing_handoffs'] ?? 0) === 0 || ($relationships['handoff_ticket'] ?? 0) === 0,
-                'invoice_chain' => ($counts['invoices'] ?? 0) === 0 || (($relationships['invoice_ticket'] ?? 0) === 0 && ($relationships['invoice_handoff'] ?? 0) === 0 && ($relationships['invoice_line'] ?? 0) === 0),
+                'invoice_chain' => ($counts['invoices'] ?? 0) === 0 || (($relationships['invoice_ticket'] ?? 0) === 0 && ($relationships['invoice_handoff'] ?? 0) === 0 && ($relationships['invoice_line'] ?? 0) === 0 && ($relationships['invoice_service_snapshot'] ?? 0) === 0),
             ],
         ];
     }
