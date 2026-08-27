@@ -12,6 +12,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\View\View;
+use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\StreamedResponse;
 
 class InvoicePresentationController extends Controller
@@ -38,6 +39,27 @@ class InvoicePresentationController extends Controller
         }
 
         return view('invoices.present', compact('invoice', 'paymentProviders', 'defaultPaymentProvider', 'checkoutPaymentProvider'));
+    }
+
+    public function printComposer(Request $request, string $invoice): Response
+    {
+        $invoice = $this->invoice($request, $invoice)->load([
+            'organization',
+            'serviceTicket',
+            'serviceLocation',
+            'serviceSnapshot',
+            'lines',
+            'acknowledgments',
+        ]);
+        Gate::authorize('present', $invoice);
+        abort_unless($invoice->status === 'issued', 404);
+
+        return response()
+            ->view('invoices.print', compact('invoice'))
+            ->header('Cache-Control', 'no-store, private')
+            ->header('Pragma', 'no-cache')
+            ->header('X-Robots-Tag', 'noindex, nofollow')
+            ->header('Referrer-Policy', 'no-referrer');
     }
 
     public function brand(Request $request, string $invoice): StreamedResponse

@@ -1238,6 +1238,73 @@ test.describe('mobile beta', () => {
         expect(shortControls).toEqual([]);
     });
 
+    test('Invoice Print Composer is static, responsive, and restores bounded defaults', async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name !== 'mobile', 'One browser project loops through every required composer width.');
+        test.setTimeout(120_000);
+        await login(page, 'super_admin');
+        await page.goto('/office/invoices?status=issued');
+        await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
+        await page.getByRole('link', { name: 'Customer view' }).click();
+
+        if (await page.locator('#contact_name').count()) {
+            await page.getByLabel('Point-of-contact name').fill('Beta Invoice Presenter');
+            await page.getByLabel('I confirm this invoice was presented for review.').check();
+            await page.getByRole('button', { name: 'Record acknowledgment' }).click();
+        }
+
+        await page.getByRole('link', { name: 'Print Invoice' }).click();
+        await expect(page.getByRole('heading', { name: /Compose NDT-INV-/ })).toBeVisible();
+        await expect(page.locator('[data-print-section="financial-core"]')).toBeVisible();
+        await expect(page.locator('[data-print-section="customer-note"]')).toBeVisible();
+        await expect(page.locator('[data-print-section="service-details"]')).toBeVisible();
+        await expect(page.locator('[data-print-section="service-details"]')).toHaveClass(/print-break-before/);
+        await expect(page.locator('[data-print-section="invoice-acknowledgment"]')).toBeHidden();
+        await expect(page.locator('form')).toHaveCount(0);
+        await expect(page.locator('details')).toHaveCount(0);
+        await expect(page.getByText('Create secure checkout')).toHaveCount(0);
+        await expect(page.getByText('Refresh payment status')).toHaveCount(0);
+
+        await page.getByLabel('Customer note', { exact: true }).uncheck();
+        await expect(page.locator('[data-print-section="customer-note"]')).toBeHidden();
+        await page.getByLabel('Start Service Details on a new page').uncheck();
+        await expect(page.locator('[data-print-section="service-details"]')).not.toHaveClass(/print-break-before/);
+        await page.getByLabel('Invoice acknowledgment', { exact: true }).check();
+        await page.getByLabel('Start Invoice Acknowledgment on a new page').check();
+        await expect(page.locator('[data-print-section="invoice-acknowledgment"]')).toBeVisible();
+        await expect(page.locator('[data-print-section="invoice-acknowledgment"]')).toHaveClass(/print-break-before/);
+
+        await page.getByRole('button', { name: 'Reset defaults' }).click();
+        await expect(page.getByLabel('Customer note', { exact: true })).toBeChecked();
+        await expect(page.getByLabel('Service Details', { exact: true })).toBeChecked();
+        await expect(page.getByLabel('Start Service Details on a new page')).toBeChecked();
+        await expect(page.getByLabel('Invoice acknowledgment', { exact: true })).not.toBeChecked();
+        await expect(page.locator('[data-print-section="invoice-acknowledgment"]')).toBeHidden();
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await capturePrintDocument(page, `invoice-composer-${viewport.width}x${viewport.height}.png`);
+        }
+
+        await page.emulateMedia({ media: 'print' });
+        await expect(page.locator('.print-controls')).toBeHidden();
+        expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBeTruthy();
+        if (printDocumentReviewDir) {
+            await page.pdf({ path: `${printDocumentReviewDir}/invoice-composer-letter.pdf`, format: 'Letter', printBackground: true, preferCSSPageSize: true });
+        }
+        await page.emulateMedia({ media: 'screen' });
+        await page.evaluate(() => { window.print = () => { window.__invoicePrintCalled = true; }; });
+        await page.getByRole('button', { name: 'Print', exact: true }).click();
+        expect(await page.evaluate(() => window.__invoicePrintCalled)).toBeTruthy();
+    });
+
     test('quick customer dialog fills the phone viewport and protects unsaved work', async ({ page }) => {
         await login(page, 'super_admin');
         await page.goto('/office/service-tickets/create');
