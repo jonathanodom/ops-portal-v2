@@ -83,6 +83,8 @@ class CatalogInvoiceIntegrationTest extends TestCase
         $this->assertSame($variant->id, $serviceLine->catalog_service_variant_id);
         $this->assertSame('TV-MOUNT:56-75', $serviceLine->catalog_code_snapshot);
         $this->assertSame('TV Mounting — 56–75 inch TV', $serviceLine->catalog_name_snapshot);
+        $this->assertSame('each', $serviceLine->catalog_unit_code_snapshot);
+        $this->assertSame($service->id, $serviceLine->catalog_service_id);
         $this->assertSame(27500, $serviceLine->catalog_original_unit_price_cents);
         $this->assertSame(27500, $serviceLine->unit_price_cents);
         $productLine = $invoice->lines()->where('catalog_item_type', 'product')->firstOrFail();
@@ -95,6 +97,7 @@ class CatalogInvoiceIntegrationTest extends TestCase
         $product->update(['default_sell_price_cents' => 50000]);
         $this->assertSame('TV Mounting — 56–75 inch TV', $serviceLine->fresh()->catalog_name_snapshot);
         $this->assertSame(27500, $serviceLine->fresh()->unit_price_cents);
+        $this->assertSame($service->id, $serviceLine->fresh()->catalog_service_id);
         $this->assertSame(8900, $productLine->fresh()->unit_price_cents);
     }
 

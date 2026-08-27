@@ -199,6 +199,8 @@ class Phase6InvoicingTest extends TestCase
         $this->assertSame(78, $invoice->tax_total_cents);
         $this->assertSame(1978, $invoice->total_cents);
         $this->assertSame(100, $invoice->lines->sum('discount_cents'));
+        $this->assertSame([51, 49], $invoice->lines->pluck('discount_cents')->all());
+        $this->assertSame([78, 0], $invoice->lines->pluck('tax_cents')->all());
     }
 
     public function test_issue_is_immutable_and_generates_an_authorized_private_pdf(): void
