@@ -539,7 +539,7 @@ class Phase6InvoicingTest extends TestCase
 
         $invoice->update(['status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $admin->id]);
         $this->actingAs($admin)->get("/office/invoices/{$invoice->id}")
-            ->assertOk()->assertSee('Balance due')->assertSee('Customer view')->assertSee('Record payment')
+            ->assertOk()->assertSee('Balance due')->assertSee('Print / PDF options')->assertSee('Present / collect payment')->assertSee('Record payment')
             ->assertDontSee('data-invoice-billing-dialog', false)->assertDontSee('Delete unissued invoice');
 
         $invoice->paymentTransactions()->create([

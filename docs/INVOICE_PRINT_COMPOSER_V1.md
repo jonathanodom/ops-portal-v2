@@ -14,6 +14,8 @@ The authenticated interactive Invoice remains at `GET /invoices/{invoice}/presen
 
 The Print Invoice action now opens `GET /invoices/{invoice}/print` (`invoices.print`). The route uses the existing `invoices.present` capability, active-Organization resolution, organization-scoped Invoice lookup, issued-status guard, and safe cross-Organization denial. Responses are private, `no-store`, non-indexable, and use a restrictive referrer policy.
 
+On the Office Invoice workspace, the primary action is **Print / PDF options**. It opens the composer, where a ready canonical PDF can also be downloaded. The staff-assisted browser presentation remains available under **More** as **Present / collect payment**, preserving acknowledgment and collection workflows without presenting “Customer view” as the primary Office action.
+
 The print DOM is purpose-built and static. It does not load or render acknowledgment mutation forms, payment-provider configuration, payment attempts, checkout links or QR controls, connectivity messaging, interactive `details`, or application navigation inside the document.
 
 ## Composer defaults

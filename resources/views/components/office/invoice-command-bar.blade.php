@@ -47,8 +47,8 @@
                 </form>
             @endif
         @elseif($invoice->status === 'issued')
-            <a class="button-secondary" href="{{ route('invoices.present', $invoice) }}">Customer view</a>
-            @if($invoice->pdf_status === 'ready')<a class="button-secondary" href="{{ route('invoices.pdf', $invoice) }}">PDF</a>@endif
+            <a class="button-secondary" href="{{ route('invoices.print', $invoice) }}">Print / PDF options</a>
+            @if($invoice->pdf_status === 'ready')<a class="button-secondary" href="{{ route('invoices.pdf', $invoice) }}">Download PDF</a>@endif
             @if($activeMembership->hasCapability('payments.view'))
                 @if($isPaid)
                     <button class="button-secondary" type="button" data-payment-overlay-open="payment-history-dialog">Payments / receipts</button>
@@ -65,6 +65,7 @@
                 <label class="sr-only" for="command-invoice-number-{{ $invoice->id }}">Invoice number</label>
                 <input class="sr-only" id="command-invoice-number-{{ $invoice->id }}" value="{{ $invoice->invoice_number }}" readonly>
                 <button class="invoice-command-menu-item" type="button" data-copy-target="command-invoice-number-{{ $invoice->id }}">Copy invoice number</button>
+                @if($invoice->status === 'issued')<a class="invoice-command-menu-item" href="{{ route('invoices.present', $invoice) }}">Present / collect payment</a>@endif
                 @if($invoice->serviceTicket)<a class="invoice-command-menu-item" href="{{ route('office.service-tickets.show', $invoice->serviceTicket) }}#history">Ticket history</a>@endif
                 @if($canDeleteDraft)<a class="invoice-command-menu-item text-red-800" href="#delete-unissued-invoice">Delete unissued invoice</a>@endif
                 @if($activeMembership->hasCapability('invoices.void') && $invoice->status !== 'void')<a class="invoice-command-menu-item text-red-800" href="#void-reissue">Void &amp; reissue</a>@endif

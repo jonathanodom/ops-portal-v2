@@ -424,7 +424,8 @@ test.describe('desktop beta', () => {
         await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         await expectAccessible(page);
-        await page.getByRole('link', { name: 'Customer view' }).click();
+        await page.locator('[data-invoice-more-actions] summary').click();
+        await page.getByRole('link', { name: 'Present / collect payment' }).click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
         await expectAccessible(page);
@@ -1215,7 +1216,8 @@ test.describe('mobile beta', () => {
         expect(settingsShortControls).toEqual([]);
         await page.goto('/office/invoices?status=issued');
         await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
-        await page.getByRole('link', { name: 'Customer view' }).click();
+        await page.locator('[data-invoice-more-actions] summary').click();
+        await page.getByRole('link', { name: 'Present / collect payment' }).click();
         await expect(page.getByRole('heading', { name: /NDT-INV-/ })).toBeVisible();
         await expect(page.getByRole('heading', { name: 'Service Details' })).toBeVisible();
         await expect(page.getByRole('heading', { name: 'Visit history' })).toBeVisible();
@@ -1244,7 +1246,8 @@ test.describe('mobile beta', () => {
         await login(page, 'super_admin');
         await page.goto('/office/invoices?status=issued');
         await page.getByRole('link', { name: /NDT-INV-/ }).first().click();
-        await page.getByRole('link', { name: 'Customer view' }).click();
+        await page.locator('[data-invoice-more-actions] summary').click();
+        await page.getByRole('link', { name: 'Present / collect payment' }).click();
 
         if (await page.locator('#contact_name').count()) {
             await page.getByLabel('Point-of-contact name').fill('Beta Invoice Presenter');
@@ -1252,7 +1255,8 @@ test.describe('mobile beta', () => {
             await page.getByRole('button', { name: 'Record acknowledgment' }).click();
         }
 
-        await page.getByRole('link', { name: 'Print Invoice' }).click();
+        await page.getByRole('link', { name: 'Return to billing' }).click();
+        await page.getByRole('link', { name: 'Print / PDF options' }).click();
         await expect(page.getByRole('heading', { name: /Compose NDT-INV-/ })).toBeVisible();
         await expect(page.locator('[data-print-section="financial-core"]')).toBeVisible();
         await expect(page.locator('[data-print-section="customer-note"]')).toBeVisible();

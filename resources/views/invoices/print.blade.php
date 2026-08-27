@@ -43,7 +43,8 @@
                     <p class="mt-1 text-sm text-slate-600">Financial details are always included. These choices apply only to this print session.</p>
                 </div>
                 <div class="flex flex-wrap gap-2">
-                    <a class="button-secondary" href="{{ route('invoices.present', $invoice) }}">Back to Invoice</a>
+                    <a class="button-secondary" href="{{ $activeMembership->hasCapability('experience.office.access') ? route('office.invoices.show', $invoice) : route('invoices.present', $invoice) }}">Back to Invoice</a>
+                    @if($invoice->pdf_status === 'ready')<a class="button-secondary" href="{{ route('invoices.pdf', $invoice) }}">Download PDF</a>@endif
                     <button class="button-secondary" type="button" data-print-reset>Reset defaults</button>
                     <button class="button-primary" type="button" data-print-action>Print</button>
                 </div>
