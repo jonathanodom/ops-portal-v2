@@ -13,12 +13,17 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 
 #[Fillable([
     'organization_id', 'type', 'display_name', 'legal_name', 'phone', 'phone_normalized',
-    'email', 'status', 'notes', 'created_by_id', 'updated_by_id',
+    'email', 'status', 'tax_exempt', 'tax_exemption_reference', 'notes', 'created_by_id', 'updated_by_id',
 ])]
 class Customer extends Model
 {
     /** @use HasFactory<CustomerFactory> */
     use HasFactory;
+
+    protected function casts(): array
+    {
+        return ['tax_exempt' => 'boolean'];
+    }
 
     public function organization(): BelongsTo
     {

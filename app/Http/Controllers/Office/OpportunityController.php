@@ -99,7 +99,7 @@ class OpportunityController extends Controller
         Gate::authorize('view', $opportunity);
         $organization = $request->attributes->get('organization');
         $stages = $defaults->ensure($organization);
-        $opportunity->load(['customer', 'serviceLocation', 'primaryContact', 'owner', 'stage']);
+        $opportunity->load(['customer', 'serviceLocation', 'primaryContact', 'owner', 'stage', 'quotes.revisions']);
         $opportunity->setRelation('tasks', $opportunity->tasks()->with('assignee')->orderByRaw("CASE status WHEN 'open' THEN 0 WHEN 'completed' THEN 1 ELSE 2 END")->orderBy('due_on')->limit(200)->get());
         $opportunity->setRelation('activities', $opportunity->activities()->with('actor')->limit(100)->get());
         $opportunity->setRelation('storedAttachments', $opportunity->storedAttachments()->with('uploader')->limit(100)->get());

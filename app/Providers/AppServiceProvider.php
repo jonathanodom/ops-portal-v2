@@ -8,6 +8,7 @@ use App\Domain\Projects\Contracts\CustomerDirectory;
 use App\Domain\Projects\Contracts\ServiceOperationsDirectory;
 use App\Domain\Projects\Support\EloquentCustomerDirectory;
 use App\Domain\Projects\Support\EloquentServiceOperationsDirectory;
+use App\Models\CommercialDocument;
 use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\CustomerServiceEnrollment;
@@ -19,6 +20,7 @@ use App\Models\ServiceTicket;
 use App\Models\Visit;
 use App\Payments\SquareOAuthConnectionClient;
 use App\Payments\StripeOAuthConnectionClient;
+use App\Policies\CommercialDocumentPolicy;
 use App\Policies\ContactPolicy;
 use App\Policies\CustomerPolicy;
 use App\Policies\CustomerServiceEnrollmentPolicy;
@@ -55,6 +57,7 @@ class AppServiceProvider extends ServiceProvider
     {
         Password::defaults(fn () => Password::min(12)->mixedCase()->numbers());
         Gate::policy(Customer::class, CustomerPolicy::class);
+        Gate::policy(CommercialDocument::class, CommercialDocumentPolicy::class);
         Gate::policy(CustomerServiceEnrollment::class, CustomerServiceEnrollmentPolicy::class);
         Gate::policy(Invoice::class, InvoicePolicy::class);
         Gate::policy(Opportunity::class, OpportunityPolicy::class);

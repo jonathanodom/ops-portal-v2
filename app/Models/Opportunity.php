@@ -61,6 +61,11 @@ class Opportunity extends Model
         return $this->hasMany(OpportunityAttachment::class);
     }
 
+    public function quotes(): HasMany
+    {
+        return $this->hasMany(CommercialDocument::class)->where('document_type', 'quote')->latest();
+    }
+
     public function storedAttachments(): HasMany
     {
         return $this->attachments()->where('state', 'stored')->latest();

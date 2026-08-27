@@ -1,0 +1,6 @@
+@php($selectedLine=$selectedLine ?? null)
+<div class="mt-3 grid gap-3 sm:grid-cols-3 xl:col-span-4">
+    <div><label class="form-label" for="{{ $prefix }}-location">Location</label><select class="form-input" id="{{ $prefix }}-location" name="location_id"><option value="">None</option>@foreach($revision->locations as $dimension)<option value="{{ $dimension->id }}" @selected($selectedLine?->location_id===$dimension->id)>{{ $dimension->name }}</option>@endforeach</select></div>
+    <div><label class="form-label" for="{{ $prefix }}-system">System</label><select class="form-input" id="{{ $prefix }}-system" name="system_id"><option value="">None</option>@foreach($revision->systems as $dimension)<option value="{{ $dimension->id }}" @selected($selectedLine?->system_id===$dimension->id)>{{ $dimension->name }}</option>@endforeach</select></div>
+    <div><label class="form-label" for="{{ $prefix }}-phase">Phase</label><select class="form-input" id="{{ $prefix }}-phase" name="phase_id"><option value="">None</option>@foreach($revision->phases as $dimension)<option value="{{ $dimension->id }}" @selected($selectedLine?->phase_id===$dimension->id)>{{ $dimension->name }}</option>@endforeach</select></div>
+</div>

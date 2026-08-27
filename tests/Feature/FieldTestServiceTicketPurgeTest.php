@@ -58,6 +58,8 @@ class FieldTestServiceTicketPurgeTest extends TestCase
 
     public function test_feature_is_default_off_and_direct_routes_are_not_found(): void
     {
+        config()->set('field_test.destructive_service_ticket_purge_enabled', false);
+
         [$organization, $ticket] = $this->ticketGraph();
         [$admin] = $this->userWithRole('super_admin', $organization);
 

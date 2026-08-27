@@ -2,6 +2,8 @@
 
 namespace App\Domain\Commercial;
 
+use App\Models\CommercialPhase;
+use App\Models\CommercialSystem;
 use App\Models\OpportunityStage;
 use App\Models\Organization;
 use App\Models\OrganizationCommercialSetting;
@@ -19,6 +21,10 @@ final class CommercialDefaults
         ['Lost', 'lost', 0, 'red'],
     ];
 
+    private const SYSTEMS = ['Network', 'Surveillance', 'Audio', 'Video', 'Access Control', 'Security'];
+
+    private const PHASES = ['Design', 'Rough-In', 'Trim', 'Final', 'Programming', 'Commissioning'];
+
     /** @return Collection<int, OpportunityStage> */
     public function ensure(Organization $organization): Collection
     {
@@ -29,6 +35,12 @@ final class CommercialDefaults
                     ['organization_id' => $organization->id, 'semantic_kind' => $kind],
                     ['name' => $name, 'default_probability_bps' => $probability, 'color' => $color, 'sort_order' => $order * 10, 'active' => true],
                 );
+            }
+            foreach (self::SYSTEMS as $order => $name) {
+                CommercialSystem::query()->firstOrCreate(['organization_id' => $organization->id, 'name' => $name], ['sort_order' => ($order + 1) * 10, 'active' => true]);
+            }
+            foreach (self::PHASES as $order => $name) {
+                CommercialPhase::query()->firstOrCreate(['organization_id' => $organization->id, 'name' => $name], ['sort_order' => ($order + 1) * 10, 'active' => true]);
             }
         });
 

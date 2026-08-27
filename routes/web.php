@@ -41,6 +41,7 @@ use App\Http\Controllers\Office\ProjectAttachmentController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ProjectWorkbookPrintController;
+use App\Http\Controllers\Office\QuoteController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\ServiceTicketDocumentController;
@@ -117,6 +118,23 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/{opportunity}/attachments', [OpportunityAttachmentController::class, 'store'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('attachments.store');
                 Route::get('/{opportunity}/attachments/{attachment}', [OpportunityAttachmentController::class, 'show'])->whereNumber(['opportunity', 'attachment'])->name('attachments.show');
                 Route::delete('/{opportunity}/attachments/{attachment}', [OpportunityAttachmentController::class, 'destroy'])->whereNumber(['opportunity', 'attachment'])->middleware('capability:opportunities.manage')->name('attachments.destroy');
+            });
+            Route::post('/opportunities/{opportunity}/quotes', [QuoteController::class, 'store'])->whereNumber('opportunity')->middleware('capability:quotes.manage')->name('opportunities.quotes.store');
+            Route::prefix('quotes')->name('quotes.')->middleware('capability:quotes.view')->group(function (): void {
+                Route::get('/{quote}/revisions/{revision}', [QuoteController::class, 'show'])->whereNumber(['quote', 'revision'])->name('show');
+                Route::put('/{quote}/revisions/{revision}', [QuoteController::class, 'update'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('update');
+                Route::post('/{quote}/revisions/{revision}/catalog-lines', [QuoteController::class, 'addCatalogLine'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.catalog');
+                Route::post('/{quote}/revisions/{revision}/allowances', [QuoteController::class, 'addAllowance'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.allowance');
+                Route::put('/{quote}/revisions/{revision}/lines/{line}', [QuoteController::class, 'updateLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.update');
+                Route::delete('/{quote}/revisions/{revision}/lines/{line}', [QuoteController::class, 'removeLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.destroy');
+                Route::post('/{quote}/revisions/{revision}/lines/{line}/copy', [QuoteController::class, 'copyLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.copy');
+                Route::put('/{quote}/revisions/{revision}/lines/{line}/components/{component}', [QuoteController::class, 'updateComponent'])->whereNumber(['quote', 'revision', 'line', 'component'])->middleware('capability:quotes.manage')->name('components.update');
+                Route::post('/{quote}/revisions/{revision}/bulk-dimensions', [QuoteController::class, 'bulkAssign'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.bulk');
+                Route::post('/{quote}/revisions/{revision}/dimensions/{type}', [QuoteController::class, 'addDimension'])->whereNumber(['quote', 'revision'])->whereIn('type', ['locations', 'systems', 'phases'])->middleware('capability:quotes.manage')->name('dimensions.store');
+                Route::post('/{quote}/revisions/{revision}/sections', [QuoteController::class, 'addSection'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('sections.store');
+                Route::post('/{quote}/revisions/{revision}/milestones', [QuoteController::class, 'addMilestone'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('milestones.store');
+                Route::post('/{quote}/revisions/{revision}/lock', [QuoteController::class, 'lock'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lock');
+                Route::post('/{quote}/revisions/{revision}/clone', [QuoteController::class, 'clone'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('clone');
             });
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');
