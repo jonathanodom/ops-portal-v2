@@ -370,6 +370,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         });
     Route::get('/field-media/{media}', [ExecutionController::class, 'media'])->whereNumber('media')->name('field.media.show');
     Route::get('/invoices/{invoice}/present', [InvoicePresentationController::class, 'show'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.present');
+    Route::get('/invoices/{invoice}/print', [InvoicePresentationController::class, 'printComposer'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.print');
     Route::get('/invoices/{invoice}/brand', [InvoicePresentationController::class, 'brand'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.brand');
     Route::get('/invoices/{invoice}/pdf', [InvoiceController::class, 'download'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.pdf');
     Route::post('/invoices/{invoice}/acknowledge', [InvoicePresentationController::class, 'acknowledge'])->whereNumber('invoice')->middleware('capability:invoices.present')->name('invoices.acknowledge');

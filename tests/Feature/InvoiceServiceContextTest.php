@@ -16,6 +16,7 @@ use App\Models\CloseoutReview;
 use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\Invoice;
+use App\Models\InvoiceAcknowledgment;
 use App\Models\InvoiceServiceSnapshot;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
@@ -112,10 +113,22 @@ class InvoiceServiceContextTest extends TestCase
             ->assertOk()->assertSee('Service Details — locked at issuance')->assertSee('Replace failed access point')->assertDontSee('Changed after issue');
         $this->actingAs($admin)->get("/invoices/{$issued->id}/present")
             ->assertOk()->assertSee('Service Details')->assertSee('Replace failed access point')->assertDontSee('Changed after issue');
+        InvoiceAcknowledgment::query()->create([
+            'organization_id' => $issued->organization_id,
+            'invoice_id' => $issued->id,
+            'contact_name' => 'Invoice-only Presenter',
+            'confirmed' => true,
+            'presented_by_id' => $admin->id,
+            'acknowledged_at' => now(),
+            'acknowledgment_token' => (string) Str::uuid(),
+        ]);
         $issued->load(['organization', 'serviceTicket', 'serviceLocation', 'serviceSnapshot', 'lines']);
         $pdfHtml = view('invoices.pdf', ['invoice' => $issued, 'logoDataUri' => 'data:image/png;base64,AA=='])->render();
         $this->assertStringContainsString('Replace failed access point', $pdfHtml);
         $this->assertStringContainsString('Camera C-14 offline', $pdfHtml);
+        $this->assertStringContainsString('break-before:page;page-break-before:always', $pdfHtml);
+        $this->assertStringContainsString('Customer acknowledgment', $pdfHtml);
+        $this->assertStringNotContainsString('Invoice-only Presenter', $pdfHtml);
         $this->assertStringNotContainsString('Changed after issue', $pdfHtml);
         $this->assertStringNotContainsString('private/signature.png', $pdfHtml);
         Queue::assertPushed(RenderInvoicePdf::class);
@@ -206,6 +219,131 @@ class InvoiceServiceContextTest extends TestCase
         $issuedQueries = count(DB::getQueryLog());
         DB::disableQueryLog();
         $this->assertLessThanOrEqual(30, $issuedQueries, "Issued Invoice presentation used {$issuedQueries} queries");
+    }
+
+    public function test_print_composer_is_static_private_and_uses_the_immutable_snapshot(): void
+    {
+        [, $admin, , $invoice, , $ticket] = $this->scenario();
+        $invoice->update(['customer_note' => 'Please retain this customer-facing note.']);
+        $workflow = app(InvoiceWorkflow::class);
+        $workflow->markReady($invoice, $admin);
+        $issued = $workflow->issue($invoice->fresh(), $admin, (string) Str::uuid());
+
+        $this->get(route('invoices.print', $issued))->assertRedirect(route('login'));
+        $this->actingAs($admin)->get(route('invoices.present', $issued))
+            ->assertOk()
+            ->assertSee(route('invoices.print', $issued), false)
+            ->assertSee('Print Invoice')
+            ->assertSee('data-offline-write', false)
+            ->assertSee('Invoice acknowledgment')
+            ->assertSee('Payment');
+
+        InvoiceAcknowledgment::query()->create([
+            'organization_id' => $issued->organization_id,
+            'invoice_id' => $issued->id,
+            'contact_name' => 'Jane Customer',
+            'confirmed' => true,
+            'presented_by_id' => $admin->id,
+            'acknowledged_at' => Carbon::parse('2026-08-24 18:05:00', 'UTC'),
+            'acknowledgment_token' => (string) Str::uuid(),
+        ]);
+        $ticket->update(['description' => 'Changed live description after issue.']);
+
+        $response = $this->actingAs($admin)->get(route('invoices.print', $issued));
+        $response->assertOk()
+            ->assertHeader('cache-control', 'no-store, private')
+            ->assertHeader('x-robots-tag', 'noindex, nofollow')
+            ->assertSee('data-print-composer', false)
+            ->assertSee('data-print-section="financial-core"', false)
+            ->assertSee('Please retain this customer-facing note.')
+            ->assertSee('data-print-section="service-details"', false)
+            ->assertSee('print-break-before', false)
+            ->assertSee('Replace failed access point')
+            ->assertSee('Camera C-14 offline')
+            ->assertSee('Jane Customer')
+            ->assertSee('data-print-section="invoice-acknowledgment"', false)
+            ->assertSee('hidden', false)
+            ->assertDontSee('Changed live description after issue.')
+            ->assertDontSee('<form', false)
+            ->assertDontSee('<details', false)
+            ->assertDontSee('data-connectivity-banner', false)
+            ->assertDontSee('Create secure checkout')
+            ->assertDontSee('Refresh payment status')
+            ->assertDontSee('internal_note')
+            ->assertDontSee('private/signature.png');
+    }
+
+    public function test_print_composer_keeps_direct_and_legacy_ticket_invoices_bounded(): void
+    {
+        [$organization, $admin, , $invoice] = $this->scenario();
+        $workflow = app(InvoiceWorkflow::class);
+        $customer = Customer::factory()->create(['organization_id' => $organization->id]);
+        $location = ServiceLocation::factory()->create(['organization_id' => $organization->id, 'customer_id' => $customer->id]);
+        $direct = $workflow->createDirect($organization, $customer->id, $location->id, null, $admin, (string) Str::uuid());
+        $direct->update(['customer_note' => 'Direct Invoice customer note.']);
+        $direct->lines()->create([
+            'organization_id' => $organization->id,
+            'line_type' => 'service_charge',
+            'description' => 'Direct consulting',
+            'quantity_millis' => 1000,
+            'unit' => 'each',
+            'unit_price_cents' => 10000,
+            'included' => true,
+            'taxable' => false,
+            'sort_order' => 10,
+        ]);
+        app(InvoiceCalculator::class)->recalculate($direct);
+        $workflow->markReady($direct->fresh(), $admin);
+        $workflow->issue($direct->fresh(), $admin, (string) Str::uuid());
+
+        $this->actingAs($admin)->get(route('invoices.print', $direct))
+            ->assertOk()
+            ->assertSee('Direct invoice')
+            ->assertSee('Direct Invoice customer note.')
+            ->assertDontSee('include-service-details', false)
+            ->assertDontSee('data-print-section="service-details"', false);
+
+        $invoice->update(['status' => 'issued', 'issued_at' => now(), 'issued_by_id' => $admin->id, 'pdf_status' => 'pending']);
+        $this->actingAs($admin)->get(route('invoices.print', $invoice))
+            ->assertOk()
+            ->assertSee($invoice->serviceTicket->ticket_number)
+            ->assertDontSee('Additional Work Items')
+            ->assertDontSee('include-service-details', false);
+    }
+
+    public function test_print_composer_enforces_tenant_scope_and_ignores_template_input(): void
+    {
+        [, $admin, , $invoice] = $this->scenario();
+        [, , , $foreignInvoice] = $this->scenario();
+        $invoice->update(['status' => 'issued', 'issued_at' => now(), 'pdf_status' => 'pending']);
+        $foreignInvoice->update(['status' => 'issued', 'issued_at' => now(), 'pdf_status' => 'pending']);
+
+        $this->actingAs($admin)->get(route('invoices.print', $foreignInvoice))->assertNotFound();
+        $this->actingAs($admin)->get(route('invoices.print', $invoice).'?template=../../internal-note')
+            ->assertOk()
+            ->assertSee('data-print-composer', false)
+            ->assertDontSee('internal-note');
+    }
+
+    public function test_print_composer_query_count_is_bounded_below_interactive_presentation(): void
+    {
+        [, $admin, , $invoice] = $this->scenario();
+        $workflow = app(InvoiceWorkflow::class);
+        $workflow->markReady($invoice, $admin);
+        $workflow->issue($invoice->fresh(), $admin, (string) Str::uuid());
+
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $this->actingAs($admin)->get(route('invoices.present', $invoice))->assertOk();
+        $presentationQueries = count(DB::getQueryLog());
+
+        DB::flushQueryLog();
+        $this->actingAs($admin)->get(route('invoices.print', $invoice))->assertOk();
+        $printQueries = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $this->assertLessThanOrEqual(20, $printQueries, "Invoice Print Composer used {$printQueries} queries");
+        $this->assertLessThan($presentationQueries, $printQueries, "Print used {$printQueries}; presentation used {$presentationQueries}");
     }
 
     /** @return array{Organization, User, BillingHandoff, Invoice, Visit, ServiceTicket} */

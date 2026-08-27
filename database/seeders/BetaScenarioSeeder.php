@@ -145,7 +145,10 @@ class BetaScenarioSeeder extends Seeder
         $workflow = app(InvoiceWorkflow::class);
         $invoice = $workflow->createFromHandoff($handoff, $memberships['super_admin']->user, (string) Str::uuid());
         PaymentProviderConfiguration::query()->create(['organization_id' => $organization->id, 'public_id' => (string) Str::uuid(), 'provider' => 'stripe', 'environment' => 'test', 'api_secret' => 'beta-fake-secret', 'webhook_secret' => 'beta-fake-webhook', 'credential_fingerprint' => 'BETA00000000', 'enabled' => true, 'connection_status' => 'connected', 'external_account_id' => 'beta-account', 'updated_by_id' => $memberships['super_admin']->user_id]);
-        $invoice->forceFill(['preferred_payment_provider' => 'stripe'])->save();
+        $invoice->forceFill([
+            'preferred_payment_provider' => 'stripe',
+            'customer_note' => 'Thank you for choosing NewDay Tech. Please retain this Invoice with your service records.',
+        ])->save();
         $workflow->addLine($invoice, $memberships['super_admin']->user, ['line_type' => 'service_charge', 'description' => 'Beta invoice presentation fixture', 'quantity_millis' => 1000, 'unit' => 'service', 'unit_price_cents' => 10000, 'included' => true, 'taxable' => true, 'override_reason' => 'Synthetic beta fixture']);
         $workflow->markReady($invoice->fresh(), $memberships['super_admin']->user);
         $workflow->issue($invoice->fresh(), $memberships['super_admin']->user, (string) Str::uuid());

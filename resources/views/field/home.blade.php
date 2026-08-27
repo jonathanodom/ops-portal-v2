@@ -18,7 +18,4 @@
         <a href="{{ route('field.customers.index') }}" class="button-primary mt-5 w-full">Open customer directory</a>
     @endif
 
-    @if ($activeMembership->hasCapability('experience.office.access'))
-        <a href="{{ route('office.home') }}" class="button-secondary mt-5 w-full">Open office view</a>
-    @endif
 </x-layouts.field>
