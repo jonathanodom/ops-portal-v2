@@ -13,11 +13,14 @@
     </div>
     <header class="sticky top-0 z-10 border-b border-slate-200 bg-white px-4 py-3">
         <div class="mx-auto flex max-w-2xl items-center justify-between gap-3">
-            <div>
+            <div class="min-w-0">
                 <p class="text-xs font-bold uppercase tracking-[0.14em] text-brand-blue">Field workspace</p>
-                <p class="mt-0.5 text-sm font-bold text-slate-950">{{ auth()->user()->name }}</p>
+                <p class="mt-0.5 truncate text-sm font-bold text-slate-950">{{ auth()->user()->name }}</p>
             </div>
-            <div class="flex items-center gap-3">
+            <div class="flex shrink-0 items-center gap-2 sm:gap-3">
+                @if ($activeMembership->hasCapability('experience.office.access'))
+                    <a href="{{ route('office.home') }}" class="button-secondary px-3 text-xs" aria-label="Return to office view">Office view</a>
+                @endif
                 <p data-connectivity-status class="inline-flex min-h-11 items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800" role="status" aria-live="polite">
                     <span class="h-2.5 w-2.5 rounded-full bg-emerald-600" aria-hidden="true"></span>
                     <span data-connectivity-label>Online</span>

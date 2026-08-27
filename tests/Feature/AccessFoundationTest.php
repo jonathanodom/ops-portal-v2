@@ -27,7 +27,7 @@ class AccessFoundationTest extends TestCase
 
         $this->assertNull($user->technicianProfile);
         $this->actingAs($user)->get('/office')->assertOk()->assertSee('NewDay Home');
-        $this->actingAs($user)->get('/field')->assertOk()->assertSee('No visits today');
+        $this->actingAs($user)->get('/field')->assertOk()->assertSee('No visits today')->assertSee('Return to office view');
         $this->assertTrue($membership->hasCapability('visits.execute_any'));
         $this->assertSame(Capability::query()->count(), $membership->roles()->firstOrFail()->capabilities()->count());
     }
@@ -38,7 +38,7 @@ class AccessFoundationTest extends TestCase
         [$reviewer] = $this->userWithRole('reviewer');
         [$billing] = $this->userWithRole('billing');
 
-        $this->actingAs($technician)->get('/field')->assertOk();
+        $this->actingAs($technician)->get('/field')->assertOk()->assertDontSee('Return to office view');
         $this->actingAs($technician)->get('/office')->assertForbidden();
         $this->actingAs($reviewer)->get('/office')->assertOk();
         $this->actingAs($reviewer)->get('/field')->assertForbidden();

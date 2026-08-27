@@ -1205,6 +1205,9 @@ test.describe('mobile beta', () => {
 
     test('issued invoice presentation is customer-safe at phone width', async ({ page }) => {
         await login(page, 'super_admin');
+        await page.goto('/field');
+        await expect(page.getByRole('link', { name: 'Return to office view' })).toBeVisible();
+        expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
         await page.goto('/office/settings/organization');
         await expect(page.getByRole('heading', { name: 'Settings' })).toBeVisible();
         expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
