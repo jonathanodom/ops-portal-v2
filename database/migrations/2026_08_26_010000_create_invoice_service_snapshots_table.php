@@ -20,7 +20,7 @@ return new class extends Migration
             $table->foreignId('captured_by_id')->nullable()->constrained('users')->nullOnDelete();
             $table->timestamps();
 
-            $table->index(['organization_id', 'service_ticket_id']);
+            $table->index(['organization_id', 'service_ticket_id'], 'invoice_service_snapshots_org_ticket_idx');
         });
     }
 
