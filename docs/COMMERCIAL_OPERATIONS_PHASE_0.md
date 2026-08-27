@@ -58,7 +58,7 @@ An initial validation attempt exposed four unreferenced test-generated receipt P
 - `composer check`: passed Composer validation, Pint, 195 compiled-Blade syntax checks, 434 tests / 3,774 assertions, and Vite production build.
 - `composer audit --locked --no-interaction`: no security vulnerability advisories.
 - `git diff --check`: passed.
-- GitHub MySQL and browser/safety validation: recorded in the draft PR once complete.
+- GitHub Actions run `33121151297`: passed on implementation commit `d851f32` (`core` 3m01s, `safety` 1m32s, `browser` 5m01s, aggregate `validate` 3s).
 
 ## Owner UI Acceptance Checklist
 
