@@ -159,7 +159,7 @@ return new class extends Migration
         Schema::create('commercial_revision_line_components', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('organization_id')->constrained()->restrictOnDelete();
-            $table->foreignId('commercial_revision_line_id')->constrained()->cascadeOnDelete();
+            $table->foreignId('commercial_revision_line_id')->constrained(indexName: 'commercial_component_line_fk')->cascadeOnDelete();
             $table->string('component_type', 20);
             $table->foreignId('catalog_product_id')->nullable()->constrained()->nullOnDelete();
             $table->foreignId('catalog_service_id')->nullable()->constrained()->nullOnDelete();
