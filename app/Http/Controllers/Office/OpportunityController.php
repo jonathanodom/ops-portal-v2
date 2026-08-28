@@ -12,6 +12,7 @@ use App\Models\Opportunity;
 use App\Models\OpportunityStage;
 use App\Models\OpportunityTask;
 use App\Support\AuditRecorder;
+use App\Support\FixedPoint;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -161,15 +162,29 @@ class OpportunityController extends Controller
 
     private function validated(Request $request, ?Opportunity $opportunity = null): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'customer_id' => ['required', 'integer'], 'service_location_id' => ['nullable', 'integer'], 'primary_contact_id' => ['nullable', 'integer'],
             'owner_user_id' => ['nullable', 'integer'], 'stage_id' => ['required', 'integer'], 'title' => ['required', 'string', 'max:255'],
-            'priority' => ['required', Rule::in(OpportunityWorkflow::PRIORITIES)], 'estimated_value_cents' => ['required', 'integer', 'min:0'],
-            'estimated_close_on' => ['nullable', 'date'], 'probability_override_bps' => ['nullable', 'integer', 'between:0,10000'],
+            'priority' => ['required', Rule::in(OpportunityWorkflow::PRIORITIES)], 'estimated_value' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'],
+            'estimated_close_on' => ['nullable', 'date'], 'probability_override_percent' => ['nullable', 'regex:/^\d{1,3}(\.\d{1,2})?$/'],
             'lead_source' => ['nullable', 'string', 'max:100'], 'referral_source' => ['nullable', 'string', 'max:150'],
             'classification' => ['nullable', 'string', 'max:100'], 'next_action' => ['nullable', 'string', 'max:500'],
             'lost_reason' => ['nullable', 'string', 'max:100'], 'lost_note' => ['nullable', 'string', 'max:5000'],
         ]);
+
+        $data['estimated_value_cents'] = FixedPoint::dollarsToCents($data['estimated_value']);
+        unset($data['estimated_value']);
+        if (filled($data['probability_override_percent'] ?? null)) {
+            $data['probability_override_bps'] = FixedPoint::percentToBasisPoints($data['probability_override_percent']);
+            if ($data['probability_override_bps'] > 10000) {
+                throw ValidationException::withMessages(['probability_override_percent' => 'Probability may not exceed 100 percent.']);
+            }
+        } else {
+            $data['probability_override_bps'] = null;
+        }
+        unset($data['probability_override_percent']);
+
+        return $data;
     }
 
     private function formData($organization, $stages): array

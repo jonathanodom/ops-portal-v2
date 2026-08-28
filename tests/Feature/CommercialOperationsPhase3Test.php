@@ -77,7 +77,7 @@ class CommercialOperationsPhase3Test extends TestCase
     {
         [$organization, $admin, $opportunity, $unit, $category] = $this->context('super_admin');
         $revision = app(QuoteWorkflow::class)->create($opportunity, $admin, 'Overlay')->revisions()->sole();
-        $payload = ['content_version' => $revision->content_version, 'item_type' => 'service', 'item_code' => 'NEW-SVC', 'name' => 'New service', 'category_id' => $category->id, 'sales_uom_id' => $unit->id, 'default_price' => '125.00', 'default_internal_cost' => '50.00', 'quantity_millis' => 1000, 'taxable' => 1];
+        $payload = ['content_version' => $revision->content_version, 'item_type' => 'service', 'item_code' => 'NEW-SVC', 'name' => 'New service', 'category_id' => $category->id, 'sales_uom_id' => $unit->id, 'default_price' => '125.00', 'default_internal_cost' => '50.00', 'quantity' => '1', 'taxable' => 1];
         $this->actingAs($admin)->post(route('office.quotes.catalog-items.store', [$revision->document, $revision]), $payload)->assertRedirect()->assertSessionHasNoErrors();
         $service = CatalogService::query()->where('service_code', 'NEW-SVC')->sole();
         $this->assertDatabaseHas('commercial_revision_lines', ['commercial_revision_id' => $revision->id, 'catalog_service_id' => $service->id, 'cost_basis_cents' => 5000]);

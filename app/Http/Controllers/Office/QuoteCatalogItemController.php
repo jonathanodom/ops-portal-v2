@@ -6,6 +6,7 @@ use App\Domain\Commercial\QuoteCatalogItemWorkflow;
 use App\Http\Controllers\Controller;
 use App\Models\CommercialDocument;
 use App\Models\CommercialRevision;
+use App\Support\FixedPoint;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -33,7 +34,7 @@ final class QuoteCatalogItemController extends Controller
             'default_internal_cost' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'],
             'default_labor_role_id' => ['nullable', 'integer', Rule::exists('catalog_labor_roles', 'id')->where(fn ($query) => $query->where('organization_id', $organization->id)->where('active', true))],
             'estimated_duration_minutes' => ['nullable', 'integer', 'min:1', 'max:100000'],
-            'quantity_millis' => ['required', 'integer', 'min:1'],
+            'quantity' => ['required', 'regex:/^\d{1,12}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'],
             'taxable' => ['nullable', 'boolean'], 'optional' => ['nullable', 'boolean'],
         ]);
         $type = $base['item_type'];
@@ -52,7 +53,7 @@ final class QuoteCatalogItemController extends Controller
             'package' => $common + ['package_code' => $base['item_code'], 'sales_uom_id' => (int) $base['sales_uom_id'], 'pricing_model' => 'flat', 'default_price_cents' => $price],
         };
         $workflow->createAndAdd($organization, $revision, $request->user(), $type, $catalogData, [
-            'content_version' => (int) $base['content_version'], 'quantity_millis' => (int) $base['quantity_millis'],
+            'content_version' => (int) $base['content_version'], 'quantity_millis' => FixedPoint::quantityToMillis($base['quantity']),
             'optional' => $request->boolean('optional'),
         ]);
 
@@ -61,8 +62,6 @@ final class QuoteCatalogItemController extends Controller
 
     private function dollarsToCents(string $value): int
     {
-        [$whole, $decimal] = array_pad(explode('.', $value, 2), 2, '');
-
-        return ((int) $whole * 100) + (int) str_pad(substr($decimal, 0, 2), 2, '0');
+        return FixedPoint::dollarsToCents($value);
     }
 }

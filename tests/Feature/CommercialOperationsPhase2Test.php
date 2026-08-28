@@ -66,7 +66,13 @@ class CommercialOperationsPhase2Test extends TestCase
             ->assertSee('Add scope')
             ->assertSee('bulk-location')
             ->assertSee('bulk-system')
-            ->assertSee('bulk-phase');
+            ->assertSee('bulk-phase')
+            ->assertSee('name="quantity"', false)
+            ->assertSee('name="amount"', false)
+            ->assertSee('name="tax_rate_percent"', false)
+            ->assertDontSee('thousandths')
+            ->assertDontSee('(cents)')
+            ->assertDontSee('(bps)');
     }
 
     public function test_catalog_snapshot_calculation_discount_tax_option_and_unresolved_cost_are_deterministic(): void
@@ -109,6 +115,79 @@ class CommercialOperationsPhase2Test extends TestCase
         $this->assertSame(3500, $component->fresh()->quantity_millis);
         $this->assertSame(2000, $source->fresh()->quantity_millis);
         $this->assertTrue($line->fresh()->cost_resolved);
+    }
+
+    public function test_quote_forms_convert_decimal_quantity_usd_and_percent_values_and_reject_extra_precision(): void
+    {
+        [$organization,$admin,$opportunity] = $this->context('super_admin');
+        [$product] = $this->catalog($organization, $admin);
+        $revision = app(QuoteWorkflow::class)->create($opportunity, $admin, 'Decimal inputs')->revisions()->sole();
+
+        $this->actingAs($admin)->post(route('office.quotes.lines.catalog', [$revision->document, $revision]), [
+            'content_version' => $revision->content_version,
+            'catalog_selection' => 'product:'.$product->id,
+            'quantity' => '1.125',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $line = $revision->lines()->sole();
+        $this->assertSame(1125, $line->quantity_millis);
+
+        $revision = $revision->fresh();
+        $this->actingAs($admin)->put(route('office.quotes.lines.update', [$revision->document, $revision, $line]), [
+            'content_version' => $revision->content_version,
+            'description' => $line->description,
+            'customer_description' => $line->customer_description,
+            'quantity' => '1.125',
+            'pricing_mode' => 'direct',
+            'effective_unit_sell' => '12.34',
+            'pricing_value_percent' => '8.25',
+            'discount_type' => 'percent',
+            'discount_amount' => '8.25',
+            'included' => '1',
+            'taxable' => '1',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $line->refresh();
+        $this->assertSame(1234, $line->effective_unit_sell_cents);
+        $this->assertSame(825, $line->discount_value);
+
+        $revision = $revision->fresh();
+        $this->actingAs($admin)->put(route('office.quotes.lines.update', [$revision->document, $revision, $line]), [
+            'content_version' => $revision->content_version,
+            'description' => $line->description,
+            'customer_description' => $line->customer_description,
+            'quantity' => '1.125',
+            'pricing_mode' => 'markup',
+            'effective_unit_sell' => '12.34',
+            'pricing_value_percent' => '8.25',
+            'discount_type' => '',
+            'discount_amount' => '',
+            'included' => '1',
+            'taxable' => '1',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertSame(541, $line->fresh()->effective_unit_sell_cents);
+
+        $revision = $revision->fresh();
+        $this->actingAs($admin)->put(route('office.quotes.update', [$revision->document, $revision]), [
+            'content_version' => $revision->content_version,
+            'discount_type' => 'fixed',
+            'discount_amount' => '12.34',
+            'tax_rate_percent' => '8.25',
+            'tax_override_reason' => 'Verified jurisdiction rate.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $revision->refresh();
+        $this->assertSame(1234, $revision->discount_value);
+        $this->assertSame(825, $revision->tax_rate_basis_points);
+
+        $this->actingAs($admin)->post(route('office.quotes.lines.allowance', [$revision->document, $revision]), [
+            'content_version' => $revision->content_version,
+            'description' => 'Invalid precision',
+            'amount' => '12.345',
+        ])->assertSessionHasErrors('amount');
+        $this->actingAs($admin)->post(route('office.quotes.lines.catalog', [$revision->document, $revision]), [
+            'content_version' => $revision->content_version,
+            'catalog_selection' => 'product:'.$product->id,
+            'quantity' => '1.2345',
+        ])->assertSessionHasErrors('quantity');
+        $this->assertSame(1, $revision->lines()->count());
     }
 
     public function test_draft_lock_clone_stale_rejection_and_historical_hash_stability(): void

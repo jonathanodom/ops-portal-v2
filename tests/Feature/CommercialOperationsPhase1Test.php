@@ -51,17 +51,21 @@ class CommercialOperationsPhase1Test extends TestCase
 
         $response = $this->actingAs($dispatcher)->get(route('office.opportunities.create'))->assertOk();
         $stage = OpportunityStage::query()->where('organization_id', $organization->id)->where('semantic_kind', 'new')->sole();
-        $response->assertSee('New opportunity')->assertSee($customer->display_name);
+        $response->assertSee('New opportunity')->assertSee($customer->display_name)
+            ->assertSee('Estimated value (USD)')->assertSee('name="estimated_value"', false)
+            ->assertSee('name="probability_override_percent"', false)->assertDontSee('basis points');
         $this->actingAs($dispatcher)->post(route('office.opportunities.store'), [
             'customer_id' => $customer->id, 'service_location_id' => $location->id, 'primary_contact_id' => $contact->id,
             'stage_id' => $stage->id, 'title' => 'Network modernization', 'priority' => 'high',
-            'estimated_value_cents' => 1250000, 'estimated_close_on' => '2026-10-01', 'next_action' => 'Schedule discovery.',
+            'estimated_value' => '12500.00', 'probability_override_percent' => '8.25', 'estimated_close_on' => '2026-10-01', 'next_action' => 'Schedule discovery.',
         ])->assertRedirect();
 
         $opportunity = Opportunity::query()->sole();
         $this->assertSame('OPP-2026-0001', $opportunity->opportunity_number);
         $this->assertSame($customer->id, $opportunity->customer_id);
         $this->assertSame($dispatcher->id, $opportunity->owner_user_id);
+        $this->assertSame(1250000, $opportunity->estimated_value_cents);
+        $this->assertSame(825, $opportunity->probability_override_bps);
         $this->assertDatabaseHas('document_sequences', ['organization_id' => $organization->id, 'document_type' => 'opportunity', 'year' => 2026, 'current_value' => 1]);
         $this->assertDatabaseHas('audit_events', ['event_type' => 'opportunity.created', 'subject_id' => $opportunity->id]);
     }
@@ -73,10 +77,30 @@ class CommercialOperationsPhase1Test extends TestCase
         [$dispatcher] = $this->member($organization, 'dispatcher');
         [$foreignCustomer, $foreignLocation, $foreignContact] = $this->customerContext($other);
         $foreignStage = OpportunityStage::query()->create(['organization_id' => $other->id, 'name' => 'New', 'semantic_kind' => 'new', 'default_probability_bps' => 1000]);
-        $payload = ['customer_id' => $foreignCustomer->id, 'service_location_id' => $foreignLocation->id, 'primary_contact_id' => $foreignContact->id, 'stage_id' => $foreignStage->id, 'title' => 'Forged', 'priority' => 'normal', 'estimated_value_cents' => 0];
+        $payload = ['customer_id' => $foreignCustomer->id, 'service_location_id' => $foreignLocation->id, 'primary_contact_id' => $foreignContact->id, 'stage_id' => $foreignStage->id, 'title' => 'Forged', 'priority' => 'normal', 'estimated_value' => '0.00'];
         $this->actingAs($dispatcher)->post(route('office.opportunities.store'), $payload)->assertNotFound();
         $this->actingAs($dispatcher)->post(route('office.opportunities.store'), [...$payload, 'customer_id' => null])->assertSessionHasErrors('customer_id');
         $this->assertDatabaseCount('opportunities', 0);
+    }
+
+    public function test_opportunity_money_and_probability_use_human_decimals_and_reject_extra_precision(): void
+    {
+        $organization = Organization::factory()->create();
+        [$dispatcher] = $this->member($organization, 'dispatcher');
+        [$customer] = $this->customerContext($organization);
+        $this->actingAs($dispatcher)->get(route('office.opportunities.index'))->assertOk();
+        $stage = OpportunityStage::query()->where('organization_id', $organization->id)->where('semantic_kind', 'new')->sole();
+        $base = ['customer_id' => $customer->id, 'stage_id' => $stage->id, 'title' => 'Decimal boundary', 'priority' => 'normal'];
+
+        $this->actingAs($dispatcher)->post(route('office.opportunities.store'), $base + ['estimated_value' => '12.345'])
+            ->assertSessionHasErrors('estimated_value');
+        $this->actingAs($dispatcher)->post(route('office.opportunities.store'), $base + ['estimated_value' => '12.34', 'probability_override_percent' => '8.255'])
+            ->assertSessionHasErrors('probability_override_percent');
+        $this->assertDatabaseCount('opportunities', 0);
+
+        $this->actingAs($dispatcher)->post(route('office.opportunities.store'), $base + ['estimated_value' => '12.34', 'probability_override_percent' => '8.25'])
+            ->assertRedirect()->assertSessionHasNoErrors();
+        $this->assertDatabaseHas('opportunities', ['estimated_value_cents' => 1234, 'probability_override_bps' => 825]);
     }
 
     public function test_protected_stage_override_lost_reopen_and_won_final_rules_are_enforced(): void
@@ -160,11 +184,14 @@ class CommercialOperationsPhase1Test extends TestCase
         $organization = Organization::factory()->create();
         [$admin] = $this->member($organization, 'super_admin');
         [$dispatcher] = $this->member($organization, 'dispatcher');
-        $this->actingAs($admin)->get(route('office.settings.commercial.edit'))->assertOk()->assertSee('Pipeline stages');
+        $this->actingAs($admin)->get(route('office.settings.commercial.edit'))->assertOk()->assertSee('Pipeline stages')
+            ->assertSee('name="gross_margin_floor_percent"', false)
+            ->assertSee('default_probability_percent', false)
+            ->assertDontSee('(bps)');
         $stages = OpportunityStage::query()->where('organization_id', $organization->id)->get();
-        $payload = ['default_proposal_expiration_days' => 45, 'gross_margin_floor_bps' => 2500, 'discount_approval_ceiling_bps' => 1200, 'first_reminder_days' => 10, 'second_reminder_days' => 3, 'notification_policy' => 'staff_only', 'approve_manual_price_overrides' => '1', 'approve_below_cost_lines' => '1', 'approve_terms_overrides' => '1', 'stages' => []];
+        $payload = ['default_proposal_expiration_days' => 45, 'gross_margin_floor_percent' => '25.00', 'discount_approval_ceiling_percent' => '12.00', 'first_reminder_days' => 10, 'second_reminder_days' => 3, 'notification_policy' => 'staff_only', 'approve_manual_price_overrides' => '1', 'approve_below_cost_lines' => '1', 'approve_terms_overrides' => '1', 'stages' => []];
         foreach ($stages as $stage) {
-            $payload['stages'][$stage->id] = ['name' => $stage->semantic_kind === 'qualifying' ? 'Discovery' : $stage->name, 'default_probability_bps' => $stage->default_probability_bps, 'color' => $stage->color, 'sort_order' => $stage->sort_order];
+            $payload['stages'][$stage->id] = ['name' => $stage->semantic_kind === 'qualifying' ? 'Discovery' : $stage->name, 'default_probability_percent' => number_format($stage->default_probability_bps / 100, 2, '.', ''), 'color' => $stage->color, 'sort_order' => $stage->sort_order];
         }
         $this->actingAs($admin)->put(route('office.settings.commercial.update'), $payload)->assertRedirect();
         $this->assertDatabaseHas('opportunity_stages', ['organization_id' => $organization->id, 'semantic_kind' => 'qualifying', 'name' => 'Discovery']);
@@ -173,7 +200,7 @@ class CommercialOperationsPhase1Test extends TestCase
 
     private function payload(Opportunity $opportunity, int $stageId): array
     {
-        return ['customer_id' => $opportunity->customer_id, 'service_location_id' => $opportunity->service_location_id, 'primary_contact_id' => $opportunity->primary_contact_id, 'owner_user_id' => $opportunity->owner_user_id, 'stage_id' => $stageId, 'title' => $opportunity->title, 'priority' => $opportunity->priority, 'estimated_value_cents' => $opportunity->estimated_value_cents];
+        return ['customer_id' => $opportunity->customer_id, 'service_location_id' => $opportunity->service_location_id, 'primary_contact_id' => $opportunity->primary_contact_id, 'owner_user_id' => $opportunity->owner_user_id, 'stage_id' => $stageId, 'title' => $opportunity->title, 'priority' => $opportunity->priority, 'estimated_value' => number_format($opportunity->estimated_value_cents / 100, 2, '.', ''), 'probability_override_percent' => $opportunity->probability_override_bps === null ? null : number_format($opportunity->probability_override_bps / 100, 2, '.', '')];
     }
 
     private function organizationMember(string $role): array

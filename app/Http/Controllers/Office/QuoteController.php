@@ -15,10 +15,12 @@ use App\Models\CommercialRevisionLine;
 use App\Models\CommercialRevisionLineComponent;
 use App\Models\Opportunity;
 use App\Models\UnitOfMeasure;
+use App\Support\FixedPoint;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
 final class QuoteController extends Controller
@@ -55,7 +57,13 @@ final class QuoteController extends Controller
     {
         [$quote, $revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('update', $quote);
-        $data = $request->validate(['content_version' => ['required', 'integer', 'min:1'], 'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_value' => ['nullable', 'integer', 'min:0'], 'tax_rate_basis_points' => ['required', 'integer', 'min:0', 'max:10000'], 'tax_override_reason' => ['nullable', 'string', 'max:1000']]);
+        $data = $request->validate(['content_version' => ['required', 'integer', 'min:1'], 'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_amount' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'tax_rate_percent' => ['required', 'regex:/^\d{1,3}(\.\d{1,2})?$/'], 'tax_override_reason' => ['nullable', 'string', 'max:1000']]);
+        $data['discount_value'] = $this->discountValue($data['discount_type'] ?? null, $data['discount_amount'] ?? null, 'discount_amount');
+        $data['tax_rate_basis_points'] = FixedPoint::percentToBasisPoints($data['tax_rate_percent']);
+        if ($data['tax_rate_basis_points'] > 10000) {
+            throw ValidationException::withMessages(['tax_rate_percent' => 'Tax rate may not exceed 100 percent.']);
+        }
+        unset($data['discount_amount'], $data['tax_rate_percent']);
         $workflow->updateRevision($revision, $request->user(), $data);
 
         return $this->back($quote, $revision, 'Quote totals updated.');
@@ -65,7 +73,9 @@ final class QuoteController extends Controller
     {
         [$quote,$revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('update', $quote);
-        $data = $request->validate(['content_version' => ['required', 'integer'], 'catalog_selection' => ['required', 'string'], 'quantity_millis' => ['required', 'integer', 'min:1'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean']]);
+        $data = $request->validate(['content_version' => ['required', 'integer'], 'catalog_selection' => ['required', 'string'], 'quantity' => ['required', 'regex:/^\d{1,12}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean']]);
+        $data['quantity_millis'] = FixedPoint::quantityToMillis($data['quantity']);
+        unset($data['quantity']);
         $parts = explode(':', $data['catalog_selection']);
         if (count($parts) < 2 || ! in_array($parts[0], ['service', 'product', 'package'], true) || ! ctype_digit($parts[1])) {
             return back()->withErrors(['catalog_selection' => 'Choose a valid Catalog item.']);
@@ -82,7 +92,9 @@ final class QuoteController extends Controller
     {
         [$quote,$revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('update', $quote);
-        $data = $request->validate(['content_version' => ['required', 'integer'], 'description' => ['required', 'string', 'max:255'], 'customer_description' => ['nullable', 'string', 'max:2000'], 'amount_cents' => ['required', 'integer', 'min:0'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean'], 'taxable' => ['nullable', 'boolean']]);
+        $data = $request->validate(['content_version' => ['required', 'integer'], 'description' => ['required', 'string', 'max:255'], 'customer_description' => ['nullable', 'string', 'max:2000'], 'amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean'], 'taxable' => ['nullable', 'boolean']]);
+        $data['amount_cents'] = FixedPoint::dollarsToCents($data['amount']);
+        unset($data['amount']);
         $workflow->addAllowance($revision, $request->user(), $data);
 
         return $this->back($quote, $revision, 'Allowance added.');
@@ -93,7 +105,15 @@ final class QuoteController extends Controller
         [$quote,$revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('update', $quote);
         abort_unless((int) $line->commercial_revision_id === (int) $revision->id, 404);
-        $data = $request->validate(['content_version' => ['required', 'integer'], 'description' => ['required', 'string', 'max:255'], 'customer_description' => ['nullable', 'string', 'max:2000'], 'quantity_millis' => ['required', 'integer', 'min:1'], 'pricing_mode' => ['required', Rule::in(['catalog', 'direct', 'markup', 'margin'])], 'effective_unit_sell_cents' => ['required', 'integer', 'min:0'], 'pricing_value_basis_points' => ['nullable', 'integer', 'min:0', 'max:999999'], 'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_value' => ['nullable', 'integer', 'min:0'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean'], 'included' => ['nullable', 'boolean'], 'taxable' => ['nullable', 'boolean']]);
+        $data = $request->validate(['content_version' => ['required', 'integer'], 'description' => ['required', 'string', 'max:255'], 'customer_description' => ['nullable', 'string', 'max:2000'], 'quantity' => ['required', 'regex:/^\d{1,12}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'], 'pricing_mode' => ['required', Rule::in(['catalog', 'direct', 'markup', 'margin'])], 'effective_unit_sell' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'pricing_value_percent' => ['nullable', 'regex:/^\d{1,4}(\.\d{1,2})?$/'], 'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_amount' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean'], 'included' => ['nullable', 'boolean'], 'taxable' => ['nullable', 'boolean']]);
+        $data['quantity_millis'] = FixedPoint::quantityToMillis($data['quantity']);
+        $data['effective_unit_sell_cents'] = FixedPoint::dollarsToCents($data['effective_unit_sell']);
+        $data['pricing_value_basis_points'] = filled($data['pricing_value_percent'] ?? null) ? FixedPoint::percentToBasisPoints($data['pricing_value_percent']) : 0;
+        if ($data['pricing_value_basis_points'] > 999999) {
+            throw ValidationException::withMessages(['pricing_value_percent' => 'Markup or margin may not exceed 9,999.99 percent.']);
+        }
+        $data['discount_value'] = $this->discountValue($data['discount_type'] ?? null, $data['discount_amount'] ?? null, 'discount_amount');
+        unset($data['quantity'], $data['effective_unit_sell'], $data['pricing_value_percent'], $data['discount_amount']);
         $workflow->updateLine($revision, $line, $request->user(), $data);
 
         return $this->back($quote, $revision, 'Line updated.');
@@ -136,7 +156,13 @@ final class QuoteController extends Controller
         [$quote,$revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('update', $quote);
         abort_unless((int) $line->commercial_revision_id === (int) $revision->id && (int) $component->commercial_revision_line_id === (int) $line->id, 404);
-        $data = $request->validate(['content_version' => ['required', 'integer'], 'name' => ['required', 'string', 'max:255'], 'quantity_millis' => ['required', 'integer', 'min:1'], 'waste_basis_points' => ['required', 'integer', 'min:0', 'max:10000'], 'customer_visible' => ['nullable', 'boolean']]);
+        $data = $request->validate(['content_version' => ['required', 'integer'], 'name' => ['required', 'string', 'max:255'], 'quantity' => ['required', 'regex:/^\d{1,12}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'], 'waste_percent' => ['required', 'regex:/^\d{1,3}(\.\d{1,2})?$/'], 'customer_visible' => ['nullable', 'boolean']]);
+        $data['quantity_millis'] = FixedPoint::quantityToMillis($data['quantity']);
+        $data['waste_basis_points'] = FixedPoint::percentToBasisPoints($data['waste_percent']);
+        if ($data['waste_basis_points'] > 10000) {
+            throw ValidationException::withMessages(['waste_percent' => 'Waste may not exceed 100 percent.']);
+        }
+        unset($data['quantity'], $data['waste_percent']);
         $workflow->updateComponent($revision, $line, $component, $request->user(), $data);
 
         return $this->back($quote, $revision, 'Package component updated.');
@@ -166,7 +192,14 @@ final class QuoteController extends Controller
     {
         [$quote,$revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('update', $quote);
-        $data = $request->validate(['content_version' => ['required', 'integer'], 'name' => ['required', 'string', 'max:120'], 'amount_type' => ['required', Rule::in(['fixed', 'percent'])], 'amount_value' => ['required', 'integer', 'min:0'], 'is_balancing' => ['nullable', 'boolean']]);
+        $data = $request->validate(['content_version' => ['required', 'integer'], 'name' => ['required', 'string', 'max:120'], 'amount_type' => ['required', Rule::in(['fixed', 'percent'])], 'amount' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'is_balancing' => ['nullable', 'boolean']]);
+        $data['amount_value'] = $data['amount_type'] === 'percent'
+            ? FixedPoint::percentToBasisPoints($data['amount'])
+            : FixedPoint::dollarsToCents($data['amount']);
+        if ($data['amount_type'] === 'percent' && $data['amount_value'] > 10000) {
+            throw ValidationException::withMessages(['amount' => 'A percentage milestone may not exceed 100 percent.']);
+        }
+        unset($data['amount']);
         $workflow->addMilestone($revision, $request->user(), $data);
 
         return $this->back($quote, $revision, 'Payment milestone added.');
@@ -196,6 +229,25 @@ final class QuoteController extends Controller
         $organization = $request->attributes->get('organization');
 
         return Opportunity::query()->forOrganization($organization->id)->findOrFail($opportunity->id);
+    }
+
+    private function discountValue(?string $type, ?string $value, string $field): ?int
+    {
+        if ($type === null || $type === '') {
+            return null;
+        }
+        if ($value === null || $value === '') {
+            throw ValidationException::withMessages([$field => 'Enter a discount value.']);
+        }
+
+        $converted = $type === 'percent'
+            ? FixedPoint::percentToBasisPoints($value)
+            : FixedPoint::dollarsToCents($value);
+        if ($type === 'percent' && $converted > 10000) {
+            throw ValidationException::withMessages([$field => 'A percentage discount may not exceed 100 percent.']);
+        }
+
+        return $converted;
     }
 
     private function scoped(Request $request, CommercialDocument $quote, CommercialRevision $revision): array
