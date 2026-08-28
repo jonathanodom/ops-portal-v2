@@ -6,6 +6,7 @@ const dashboardReviewDir = process.env.DASHBOARD_REVIEW_DIR;
 const projectsReviewDir = process.env.PROJECTS_REVIEW_DIR;
 const fieldTestReviewDir = process.env.FIELD_TEST_REVIEW_DIR;
 const printDocumentReviewDir = process.env.PRINT_DOCUMENT_REVIEW_DIR;
+const commercialReviewDir = process.env.COMMERCIAL_REVIEW_DIR;
 
 async function captureDashboard(page, filename) {
     if (dashboardReviewDir) {
@@ -31,6 +32,12 @@ async function capturePrintDocument(page, filename) {
     }
 }
 
+async function captureCommercial(page, filename) {
+    if (commercialReviewDir) {
+        await page.screenshot({ path: `${commercialReviewDir}/${filename}`, fullPage: true });
+    }
+}
+
 async function login(page, role) {
     await page.goto('/login');
     await expectAccessible(page);
@@ -47,6 +54,39 @@ async function expectAccessible(page) {
 }
 
 test.skip(!password, 'BETA_DEMO_PASSWORD is required.');
+
+test.describe('Commercial Operations Phase 4', () => {
+    test('Proposal library and approval queue are responsive and accessible', async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name !== 'desktop', 'One browser project loops through all required widths.');
+        await login(page, 'super_admin');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office/commercial-library');
+            await expect(page.getByRole('heading', { name: 'Proposal library' })).toBeVisible();
+            await expect(page.getByText('Budgetary Estimate', { exact: true })).toBeVisible();
+            await expect(page.getByText('Quick Quote', { exact: true })).toBeVisible();
+            await expect(page.getByText('Full Project Proposal', { exact: true })).toBeVisible();
+            await expect(page.getByText('Change Order', { exact: true })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await captureCommercial(page, `proposal-library-${viewport.width}x${viewport.height}.png`);
+
+            await page.goto('/office/quote-approvals');
+            await expect(page.getByRole('heading', { name: 'Quote approvals' })).toBeVisible();
+            await expect(page.getByRole('heading', { name: 'No approvals waiting' })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            await captureCommercial(page, `approval-queue-${viewport.width}x${viewport.height}.png`);
+        }
+    });
+});
 
 test.describe('Printable operational documents', () => {
     test('Work Order and Project Workbook are accessible print-oriented private previews', async ({ page }, testInfo) => {

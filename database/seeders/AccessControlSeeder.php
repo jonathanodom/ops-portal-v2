@@ -61,6 +61,10 @@ class AccessControlSeeder extends Seeder
         'quotes.view' => 'View internal Quotes and customer-safe commercial data',
         'quotes.manage' => 'Create and edit Draft Quote revisions',
         'quotes.cost_margin.view' => 'View internal Quote cost, profit, margin, and markup',
+        'quotes.publish' => 'Publish approved Quote revisions and manage delivery',
+        'quotes.approve' => 'Approve Quote pricing and terms exceptions',
+        'proposal.engagement.view' => 'View Proposal recipients and delivery activity',
+        'proposal.templates.manage' => 'Manage Proposal templates, content, terms, and defaults',
     ];
 
     private const ROLES = [

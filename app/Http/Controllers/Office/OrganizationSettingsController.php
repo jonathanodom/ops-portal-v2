@@ -33,6 +33,9 @@ class OrganizationSettingsController extends Controller
         if ($membership->hasCapability('opportunities.admin')) {
             return redirect()->route('office.settings.commercial.edit');
         }
+        if ($membership->hasCapability('proposal.templates.manage')) {
+            return redirect()->route('office.commercial-library.index');
+        }
 
         abort(403);
     }

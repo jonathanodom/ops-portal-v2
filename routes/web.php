@@ -23,6 +23,9 @@ use App\Http\Controllers\Office\CatalogServiceAddonController;
 use App\Http\Controllers\Office\CatalogServiceController;
 use App\Http\Controllers\Office\CatalogServiceVariantController;
 use App\Http\Controllers\Office\CloseoutReviewController;
+use App\Http\Controllers\Office\CommercialApprovalController;
+use App\Http\Controllers\Office\CommercialLibraryController;
+use App\Http\Controllers\Office\CommercialRevisionContentController;
 use App\Http\Controllers\Office\CommercialSettingsController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
@@ -42,6 +45,7 @@ use App\Http\Controllers\Office\ProjectAttachmentController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ProjectWorkbookPrintController;
+use App\Http\Controllers\Office\ProposalPublicationController;
 use App\Http\Controllers\Office\QuoteCatalogItemController;
 use App\Http\Controllers\Office\QuoteController;
 use App\Http\Controllers\Office\ServiceLocationController;
@@ -122,6 +126,15 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::delete('/{opportunity}/attachments/{attachment}', [OpportunityAttachmentController::class, 'destroy'])->whereNumber(['opportunity', 'attachment'])->middleware('capability:opportunities.manage')->name('attachments.destroy');
             });
             Route::post('/opportunities/{opportunity}/quotes', [QuoteController::class, 'store'])->whereNumber('opportunity')->middleware('capability:quotes.manage')->name('opportunities.quotes.store');
+            Route::get('/quote-approvals', [CommercialApprovalController::class, 'index'])->middleware('capability:quotes.approve')->name('quote-approvals.index');
+            Route::prefix('commercial-library')->name('commercial-library.')->middleware('capability:proposal.templates.manage')->group(function (): void {
+                Route::get('/', [CommercialLibraryController::class, 'index'])->name('index');
+                Route::post('/content-blocks', [CommercialLibraryController::class, 'block'])->name('blocks.store');
+                Route::post('/terms', [CommercialLibraryController::class, 'terms'])->name('terms.store');
+                Route::put('/templates/{template}', [CommercialLibraryController::class, 'template'])->whereNumber('template')->name('templates.update');
+                Route::post('/templates/{template}/sections', [CommercialLibraryController::class, 'section'])->whereNumber('template')->name('templates.sections.store');
+                Route::put('/templates/{template}/sections/{section}', [CommercialLibraryController::class, 'updateSection'])->whereNumber(['template', 'section'])->name('templates.sections.update');
+            });
             Route::prefix('quotes')->name('quotes.')->middleware('capability:quotes.view')->group(function (): void {
                 Route::get('/{quote}/revisions/{revision}', [QuoteController::class, 'show'])->whereNumber(['quote', 'revision'])->name('show');
                 Route::put('/{quote}/revisions/{revision}', [QuoteController::class, 'update'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('update');
@@ -138,6 +151,26 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/{quote}/revisions/{revision}/milestones', [QuoteController::class, 'addMilestone'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('milestones.store');
                 Route::post('/{quote}/revisions/{revision}/lock', [QuoteController::class, 'lock'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lock');
                 Route::post('/{quote}/revisions/{revision}/clone', [QuoteController::class, 'clone'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('clone');
+                Route::put('/{quote}/revisions/{revision}/terms', [CommercialRevisionContentController::class, 'terms'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('terms.update');
+                Route::post('/{quote}/revisions/{revision}/content-blocks', [CommercialRevisionContentController::class, 'block'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('content-blocks.store');
+                Route::post('/{quote}/revisions/{revision}/media', [CommercialRevisionContentController::class, 'upload'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('media.upload');
+                Route::post('/{quote}/revisions/{revision}/media/embed', [CommercialRevisionContentController::class, 'embed'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('media.embed');
+                Route::get('/{quote}/revisions/{revision}/media/{media}', [CommercialRevisionContentController::class, 'show'])->whereNumber(['quote', 'revision', 'media'])->name('media.show');
+                Route::delete('/{quote}/revisions/{revision}/media/{media}', [CommercialRevisionContentController::class, 'destroy'])->whereNumber(['quote', 'revision', 'media'])->middleware('capability:quotes.manage')->name('media.destroy');
+                Route::post('/{quote}/revisions/{revision}/approval', [CommercialApprovalController::class, 'submit'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('approval.submit');
+                Route::post('/{quote}/revisions/{revision}/publications', [ProposalPublicationController::class, 'store'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.publish')->name('publications.store');
+            });
+            Route::post('/quote-approvals/{approval}/decision', [CommercialApprovalController::class, 'decide'])->whereNumber('approval')->middleware('capability:quotes.approve')->name('quote-approvals.decide');
+            Route::prefix('proposal-publications/{publication}')->whereNumber('publication')->name('proposal-publications.')->group(function (): void {
+                Route::get('/', [ProposalPublicationController::class, 'show'])->name('show');
+                Route::get('/pdf', [ProposalPublicationController::class, 'pdf'])->name('pdf');
+                Route::post('/pdf/retry', [ProposalPublicationController::class, 'retryPdf'])->middleware('capability:quotes.publish')->name('pdf.retry');
+                Route::post('/recipients', [ProposalPublicationController::class, 'recipient'])->middleware('capability:quotes.publish')->name('recipients.store');
+                Route::post('/share-links', [ProposalPublicationController::class, 'shareLink'])->middleware('capability:quotes.publish')->name('share-links.store');
+                Route::post('/recipients/{recipient}/revoke', [ProposalPublicationController::class, 'revokeRecipient'])->whereNumber('recipient')->middleware('capability:quotes.publish')->name('recipients.revoke');
+                Route::post('/share-links/{shareLink}/revoke', [ProposalPublicationController::class, 'revokeShareLink'])->whereNumber('shareLink')->middleware('capability:quotes.publish')->name('share-links.revoke');
+                Route::post('/recipients/{recipient}/deliver', [ProposalPublicationController::class, 'deliver'])->whereNumber('recipient')->middleware('capability:quotes.publish')->name('deliver');
+                Route::post('/withdraw', [ProposalPublicationController::class, 'withdraw'])->middleware('capability:quotes.publish')->name('withdraw');
             });
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');

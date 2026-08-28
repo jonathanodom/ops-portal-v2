@@ -6,12 +6,14 @@ use App\Domain\CatalogLineSnapshotFactory;
 use App\Models\CatalogPackage;
 use App\Models\CatalogProduct;
 use App\Models\CatalogService;
+use App\Models\CommercialContentBlock;
 use App\Models\CommercialDocument;
 use App\Models\CommercialPhase;
 use App\Models\CommercialRevision;
 use App\Models\CommercialRevisionLine;
 use App\Models\CommercialRevisionLineComponent;
 use App\Models\CommercialSystem;
+use App\Models\CommercialTermsSet;
 use App\Models\Opportunity;
 use App\Models\OrganizationBillingSetting;
 use App\Models\User;
@@ -271,6 +273,38 @@ final class QuoteWorkflow
         return $this->mutate($revision, $actor, (int) $data['content_version'], fn (CommercialRevision $locked) => $locked->sections()->create(['organization_id' => $locked->organization_id, 'heading' => $data['heading'], 'body' => $data['body'] ?? null, 'customer_visible' => (bool) ($data['customer_visible'] ?? false), 'sort_order' => ((int) $locked->sections()->max('sort_order')) + 10]), 'quote.section_added');
     }
 
+    public function addContentBlock(CommercialRevision $revision, CommercialContentBlock $block, User $actor, int $contentVersion): CommercialRevision
+    {
+        abort_unless($block->organization_id === $revision->organization_id && $block->active, 404);
+
+        return $this->mutate($revision, $actor, $contentVersion, fn (CommercialRevision $locked) => $locked->sections()->create(['organization_id' => $locked->organization_id, 'source_content_block_id' => $block->id, 'heading' => $block->heading, 'body' => $block->body, 'customer_visible' => true, 'sort_order' => ((int) $locked->sections()->max('sort_order')) + 10]), 'quote.content_block_added', ['content_block_id' => $block->id]);
+    }
+
+    public function updateTerms(CommercialRevision $revision, ?CommercialTermsSet $terms, User $actor, int $contentVersion, ?string $overrideBody): CommercialRevision
+    {
+        if ($terms) {
+            abort_unless($terms->organization_id === $revision->organization_id && $terms->active, 404);
+        }
+
+        return $this->mutate($revision, $actor, $contentVersion, function (CommercialRevision $locked) use ($terms, $overrideBody): void {
+            $body = filled($overrideBody) ? $overrideBody : $terms?->body;
+            $locked->update(['commercial_terms_set_id' => $terms?->id, 'terms_name_snapshot' => $terms?->name ?? 'Custom terms', 'terms_version_snapshot' => $terms?->version, 'terms_body_snapshot' => $body, 'terms_overridden' => filled($overrideBody) && $overrideBody !== $terms?->body]);
+        }, 'quote.terms_updated', ['changed_fields' => ['terms_set', 'terms_body', 'terms_overridden'], 'terms_set_id' => $terms?->id]);
+    }
+
+    public function refreshContent(CommercialRevision $revision, User $actor): CommercialRevision
+    {
+        return DB::transaction(function () use ($revision, $actor): CommercialRevision {
+            $revision = CommercialRevision::query()->whereKey($revision->id)->lockForUpdate()->firstOrFail();
+            if (! $revision->isEditable()) {
+                throw ValidationException::withMessages(['revision' => 'Only a Draft revision may be edited.']);
+            }
+            $this->refresh($revision, $actor);
+
+            return $revision->fresh();
+        });
+    }
+
     /** @param array<string,mixed> $data */
     public function addMilestone(CommercialRevision $revision, User $actor, array $data): CommercialRevision
     {
@@ -299,7 +333,7 @@ final class QuoteWorkflow
             }
             $document = CommercialDocument::query()->whereKey($source->commercial_document_id)->lockForUpdate()->firstOrFail();
             $version = ((int) $document->revisions()->max('version')) + 1;
-            $target = CommercialRevision::query()->create(array_merge($source->only(['organization_id', 'commercial_document_id', 'currency', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'tax_rate_overridden', 'tax_override_reason', 'customer_tax_exempt', 'tax_exemption_reference']), ['version' => $version, 'source_revision_id' => $source->id, 'status' => 'draft', 'content_version' => 1, 'content_hash' => str_repeat('0', 64), 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]));
+            $target = CommercialRevision::query()->create(array_merge($source->only(['organization_id', 'commercial_document_id', 'currency', 'commercial_terms_set_id', 'terms_name_snapshot', 'terms_version_snapshot', 'terms_body_snapshot', 'terms_overridden', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'tax_rate_overridden', 'tax_override_reason', 'customer_tax_exempt', 'tax_exemption_reference']), ['version' => $version, 'source_revision_id' => $source->id, 'status' => 'draft', 'content_version' => 1, 'content_hash' => str_repeat('0', 64), 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]));
             $maps = [];
             foreach (['locations', 'systems', 'phases'] as $relation) {
                 $maps[$relation] = [];
@@ -314,7 +348,7 @@ final class QuoteWorkflow
                 }
             }
             foreach ($source->sections()->get() as $record) {
-                $target->sections()->create($record->only(['organization_id', 'heading', 'body', 'customer_visible', 'sort_order']));
+                $target->sections()->create($record->only(['organization_id', 'source_content_block_id', 'heading', 'body', 'customer_visible', 'sort_order']));
             }
             foreach ($source->lines()->with('components')->get() as $line) {
                 $data = $line->only($line->getFillable());
@@ -361,10 +395,11 @@ final class QuoteWorkflow
         $this->calculator->recalculate($revision);
         $version = $increment ? $revision->content_version + 1 : $revision->content_version;
         $payload = [
-            'revision' => $revision->only(['version', 'status', 'currency', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'customer_tax_exempt']),
+            'revision' => $revision->only(['version', 'status', 'currency', 'commercial_terms_set_id', 'terms_name_snapshot', 'terms_version_snapshot', 'terms_body_snapshot', 'terms_overridden', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'customer_tax_exempt']),
             'locations' => $revision->locations()->orderBy('id')->get()->toArray(), 'systems' => $revision->systems()->orderBy('id')->get()->toArray(),
             'phases' => $revision->phases()->orderBy('id')->get()->toArray(), 'sections' => $revision->sections()->orderBy('id')->get()->toArray(),
             'lines' => $revision->lines()->with('components')->orderBy('id')->get()->toArray(), 'milestones' => $revision->paymentMilestones()->orderBy('id')->get()->toArray(),
+            'media' => $revision->media()->where('state', 'stored')->orderBy('id')->get(['id', 'media_type', 'original_name', 'mime_type', 'byte_size', 'sha256', 'embed_url', 'caption'])->toArray(),
         ];
         $revision->forceFill(['content_version' => $version, 'content_hash' => hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR)), 'updated_by_id' => $actor->id])->save();
     }

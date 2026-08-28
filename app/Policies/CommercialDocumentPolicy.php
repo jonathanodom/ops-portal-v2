@@ -30,4 +30,19 @@ final class CommercialDocumentPolicy
     {
         return $this->hasCapability($user, $document->organization_id, 'quotes.cost_margin.view');
     }
+
+    public function approve(User $user, CommercialDocument $document): bool
+    {
+        return $this->hasCapability($user, $document->organization_id, 'quotes.approve');
+    }
+
+    public function publish(User $user, CommercialDocument $document): bool
+    {
+        return $this->hasCapability($user, $document->organization_id, 'quotes.publish');
+    }
+
+    public function viewEngagement(User $user, CommercialDocument $document): bool
+    {
+        return $this->hasCapability($user, $document->organization_id, 'proposal.engagement.view');
+    }
 }

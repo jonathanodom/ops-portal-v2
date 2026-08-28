@@ -166,6 +166,8 @@ Commercial Operations Phase 2 adds the internal revisioned Quote builder, immuta
 
 Commercial Operations Phase 3 adds approved Service/labor-role estimating costs, fixed and component-sum Package pricing, immutable cost provenance, and an authorized transactional Quote-to-Catalog item overlay. See [Commercial Operations Phase 3](docs/COMMERCIAL_OPERATIONS_PHASE_3.md) for the schema, resolution order, preservation evidence, UI checklist, and deferred Checkpoint 4 boundary.
 
+Commercial Operations Phase 4 adds content-hash-bound approvals, reusable Proposal content and templates, immutable internal publications, private Proposal media/PDF generation, and local/test-only delivery infrastructure. See [Commercial Operations Phase 4](docs/COMMERCIAL_OPERATIONS_PHASE_4.md) for the schema, approval matrix, preservation evidence, validation results, UI checklist, and explicit Phase 5 boundary.
+
 The implemented Opportunity foundation and its Phase 1 owner acceptance gate are documented in [Commercial Operations Phase 1](docs/COMMERCIAL_OPERATIONS_PHASE_1.md).
 
 ## Quality commands

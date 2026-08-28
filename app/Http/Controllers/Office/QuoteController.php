@@ -9,11 +9,15 @@ use App\Models\CatalogLaborRole;
 use App\Models\CatalogPackage;
 use App\Models\CatalogProduct;
 use App\Models\CatalogService;
+use App\Models\CommercialContentBlock;
 use App\Models\CommercialDocument;
 use App\Models\CommercialRevision;
 use App\Models\CommercialRevisionLine;
 use App\Models\CommercialRevisionLineComponent;
+use App\Models\CommercialTermsSet;
 use App\Models\Opportunity;
+use App\Models\OrganizationCommercialSetting;
+use App\Models\ProposalTemplate;
 use App\Models\UnitOfMeasure;
 use App\Support\FixedPoint;
 use Illuminate\Http\RedirectResponse;
@@ -39,7 +43,7 @@ final class QuoteController extends Controller
     {
         [$quote, $revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('view', $quote);
-        $revision->load(['document.opportunity.customer', 'document.opportunity.serviceLocation', 'locations.parent', 'systems', 'phases', 'sections', 'lines.components', 'lines.location', 'lines.system', 'lines.phase', 'lines.category', 'paymentMilestones']);
+        $revision->load(['document.opportunity.customer', 'document.opportunity.serviceLocation', 'locations.parent', 'systems', 'phases', 'sections', 'lines.components', 'lines.location', 'lines.system', 'lines.phase', 'lines.category', 'paymentMilestones', 'media' => fn ($query) => $query->where('state', 'stored'), 'approvals.requestedBy', 'approvals.decidedBy', 'publication']);
         $organizationId = $quote->organization_id;
         $services = CatalogService::query()->forOrganization($organizationId)->where('active', true)->with(['variants' => fn ($q) => $q->where('active', true), 'salesUom'])->orderBy('name')->get();
         $products = CatalogProduct::query()->forOrganization($organizationId)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get();
@@ -49,8 +53,12 @@ final class QuoteController extends Controller
         $laborRoles = CatalogLaborRole::query()->forOrganization($organizationId)->where('active', true)->orderBy('name')->get();
         $group = in_array($request->string('group')->toString(), ['location', 'system', 'phase', 'category', 'type'], true) ? $request->string('group')->toString() : 'location';
         $canViewCost = Gate::allows('viewCostMargin', $quote);
+        $contentBlocks = CommercialContentBlock::query()->forOrganization($organizationId)->where('active', true)->orderBy('name')->get();
+        $termsSets = CommercialTermsSet::query()->forOrganization($organizationId)->where('active', true)->where('approved', true)->orderBy('name')->orderByDesc('version')->get();
+        $proposalTemplates = ProposalTemplate::query()->forOrganization($organizationId)->where('active', true)->orderBy('name')->get();
+        $commercialSettings = OrganizationCommercialSetting::query()->where('organization_id', $organizationId)->firstOrFail();
 
-        return view('office.quotes.show', compact('quote', 'revision', 'services', 'products', 'packages', 'categories', 'units', 'laborRoles', 'group', 'canViewCost'));
+        return view('office.quotes.show', compact('quote', 'revision', 'services', 'products', 'packages', 'categories', 'units', 'laborRoles', 'group', 'canViewCost', 'contentBlocks', 'termsSets', 'proposalTemplates', 'commercialSettings'));
     }
 
     public function update(Request $request, CommercialDocument $quote, CommercialRevision $revision, QuoteWorkflow $workflow): RedirectResponse

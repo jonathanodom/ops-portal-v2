@@ -36,6 +36,7 @@ class CommercialSettingsController extends Controller
             'default_proposal_expiration_days' => ['required', 'integer', 'between:1,365'], 'gross_margin_floor_percent' => ['required', 'regex:/^\d{1,3}(\.\d{1,2})?$/'],
             'discount_approval_ceiling_percent' => ['required', 'regex:/^\d{1,3}(\.\d{1,2})?$/'], 'first_reminder_days' => ['required', 'integer', 'between:0,90'],
             'second_reminder_days' => ['required', 'integer', 'between:0,90'], 'notification_policy' => ['required', Rule::in(['staff_only', 'owner_and_staff'])],
+            'customer_labor_grouping' => ['nullable', Rule::in(['location', 'system'])],
             'approve_manual_price_overrides' => ['nullable', 'boolean'], 'approve_below_cost_lines' => ['nullable', 'boolean'], 'approve_terms_overrides' => ['nullable', 'boolean'],
             'stages' => ['required', 'array'], 'stages.*.name' => ['required', 'string', 'max:80'], 'stages.*.default_probability_percent' => ['required', 'regex:/^\d{1,3}(\.\d{1,2})?$/'],
             'stages.*.color' => ['required', Rule::in(['slate', 'blue', 'orange', 'purple', 'green', 'red'])], 'stages.*.sort_order' => ['required', 'integer', 'between:0,1000'],
@@ -54,6 +55,12 @@ class CommercialSettingsController extends Controller
             'approve_manual_price_overrides' => $request->boolean('approve_manual_price_overrides'),
             'approve_below_cost_lines' => $request->boolean('approve_below_cost_lines'),
             'approve_terms_overrides' => $request->boolean('approve_terms_overrides'),
+            'customer_show_line_details' => $request->boolean('customer_show_line_details'),
+            'customer_show_optional_items' => $request->boolean('customer_show_optional_items'),
+            'customer_show_location_totals' => $request->boolean('customer_show_location_totals'),
+            'customer_show_manufacturer_model' => $request->boolean('customer_show_manufacturer_model'),
+            'customer_show_product_images' => $request->boolean('customer_show_product_images'),
+            'customer_show_package_components' => $request->boolean('customer_show_package_components'),
         ]);
         foreach ($stages as $stage) {
             $stageData = $data['stages'][$stage->id] ?? null;

@@ -14,7 +14,7 @@ class CommercialOperationsPhase0Test extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_phase_two_exposes_quote_foundation_but_no_proposal_surface(): void
+    public function test_phase_four_exposes_internal_publication_foundation_but_no_public_customer_surface(): void
     {
         $this->seed(AccessControlSeeder::class);
 
@@ -23,7 +23,7 @@ class CommercialOperationsPhase0Test extends TestCase
         foreach (['proposals'] as $prefix) {
             $this->assertFalse(
                 $routeUris->contains(fn (string $uri): bool => $uri === $prefix || str_starts_with($uri, $prefix.'/')),
-                "Commercial route [{$prefix}] must not exist during Phase 2.",
+                "Public customer route [{$prefix}] must not exist during Phase 4.",
             );
         }
 
@@ -33,15 +33,14 @@ class CommercialOperationsPhase0Test extends TestCase
         foreach (['commercial_documents', 'commercial_revisions', 'commercial_revision_locations', 'commercial_revision_systems', 'commercial_revision_phases', 'commercial_revision_sections', 'commercial_revision_lines', 'commercial_revision_line_components', 'commercial_payment_milestones'] as $table) {
             $this->assertTrue(Schema::hasTable($table), "Quote foundation table [{$table}] must exist during Phase 2.");
         }
-        $this->assertFalse(Schema::hasTable('proposal_publications'));
+        foreach (['commercial_content_blocks', 'commercial_terms_sets', 'proposal_templates', 'proposal_template_sections', 'commercial_revision_media', 'commercial_revision_approvals', 'proposal_publications', 'proposal_recipients', 'proposal_share_links', 'proposal_delivery_attempts'] as $table) {
+            $this->assertTrue(Schema::hasTable($table), "Phase 4 publication table [{$table}] must exist.");
+        }
 
         $this->assertSame(3, Capability::query()->where('key', 'like', 'opportunities.%')->count());
-        $this->assertSame(3, Capability::query()->where('key', 'like', 'quotes.%')->count());
-        $this->assertFalse(Capability::query()->where(function ($query): void {
-            $query->where('key', 'like', 'proposal.%')
-                ->orWhere('key', 'like', 'commercial.%')
-                ->orWhere('key', 'like', 'change_orders.%');
-        })->exists());
+        $this->assertSame(5, Capability::query()->where('key', 'like', 'quotes.%')->count());
+        $this->assertSame(2, Capability::query()->where('key', 'like', 'proposal.%')->count());
+        $this->assertFalse(Capability::query()->where('key', 'like', 'commercial.%')->orWhere('key', 'like', 'change_orders.%')->exists());
     }
 
     public function test_private_storage_is_isolated_from_retained_files_during_tests(): void
