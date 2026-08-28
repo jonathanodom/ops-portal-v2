@@ -164,6 +164,8 @@ The next additive product track connects Customers and Catalog to Opportunities,
 
 Commercial Operations Phase 2 adds the internal revisioned Quote builder, immutable Catalog and Package recipe snapshots, deterministic estimating calculations, revision-owned dimensions, options, Allowances, and payment schedules. See [Commercial Operations Phase 2](docs/COMMERCIAL_OPERATIONS_PHASE_2.md) for its schema, calculation rules, authorization, preservation evidence, UI checklist, and exclusions.
 
+Commercial Operations Phase 3 adds approved Service/labor-role estimating costs, fixed and component-sum Package pricing, immutable cost provenance, and an authorized transactional Quote-to-Catalog item overlay. See [Commercial Operations Phase 3](docs/COMMERCIAL_OPERATIONS_PHASE_3.md) for the schema, resolution order, preservation evidence, UI checklist, and deferred Checkpoint 4 boundary.
+
 The implemented Opportunity foundation and its Phase 1 owner acceptance gate are documented in [Commercial Operations Phase 1](docs/COMMERCIAL_OPERATIONS_PHASE_1.md).
 
 ## Quality commands

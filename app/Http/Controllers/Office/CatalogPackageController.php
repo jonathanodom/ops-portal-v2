@@ -141,7 +141,7 @@ class CatalogPackageController extends Controller
             if ($data['pricing_model'] === 'flat' && blank($data['default_price'])) {
                 throw ValidationException::withMessages(['default_price' => 'A flat-price Package requires a default price.']);
             }
-            $data['default_price_cents'] = $data['pricing_model'] === 'quote_required' ? null : $this->dollarsToCents((string) $data['default_price']);
+            $data['default_price_cents'] = $data['pricing_model'] === 'flat' ? $this->dollarsToCents((string) $data['default_price']) : null;
             $data['taxable'] = $request->boolean('taxable');
             unset($data['default_price']);
         } elseif ($package) {

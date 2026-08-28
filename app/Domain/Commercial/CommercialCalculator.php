@@ -13,6 +13,12 @@ final class CommercialCalculator
     {
         $lines = $revision->lines()->with('components')->orderBy('sort_order')->orderBy('id')->get();
         foreach ($lines as $line) {
+            if ($line->line_type === 'package' && $line->package_pricing_mode === 'component_sum' && ! $line->sell_price_overridden) {
+                $unitSell = $this->packageUnitSell($line);
+                if ($unitSell !== null) {
+                    $line->forceFill(['catalog_unit_sell_cents' => $unitSell, 'effective_unit_sell_cents' => $unitSell])->save();
+                }
+            }
             $included = ! $line->optional || $line->included;
             $gross = $included ? $this->roundRatio($line->quantity_millis * $line->effective_unit_sell_cents, 1000) : 0;
             $lineDiscount = $included ? $this->discount($line->discount_type, (int) $line->discount_value, $gross, 'line') : 0;
@@ -87,6 +93,23 @@ final class CommercialCalculator
         }
 
         return [true, $total];
+    }
+
+    private function packageUnitSell(CommercialRevisionLine $line): ?int
+    {
+        $total = 0;
+        foreach ($line->components as $component) {
+            if ($component->unit_sell_cents === null) {
+                return null;
+            }
+            $quantity = (int) $component->quantity_millis;
+            if ($component->component_type === 'product') {
+                $quantity = $this->roundRatio($quantity * (10000 + (int) $component->waste_basis_points), 10000);
+            }
+            $total += $this->roundRatio($quantity * (int) $component->unit_sell_cents, 1000);
+        }
+
+        return $total;
     }
 
     /** @param Collection<int,CommercialRevisionLine> $lines @return array<int,int> */

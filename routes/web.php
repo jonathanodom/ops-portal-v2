@@ -14,6 +14,7 @@ use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
 use App\Http\Controllers\Office\BillingSettingsController;
 use App\Http\Controllers\Office\CatalogCategoryController;
+use App\Http\Controllers\Office\CatalogLaborRoleController;
 use App\Http\Controllers\Office\CatalogPackageComponentController;
 use App\Http\Controllers\Office\CatalogPackageController;
 use App\Http\Controllers\Office\CatalogProductController;
@@ -41,6 +42,7 @@ use App\Http\Controllers\Office\ProjectAttachmentController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ProjectWorkbookPrintController;
+use App\Http\Controllers\Office\QuoteCatalogItemController;
 use App\Http\Controllers\Office\QuoteController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
@@ -124,6 +126,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/{quote}/revisions/{revision}', [QuoteController::class, 'show'])->whereNumber(['quote', 'revision'])->name('show');
                 Route::put('/{quote}/revisions/{revision}', [QuoteController::class, 'update'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('update');
                 Route::post('/{quote}/revisions/{revision}/catalog-lines', [QuoteController::class, 'addCatalogLine'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.catalog');
+                Route::post('/{quote}/revisions/{revision}/catalog-items', [QuoteCatalogItemController::class, 'store'])->whereNumber(['quote', 'revision'])->middleware(['capability:quotes.manage', 'capability:catalog.manage', 'capability:catalog.pricing.manage'])->name('catalog-items.store');
                 Route::post('/{quote}/revisions/{revision}/allowances', [QuoteController::class, 'addAllowance'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.allowance');
                 Route::put('/{quote}/revisions/{revision}/lines/{line}', [QuoteController::class, 'updateLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.update');
                 Route::delete('/{quote}/revisions/{revision}/lines/{line}', [QuoteController::class, 'removeLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.destroy');
@@ -322,6 +325,11 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/packages/{package}', [CatalogPackageController::class, 'show'])->whereNumber('package')->name('packages.show');
                 Route::get('/categories', [CatalogCategoryController::class, 'index'])->name('categories.index');
                 Route::get('/units', [UnitOfMeasureController::class, 'index'])->name('units.index');
+                Route::middleware('capability:catalog.pricing.manage')->group(function (): void {
+                    Route::get('/labor-roles', [CatalogLaborRoleController::class, 'index'])->name('labor-roles.index');
+                    Route::post('/labor-roles', [CatalogLaborRoleController::class, 'store'])->name('labor-roles.store');
+                    Route::put('/labor-roles/{laborRole}', [CatalogLaborRoleController::class, 'update'])->whereNumber('laborRole')->name('labor-roles.update');
+                });
                 Route::middleware('capability:catalog.manage')->group(function (): void {
                     Route::get('/services/create', [CatalogServiceController::class, 'create'])->name('services.create');
                     Route::post('/services', [CatalogServiceController::class, 'store'])->name('services.store');

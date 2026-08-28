@@ -11,7 +11,7 @@ use Illuminate\Database\Eloquent\Relations\HasMany;
 #[Fillable(['organization_id', 'category_id', 'sales_uom_id', 'package_code', 'name', 'customer_description', 'internal_description', 'pricing_model', 'default_price_cents', 'taxable', 'active', 'created_by_id', 'updated_by_id'])]
 class CatalogPackage extends Model
 {
-    public const PRICING_MODELS = ['flat', 'quote_required'];
+    public const PRICING_MODELS = ['flat', 'component_sum', 'quote_required'];
 
     public function organization(): BelongsTo
     {

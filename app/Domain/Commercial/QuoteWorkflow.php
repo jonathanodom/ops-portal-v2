@@ -25,6 +25,7 @@ final class QuoteWorkflow
         private readonly QuoteNumber $numbers,
         private readonly CatalogLineSnapshotFactory $snapshots,
         private readonly CommercialCalculator $calculator,
+        private readonly ServiceEstimateCostResolver $serviceCosts,
         private readonly AuditRecorder $audit,
     ) {}
 
@@ -77,6 +78,41 @@ final class QuoteWorkflow
         }, 'quote.revision_updated', ['changed_fields' => ['discount_type', 'discount_value', 'tax_rate_basis_points']]);
     }
 
+    public function refreshServiceEstimatingDefaults(CatalogService $service, User $actor): int
+    {
+        $service->loadMissing('defaultLaborRole');
+        $resolved = $this->serviceCosts->resolve($service);
+        $revisionIds = CommercialRevision::query()->where('organization_id', $service->organization_id)->where('status', 'draft')
+            ->where(function ($query) use ($service): void {
+                $query->whereHas('lines', fn ($lines) => $lines->where('catalog_service_id', $service->id))
+                    ->orWhereHas('lines.components', fn ($components) => $components->where('catalog_service_id', $service->id));
+            })->pluck('id');
+
+        foreach ($revisionIds as $revisionId) {
+            DB::transaction(function () use ($revisionId, $service, $resolved, $actor): void {
+                $revision = CommercialRevision::query()->whereKey($revisionId)->where('status', 'draft')->lockForUpdate()->first();
+                if (! $revision) {
+                    return;
+                }
+                $values = [
+                    'cost_basis_cents' => $resolved['cost_cents'], 'cost_basis_quantity_millis' => $resolved['basis_quantity_millis'],
+                    'cost_resolved' => $resolved['cost_cents'] !== null, 'cost_source_type' => $resolved['source_type'],
+                    'cost_source_id' => $resolved['source_id'], 'cost_source_name' => $resolved['source_name'],
+                ];
+                $revision->lines()->where('catalog_service_id', $service->id)->update($values);
+                CommercialRevisionLineComponent::query()->whereIn('commercial_revision_line_id', $revision->lines()->select('id'))
+                    ->where('catalog_service_id', $service->id)->update($values);
+                $this->refresh($revision, $actor);
+                $this->audit->record($revision->document->opportunity->organization, $actor, 'quote.service_cost_refreshed', $revision->document->opportunity, [
+                    'quote_id' => $revision->commercial_document_id, 'revision_id' => $revision->id, 'service_id' => $service->id,
+                    'changed_fields' => ['cost_basis_cents', 'cost_basis_quantity_millis', 'cost_source'],
+                ]);
+            });
+        }
+
+        return $revisionIds->count();
+    }
+
     /** @param array<string,mixed> $data */
     public function addCatalogLine(CommercialRevision $revision, User $actor, array $data): CommercialRevisionLine
     {
@@ -86,7 +122,7 @@ final class QuoteWorkflow
             if ($snapshot['catalog_unit_price_cents'] === null) {
                 throw ValidationException::withMessages(['catalog_item_id' => 'This Catalog item needs a sell price before it can be quoted.']);
             }
-            [$categoryId, $costCents, $costQuantity] = $this->sourceCost($locked->organization_id, $snapshot);
+            [$categoryId, $costCents, $costQuantity, $costSourceType, $costSourceId, $costSourceName] = $this->sourceCost($locked->organization_id, $snapshot);
             $created = $locked->lines()->create([
                 'organization_id' => $locked->organization_id,
                 'location_id' => $this->dimension($locked, 'locations', $data['location_id'] ?? null),
@@ -95,11 +131,13 @@ final class QuoteWorkflow
                 'catalog_category_id' => $categoryId, 'line_type' => $snapshot['catalog_item_type'],
                 'catalog_product_id' => $snapshot['catalog_product_id'] ?? null, 'catalog_service_id' => $snapshot['catalog_service_id'] ?? null,
                 'catalog_service_variant_id' => $snapshot['catalog_service_variant_id'] ?? null, 'catalog_package_id' => $snapshot['catalog_package_id'] ?? null,
+                'package_pricing_mode' => $snapshot['catalog_package_pricing_model'] ?? null,
                 'source_code' => $snapshot['catalog_code_snapshot'], 'description' => $snapshot['catalog_name_snapshot'],
                 'customer_description' => $snapshot['catalog_description_snapshot'], 'unit_code' => $snapshot['catalog_unit_code_snapshot'],
                 'unit_name' => $snapshot['catalog_unit_name_snapshot'], 'quantity_millis' => $snapshot['catalog_quantity_millis'],
                 'catalog_unit_sell_cents' => $snapshot['catalog_unit_price_cents'], 'effective_unit_sell_cents' => $snapshot['catalog_unit_price_cents'],
                 'cost_basis_cents' => $costCents, 'cost_basis_quantity_millis' => $costQuantity, 'cost_resolved' => $costCents !== null,
+                'cost_source_type' => $costSourceType, 'cost_source_id' => $costSourceId, 'cost_source_name' => $costSourceName,
                 'optional' => (bool) ($data['optional'] ?? false), 'included' => ! (bool) ($data['optional'] ?? false),
                 'taxable' => $snapshot['catalog_taxable'], 'sort_order' => ((int) $locked->lines()->max('sort_order')) + 10,
             ]);
@@ -340,29 +378,33 @@ final class QuoteWorkflow
         return (int) $revision->{$relation}()->whereKey((int) $id)->value('id') ?: throw ValidationException::withMessages([$relation => 'Choose a dimension from this Quote revision.']);
     }
 
-    /** @param array<string,mixed> $snapshot @return array{?int,?int,?int} */
+    /** @param array<string,mixed> $snapshot @return array{?int,?int,?int,?string,?int,?string} */
     private function sourceCost(int $organizationId, array $snapshot): array
     {
         if ($snapshot['catalog_item_type'] === 'product') {
             $item = CatalogProduct::query()->where('organization_id', $organizationId)->findOrFail($snapshot['catalog_product_id']);
 
-            return [$item->category_id, $item->default_cost_cents, $item->default_cost_cents === null ? null : $item->default_cost_quantity_millis];
+            return [$item->category_id, $item->default_cost_cents, $item->default_cost_cents === null ? null : $item->default_cost_quantity_millis, $item->default_cost_cents === null ? null : 'product_default', $item->default_cost_cents === null ? null : $item->id, $item->default_cost_cents === null ? null : $item->name];
         }
         if ($snapshot['catalog_item_type'] === 'service') {
             $item = CatalogService::query()->where('organization_id', $organizationId)->findOrFail($snapshot['catalog_service_id']);
 
-            return [$item->category_id, null, null];
+            $resolved = $this->serviceCosts->resolve($item->loadMissing('defaultLaborRole'));
+
+            return [$item->category_id, $resolved['cost_cents'], $resolved['basis_quantity_millis'], $resolved['source_type'], $resolved['source_id'], $resolved['source_name']];
         }
         $item = CatalogPackage::query()->where('organization_id', $organizationId)->findOrFail($snapshot['catalog_package_id']);
 
-        return [$item->category_id, null, null];
+        return [$item->category_id, null, null, null, null, null];
     }
 
     private function snapshotPackageComponents(CommercialRevisionLine $line): void
     {
-        $package = CatalogPackage::query()->where('organization_id', $line->organization_id)->with(['components.product.baseUom', 'components.service.salesUom', 'components.componentUom'])->findOrFail($line->catalog_package_id);
+        $package = CatalogPackage::query()->where('organization_id', $line->organization_id)->with(['components.product.baseUom', 'components.service.salesUom', 'components.service.defaultLaborRole', 'components.componentUom'])->findOrFail($line->catalog_package_id);
         foreach ($package->components->where('active', true) as $component) {
             $item = $component->component_type === 'product' ? $component->product : $component->service;
+            $serviceCost = $component->component_type === 'service' ? $this->serviceCosts->resolve($item) : null;
+            $productCost = $component->component_type === 'product' && $item->default_cost_cents !== null;
             $line->components()->create([
                 'organization_id' => $line->organization_id, 'component_type' => $component->component_type,
                 'catalog_product_id' => $component->catalog_product_id, 'catalog_service_id' => $component->catalog_service_id,
@@ -370,9 +412,12 @@ final class QuoteWorkflow
                 'name' => $item->name, 'unit_code' => $component->componentUom->code, 'unit_name' => $component->componentUom->name,
                 'quantity_millis' => $component->quantity_millis, 'waste_basis_points' => $component->waste_basis_points,
                 'unit_sell_cents' => $component->component_type === 'product' ? $item->default_sell_price_cents : $item->default_price_cents,
-                'cost_basis_cents' => $component->component_type === 'product' ? $item->default_cost_cents : null,
-                'cost_basis_quantity_millis' => $component->component_type === 'product' && $item->default_cost_cents !== null ? $item->default_cost_quantity_millis : null,
-                'cost_resolved' => $component->component_type === 'product' && $item->default_cost_cents !== null,
+                'cost_basis_cents' => $productCost ? $item->default_cost_cents : ($serviceCost['cost_cents'] ?? null),
+                'cost_basis_quantity_millis' => $productCost ? $item->default_cost_quantity_millis : ($serviceCost['basis_quantity_millis'] ?? null),
+                'cost_resolved' => $productCost || ($serviceCost['cost_cents'] ?? null) !== null,
+                'cost_source_type' => $productCost ? 'product_default' : ($serviceCost['source_type'] ?? null),
+                'cost_source_id' => $productCost ? $item->id : ($serviceCost['source_id'] ?? null),
+                'cost_source_name' => $productCost ? $item->name : ($serviceCost['source_name'] ?? null),
                 'customer_visible' => $component->customer_visible, 'sort_order' => $component->sort_order,
             ]);
         }

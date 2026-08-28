@@ -4,6 +4,8 @@ namespace App\Http\Controllers\Office;
 
 use App\Domain\Commercial\QuoteWorkflow;
 use App\Http\Controllers\Controller;
+use App\Models\CatalogCategory;
+use App\Models\CatalogLaborRole;
 use App\Models\CatalogPackage;
 use App\Models\CatalogProduct;
 use App\Models\CatalogService;
@@ -12,6 +14,7 @@ use App\Models\CommercialRevision;
 use App\Models\CommercialRevisionLine;
 use App\Models\CommercialRevisionLineComponent;
 use App\Models\Opportunity;
+use App\Models\UnitOfMeasure;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Gate;
@@ -39,10 +42,13 @@ final class QuoteController extends Controller
         $services = CatalogService::query()->forOrganization($organizationId)->where('active', true)->with(['variants' => fn ($q) => $q->where('active', true), 'salesUom'])->orderBy('name')->get();
         $products = CatalogProduct::query()->forOrganization($organizationId)->where('active', true)->with('defaultSalesUom')->orderBy('name')->get();
         $packages = CatalogPackage::query()->forOrganization($organizationId)->where('active', true)->with('salesUom')->orderBy('name')->get();
+        $categories = CatalogCategory::query()->forOrganization($organizationId)->where('active', true)->orderBy('name')->get();
+        $units = UnitOfMeasure::query()->forOrganization($organizationId)->where('active', true)->orderBy('name')->get();
+        $laborRoles = CatalogLaborRole::query()->forOrganization($organizationId)->where('active', true)->orderBy('name')->get();
         $group = in_array($request->string('group')->toString(), ['location', 'system', 'phase', 'category', 'type'], true) ? $request->string('group')->toString() : 'location';
         $canViewCost = Gate::allows('viewCostMargin', $quote);
 
-        return view('office.quotes.show', compact('quote', 'revision', 'services', 'products', 'packages', 'group', 'canViewCost'));
+        return view('office.quotes.show', compact('quote', 'revision', 'services', 'products', 'packages', 'categories', 'units', 'laborRoles', 'group', 'canViewCost'));
     }
 
     public function update(Request $request, CommercialDocument $quote, CommercialRevision $revision, QuoteWorkflow $workflow): RedirectResponse

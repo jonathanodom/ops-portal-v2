@@ -2,9 +2,11 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\Commercial\QuoteWorkflow;
 use App\Http\Controllers\Controller;
 use App\Http\Controllers\Office\Concerns\ResolvesCatalogRecords;
 use App\Models\CatalogCategory;
+use App\Models\CatalogLaborRole;
 use App\Models\CatalogService;
 use App\Models\UnitOfMeasure;
 use App\Support\AuditRecorder;
@@ -21,7 +23,7 @@ class CatalogServiceController extends Controller
 {
     use ResolvesCatalogRecords;
 
-    private const PROTECTED_PRICING_FIELDS = ['pricing_model', 'default_price', 'taxable', 'billing_cadence', 'billing_interval'];
+    private const PROTECTED_PRICING_FIELDS = ['pricing_model', 'default_price', 'default_internal_cost', 'default_labor_role_id', 'taxable', 'billing_cadence', 'billing_interval'];
 
     public function index(Request $request): View
     {
@@ -52,10 +54,10 @@ class CatalogServiceController extends Controller
     {
         $organization = $request->attributes->get('organization');
         Gate::authorize('create', [CatalogService::class, $organization]);
-        [$categories, $units] = $this->options($organization->id);
+        [$categories, $units, $laborRoles] = $this->options($organization->id);
         $canManagePricing = $request->attributes->get('membership')->hasCapability('catalog.pricing.manage');
 
-        return view('office.catalog.services.create', compact('categories', 'units', 'canManagePricing'));
+        return view('office.catalog.services.create', compact('categories', 'units', 'laborRoles', 'canManagePricing'));
     }
 
     public function store(Request $request, AuditRecorder $audit): RedirectResponse
@@ -76,13 +78,13 @@ class CatalogServiceController extends Controller
     {
         $service = $this->service($request, $service);
         Gate::authorize('update', $service);
-        [$categories, $units] = $this->options($service->organization_id, true);
+        [$categories, $units, $laborRoles] = $this->options($service->organization_id, true);
         $canManagePricing = $request->attributes->get('membership')->hasCapability('catalog.pricing.manage');
 
-        return view('office.catalog.services.edit', compact('service', 'categories', 'units', 'canManagePricing'));
+        return view('office.catalog.services.edit', compact('service', 'categories', 'units', 'laborRoles', 'canManagePricing'));
     }
 
-    public function update(Request $request, string $service, AuditRecorder $audit): RedirectResponse
+    public function update(Request $request, string $service, AuditRecorder $audit, QuoteWorkflow $quotes): RedirectResponse
     {
         $service = $this->service($request, $service);
         Gate::authorize('update', $service);
@@ -94,6 +96,9 @@ class CatalogServiceController extends Controller
             $service->update($data + ['updated_by_id' => $request->user()->id]);
         });
         $audit->record($request->attributes->get('organization'), $request->user(), 'catalog.service_updated', $service, ['service_id' => $service->id, 'changed_fields' => $changed]);
+        if (array_intersect($changed, ['default_internal_cost_cents', 'default_labor_role_id', 'estimated_duration_minutes', 'pricing_model'])) {
+            $quotes->refreshServiceEstimatingDefaults($service->fresh(), $request->user());
+        }
 
         return redirect()->route('office.catalog.services.show', $service)->with('status', 'Service saved.');
     }
@@ -137,6 +142,8 @@ class CatalogServiceController extends Controller
             $rules += [
                 'pricing_model' => ['required', Rule::in(CatalogService::PRICING_MODELS)],
                 'default_price' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'],
+                'default_internal_cost' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'],
+                'default_labor_role_id' => ['nullable', 'integer', Rule::exists('catalog_labor_roles', 'id')->where(fn ($query) => $query->where('organization_id', $organizationId)->where('active', true))],
                 'taxable' => ['nullable', 'boolean'],
                 'billing_cadence' => ['nullable', Rule::in(['day', 'week', 'month', 'year'])],
                 'billing_interval' => ['nullable', 'integer', 'min:1', 'max:120'],
@@ -160,32 +167,40 @@ class CatalogServiceController extends Controller
                 throw ValidationException::withMessages(['billing_cadence' => 'Recurring services require a cadence and interval.']);
             }
             $data['default_price_cents'] = filled($data['default_price']) ? $this->dollarsToCents((string) $data['default_price']) : null;
+            $data['default_internal_cost_cents'] = filled($data['default_internal_cost'] ?? null) ? $this->dollarsToCents((string) $data['default_internal_cost']) : null;
+            $data['default_labor_role_id'] = filled($data['default_labor_role_id'] ?? null) ? (int) $data['default_labor_role_id'] : null;
             $data['taxable'] = $request->boolean('taxable');
             if ($model !== 'recurring') {
                 $data['billing_cadence'] = null;
                 $data['billing_interval'] = null;
             }
-            unset($data['default_price']);
+            unset($data['default_price'], $data['default_internal_cost']);
         } elseif ($service) {
             $data += collect(self::PROTECTED_PRICING_FIELDS)->mapWithKeys(function (string $field) use ($service): array {
-                $modelField = $field === 'default_price' ? 'default_price_cents' : $field;
+                $modelField = match ($field) {
+                    'default_price' => 'default_price_cents',
+                    'default_internal_cost' => 'default_internal_cost_cents',
+                    default => $field,
+                };
 
                 return [$modelField => $service->{$modelField}];
             })->all();
         } else {
-            $data += ['pricing_model' => 'quote_required', 'default_price_cents' => null, 'taxable' => false, 'billing_cadence' => null, 'billing_interval' => null];
+            $data += ['pricing_model' => 'quote_required', 'default_price_cents' => null, 'default_internal_cost_cents' => null, 'default_labor_role_id' => null, 'taxable' => false, 'billing_cadence' => null, 'billing_interval' => null];
         }
 
         return $data;
     }
 
-    /** @return array{0: Collection, 1: Collection} */
+    /** @return array{0: Collection, 1: Collection, 2: Collection} */
     private function options(int $organizationId, bool $includeInactive = false): array
     {
         $categories = CatalogCategory::query()->forOrganization($organizationId)->when(! $includeInactive, fn ($query) => $query->where('active', true))->orderBy('name')->get();
         $units = UnitOfMeasure::query()->forOrganization($organizationId)->when(! $includeInactive, fn ($query) => $query->where('active', true))->orderBy('dimension')->orderBy('name')->get();
 
-        return [$categories, $units];
+        $laborRoles = CatalogLaborRole::query()->forOrganization($organizationId)->when(! $includeInactive, fn ($query) => $query->where('active', true))->orderBy('name')->get();
+
+        return [$categories, $units, $laborRoles];
     }
 
     private function dollarsToCents(string $value): int

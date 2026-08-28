@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
-#[Fillable(['organization_id', 'category_id', 'sales_uom_id', 'service_code', 'name', 'customer_description', 'internal_description', 'internal_scope', 'internal_exclusions', 'pricing_model', 'default_price_cents', 'taxable', 'estimated_duration_minutes', 'customer_visible', 'requires_office_approval', 'billing_cadence', 'billing_interval', 'active', 'created_by_id', 'updated_by_id'])]
+#[Fillable(['organization_id', 'category_id', 'sales_uom_id', 'service_code', 'name', 'customer_description', 'internal_description', 'internal_scope', 'internal_exclusions', 'pricing_model', 'default_price_cents', 'default_internal_cost_cents', 'default_labor_role_id', 'taxable', 'estimated_duration_minutes', 'customer_visible', 'requires_office_approval', 'billing_cadence', 'billing_interval', 'active', 'created_by_id', 'updated_by_id'])]
 class CatalogService extends Model
 {
     public const PRICING_MODELS = ['flat', 'hourly', 'per_unit', 'variant', 'recurring', 'quote_required'];
@@ -32,6 +32,11 @@ class CatalogService extends Model
     public function salesUom(): BelongsTo
     {
         return $this->belongsTo(UnitOfMeasure::class, 'sales_uom_id');
+    }
+
+    public function defaultLaborRole(): BelongsTo
+    {
+        return $this->belongsTo(CatalogLaborRole::class, 'default_labor_role_id');
     }
 
     public function variants(): HasMany
