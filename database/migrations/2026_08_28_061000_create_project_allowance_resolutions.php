@@ -12,7 +12,9 @@ return new class extends Migration
             $table->id();
             $table->foreignId('organization_id')->constrained()->restrictOnDelete();
             $table->foreignId('project_id')->constrained()->restrictOnDelete();
-            $table->foreignId('project_commercial_scope_id')->constrained()->restrictOnDelete();
+            $table->foreignId('project_commercial_scope_id');
+            $table->foreign('project_commercial_scope_id', 'project_allowance_scope_fk')
+                ->references('id')->on('project_commercial_scopes')->restrictOnDelete();
             $table->unsignedBigInteger('source_revision_line_id');
             $table->string('description');
             $table->unsignedBigInteger('accepted_amount_cents');
