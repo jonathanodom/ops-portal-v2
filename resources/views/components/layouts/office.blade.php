@@ -17,12 +17,12 @@
     <title>{{ $title ?? 'Office' }} | NewDay Tech Ops</title>
     @vite(['resources/css/app.css', 'resources/js/app.js'])
 </head>
-<body class="bg-canvas">
+<body class="office-shell bg-canvas">
     <div data-connectivity-banner hidden class="bg-amber-100 px-4 py-2 text-center text-sm font-bold text-amber-900" role="status">
         You’re offline. Changes cannot be saved until connectivity returns.
     </div>
     <div class="min-h-screen lg:grid lg:grid-cols-[248px_minmax(0,1fr)]">
-        <aside class="hidden border-r border-slate-200 bg-white p-5 lg:flex lg:flex-col">
+        <aside class="hidden border-r border-slate-200 bg-white p-4 lg:flex lg:flex-col">
             <x-organization-logo variant="full" class="max-h-20 w-48 object-contain object-left" />
             <div class="mt-9 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Office workspace</div>
             <nav class="mt-3" aria-label="Office">
@@ -73,7 +73,7 @@
         </aside>
 
         <div>
-            <header class="border-b border-slate-200 bg-white px-4 py-3 sm:px-6 lg:px-8">
+            <header class="border-b border-slate-200 bg-white px-3 py-2 sm:px-4 lg:px-5">
                 <div class="{{ $contentWidthClass }} flex items-center justify-between gap-4" data-office-header-width="{{ $width }}">
                     <div class="flex items-center gap-3">
                         <x-organization-logo variant="mark" class="h-10 w-10 object-contain lg:hidden" />
@@ -103,7 +103,7 @@
                     @if($activeMembership->hasCapability('visits.archive.manage'))<a href="{{ route('office.admin.archive.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.admin.archive.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Archive</a>@endif
                     @if($activeMembership->hasCapability('organization.settings.manage') || $activeMembership->hasCapability('billing.settings.manage') || $activeMembership->hasCapability('payments.view') || $activeMembership->hasCapability('opportunities.admin') || $activeMembership->hasCapability('proposal.templates.manage'))<a href="{{ route('office.settings.index') }}" class="inline-flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-bold {{ request()->routeIs('office.settings.*') ? 'bg-blue-50 text-brand-blue-dark' : 'text-slate-600' }}">Settings</a>@endif
             </nav>
-            <main id="main-content" class="{{ $contentWidthClass }} p-4 sm:p-6 lg:p-8" data-office-width="{{ $width }}">
+            <main id="main-content" class="{{ $contentWidthClass }} p-2 sm:p-3 lg:p-4" data-office-width="{{ $width }}">
                 {{ $slot }}
             </main>
         </div>

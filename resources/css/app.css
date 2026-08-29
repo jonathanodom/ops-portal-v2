@@ -245,7 +245,7 @@
     }
 
     .office-primary-toolbar {
-        @apply grid items-center gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:grid-cols-[minmax(170px,auto)_minmax(200px,1fr)_minmax(0,auto)_auto_auto_auto];
+        @apply grid items-center gap-2 border border-slate-200 bg-white p-2 lg:grid-cols-[minmax(170px,auto)_minmax(200px,1fr)_minmax(0,auto)_auto_auto_auto];
     }
 
     .office-primary-toolbar-heading {
@@ -288,15 +288,15 @@
     }
 
     .office-primary-toolbar-chips {
-        @apply flex flex-wrap items-center gap-2 border-t border-slate-200 pt-3 lg:col-span-6;
+        @apply flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2 lg:col-span-6;
     }
 
     .office-primary-toolbar .office-workspace-tabs {
-        @apply mt-0 min-h-11 rounded-lg border border-slate-300 bg-slate-50 p-0.5;
+        @apply mt-0 min-h-11 border border-slate-300 bg-slate-50 p-0;
     }
 
     .office-primary-toolbar .office-workspace-tab {
-        @apply min-h-11 rounded-md border-0 px-3;
+        @apply min-h-11 border-0 px-3;
     }
 
     .office-primary-toolbar .office-workspace-tab-active {
@@ -316,7 +316,7 @@
     }
 
     .office-filter-panel {
-        @apply absolute right-0 top-[calc(100%+0.5rem)] z-30 w-[min(44rem,calc(100vw-2rem))] rounded-lg border border-slate-300 bg-white p-4 shadow-xl;
+        @apply absolute right-0 top-[calc(100%+0.25rem)] z-30 w-[min(44rem,calc(100vw-1rem))] border border-slate-300 bg-white p-3 shadow-none;
     }
 
     .office-filter-chip {
@@ -324,11 +324,11 @@
     }
 
     .office-view-switcher {
-        @apply inline-flex min-h-11 items-center rounded-lg border border-slate-300 bg-slate-50 p-0.5;
+        @apply inline-flex min-h-11 items-center border border-slate-300 bg-slate-50 p-0;
     }
 
     .office-view-switcher a {
-        @apply inline-flex min-h-10 items-center rounded-md px-3 text-sm font-bold text-slate-600 hover:text-slate-950;
+        @apply inline-flex min-h-10 items-center px-3 text-sm font-bold text-slate-600 hover:text-slate-950;
     }
 
     .office-view-switcher a[aria-current="page"] {
@@ -344,11 +344,11 @@
     }
 
     .office-view-menu-panel {
-        @apply absolute left-0 top-[calc(100%+0.5rem)] z-30 grid min-w-56 rounded-lg border border-slate-300 bg-white p-1 shadow-xl;
+        @apply absolute left-0 top-[calc(100%+0.25rem)] z-30 grid min-w-56 border border-slate-300 bg-white p-0 shadow-none;
     }
 
     .office-view-menu-panel a {
-        @apply inline-flex min-h-11 items-center rounded-md px-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-brand-blue-dark;
+        @apply inline-flex min-h-11 items-center px-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-brand-blue-dark;
     }
 
     .office-view-menu-panel a[aria-current="page"] {
@@ -356,7 +356,7 @@
     }
 
     .office-state-panel {
-        @apply rounded-lg border border-slate-200 bg-white px-5 py-10 text-center;
+        @apply border border-slate-200 bg-white px-4 py-6 text-center;
     }
 
     .office-state-panel-title {
@@ -385,7 +385,7 @@
     }
 
     .office-alert {
-        @apply mb-4 rounded-lg border px-4 py-3 text-sm font-semibold;
+        @apply mb-3 border px-3 py-2 text-sm font-semibold;
     }
 
     .office-alert-success {
@@ -455,7 +455,7 @@
     }
 
     .office-workspace-tabs {
-        @apply mt-5 flex min-h-11 gap-1 overflow-x-auto border-b border-slate-300;
+        @apply mt-3 flex min-h-11 gap-0 overflow-x-auto border-b border-slate-300;
     }
 
     .office-workspace-tab {
@@ -467,11 +467,11 @@
     }
 
     .office-filter-toolbar {
-        @apply mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:items-end;
+        @apply mt-3 grid gap-2 border border-slate-200 bg-white p-2 lg:items-end;
     }
 
     .office-table-wrap {
-        @apply mt-5 hidden overflow-hidden rounded-lg border border-slate-200 bg-white lg:block;
+        @apply mt-3 hidden overflow-hidden border border-slate-200 bg-white lg:block;
     }
 
     .office-data-table {
@@ -483,11 +483,11 @@
     }
 
     .office-data-table th {
-        @apply border-b border-slate-200 px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-slate-600;
+        @apply border-b border-slate-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-600;
     }
 
     .office-data-table td {
-        @apply border-b border-slate-200 px-4 py-3 align-middle text-sm text-slate-700;
+        @apply border-b border-slate-200 px-3 py-2.5 align-middle text-sm text-slate-700;
     }
 
     .office-data-table tbody tr:last-child td {
@@ -511,11 +511,11 @@
     }
 
     .office-mobile-list {
-        @apply mt-5 space-y-3 lg:hidden;
+        @apply mt-3 space-y-1 lg:hidden;
     }
 
     .office-mobile-card {
-        @apply block min-h-11 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50;
+        @apply block min-h-11 border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300 hover:bg-slate-50;
     }
 
     .office-mobile-primary-nav {
@@ -548,23 +548,23 @@
     }
 
     .office-detail-grid {
-        @apply mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)];
+        @apply mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)];
     }
 
     .office-detail-main {
-        @apply min-w-0 space-y-6;
+        @apply min-w-0 space-y-4;
     }
 
     .office-detail-rail {
-        @apply min-w-0 space-y-4 xl:sticky xl:top-6 xl:self-start;
+        @apply min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start;
     }
 
     .office-detail-section {
-        @apply scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white;
+        @apply scroll-mt-4 overflow-hidden border border-slate-200 bg-white;
     }
 
     .office-detail-section-header {
-        @apply flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between;
+        @apply flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between;
     }
 
     .office-detail-section-title {
@@ -576,7 +576,7 @@
     }
 
     .office-detail-row {
-        @apply min-h-16 px-5 py-4 transition-colors hover:bg-blue-50/45 focus-within:bg-blue-50/60;
+        @apply min-h-14 px-4 py-3 transition-colors hover:bg-blue-50/45 focus-within:bg-blue-50/60;
     }
 
     .office-detail-empty {
@@ -584,7 +584,7 @@
     }
 
     .office-detail-form-body {
-        @apply px-5 py-5;
+        @apply px-4 py-4;
     }
 
     .office-detail-form-separated {
@@ -592,7 +592,7 @@
     }
 
     .office-detail-form-inset {
-        @apply mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5;
+        @apply mt-2 border border-slate-200 bg-slate-50 p-3 sm:p-4;
     }
 
     .office-detail-form-grid {
@@ -612,7 +612,7 @@
     }
 
     .invoice-command-bar {
-        @apply sticky top-0 z-30 -mx-4 flex flex-col gap-3 border-y border-slate-200 bg-white px-4 py-3 shadow-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:grid lg:grid-cols-[minmax(260px,1fr)_auto_minmax(320px,auto)] lg:items-center lg:px-8;
+        @apply sticky top-0 z-30 -mx-2 flex flex-col gap-3 border-y border-slate-200 bg-white px-2 py-3 sm:-mx-3 sm:px-3 lg:-mx-4 lg:grid lg:grid-cols-[minmax(260px,1fr)_auto_minmax(320px,auto)] lg:items-center lg:px-4;
     }
 
     .invoice-command-bar-identity {
@@ -640,7 +640,7 @@
     }
 
     .invoice-billing-summary {
-        @apply mt-5 grid gap-5 rounded-lg border border-slate-200 bg-white p-5 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_minmax(520px,1.7fr)_auto] xl:items-center;
+        @apply mt-3 grid gap-3 border border-slate-200 bg-white p-3 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_minmax(520px,1.7fr)_auto] xl:items-center;
     }
 
     .invoice-billing-meta {
@@ -656,7 +656,7 @@
     }
 
     .invoice-workspace {
-        @apply mt-6 space-y-6;
+        @apply mt-4 space-y-4;
     }
 
     .invoice-lower-section {
@@ -915,4 +915,31 @@ body:has(dialog[data-payment-overlay][open]) {
     .print-section:first-of-type { break-before: auto; }
     .print-document-footer { break-inside: avoid; }
     a { color: inherit !important; text-decoration: none !important; }
+}
+
+/* Office modernization: dense, flat operational surfaces. Semantic pills stay rounded. */
+@media screen {
+    .office-shell .surface,
+    .office-shell .rounded-xl,
+    .office-shell .rounded-lg,
+    .office-shell .rounded-md,
+    .office-shell .button-primary,
+    .office-shell .button-secondary,
+    .office-shell .button-danger,
+    .office-shell .form-input,
+    .office-shell .form-textarea {
+        border-radius: 0;
+    }
+
+    .office-shell .surface,
+    .office-shell .office-primary-toolbar,
+    .office-shell .office-filter-panel,
+    .office-shell .office-view-menu-panel,
+    .office-shell .office-table-wrap,
+    .office-shell .office-mobile-card,
+    .office-shell .office-detail-section,
+    .office-shell .office-detail-form-inset,
+    .office-shell .invoice-billing-summary {
+        box-shadow: none;
+    }
 }

@@ -13,10 +13,12 @@ Checkpoint 2 applies the approved shared Office workspace language to the remain
 
 Search, filters, selected dates, calendar state, pagination, capability-gated actions, Catalog tabs, Billing tabs, and responsive table/card behavior remain server-rendered and route-backed. Form-heavy Settings, Catalog Labor Costs, and Proposal Library bodies retain their established workflows; only their shared workspace framing changed.
 
+Following owner review, the shared Office treatment was tightened further: page gutters and component padding are smaller, operational surfaces use square corners and no decorative shadows, and tables/cards use denser spacing. Semantic status and priority pills remain rounded so state continues to scan quickly.
+
 ## Responsive review
 
-- 390px: stacked toolbar, full-width primary actions, filter disclosure, mobile cards/agendas, and no page-level horizontal overflow.
-- 1440px: compact workspace toolbar, dense operational tables/calendar, and aligned actions.
+- 390px: stacked toolbar, full-width primary actions, filter disclosure, compact flat cards/agendas, and no page-level horizontal overflow.
+- 1440px: compact workspace toolbar, dense flat operational tables/calendar, square surfaces, and aligned actions.
 - Review screenshots are stored in `docs/ui-review/office-modernization/checkpoint-2/after` for ten representative workspaces at both widths.
 
 ## Validation
@@ -32,7 +34,7 @@ Search, filters, selected dates, calendar state, pagination, capability-gated ac
 - Beta fixture: exact fixture validation passed; Beta Hardening passed 8 tests / 56 assertions.
 - Beta benchmark: all budgets passed; highest p95 was Dispatch at 25.3 ms and highest query count was Office Dashboard at 36.
 - Focused Checkpoint 2 Playwright/axe: passed across 390px and 1440px for ten representative workspaces.
-- Full Playwright/axe: 33 passed / 33 intentionally skipped in 3.4 minutes.
+- Full Playwright/axe: 33 passed / 33 intentionally skipped in 3.3 minutes after a clean isolated beta reset.
 - `git diff --check`: passed.
 
 ## Known limitations

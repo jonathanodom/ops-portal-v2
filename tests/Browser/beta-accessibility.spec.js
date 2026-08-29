@@ -176,14 +176,14 @@ test.describe('Projects V1', () => {
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             const bodyPadding = await page.locator('.office-detail-form-body').evaluateAll((forms) => forms.map((form) => Number.parseFloat(getComputedStyle(form).paddingLeft)));
             expect(bodyPadding.length).toBeGreaterThan(0);
-            expect(bodyPadding.every((padding) => padding === 20)).toBeTruthy();
+            expect(bodyPadding.every((padding) => padding === 16)).toBeTruthy();
             await page.getByText('Edit Workstream', { exact: true }).first().click();
             const insetTreatment = await page.locator('form.office-detail-form-inset:visible').first().evaluate((form) => ({
                 padding: Number.parseFloat(getComputedStyle(form).paddingLeft),
                 border: Number.parseFloat(getComputedStyle(form).borderLeftWidth),
                 background: getComputedStyle(form).backgroundColor,
             }));
-            expect(insetTreatment.padding).toBeGreaterThanOrEqual(16);
+            expect(insetTreatment.padding).toBeGreaterThanOrEqual(viewport.width < 640 ? 12 : 16);
             expect(insetTreatment.border).toBe(1);
             expect(insetTreatment.background).not.toBe('rgba(0, 0, 0, 0)');
             const shortControls = await page.locator('form:visible input, form:visible select, form:visible textarea, form:visible button').evaluateAll((elements) => elements
