@@ -1,24 +1,43 @@
 <x-layouts.office title="Opportunities" width="workspace">
-    @if(session('status'))<div class="mb-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900" role="status">{{ session('status') }}</div>@endif
-    <header class="flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between">
-        <div><p class="text-sm font-bold uppercase tracking-[.12em] text-brand-blue">Commercial</p><h1 class="mt-1 text-3xl font-bold text-slate-950">Opportunities</h1><p class="mt-2 text-slate-600">Qualify customer work and keep the next action visible before estimating begins.</p></div>
-        @can('create', [App\Models\Opportunity::class, $organization])<a class="button-primary" href="{{ route('office.opportunities.create') }}">New opportunity</a>@endcan
-    </header>
-    <div class="surface mt-6 p-4">
-        <form method="GET" class="grid gap-3 md:grid-cols-5">
-            <div class="md:col-span-2"><label class="form-label" for="opportunity-search">Search</label><input class="form-input" id="opportunity-search" name="search" value="{{ request('search') }}" placeholder="Number, title, customer, or site"></div>
-            <div><label class="form-label" for="stage-filter">Stage</label><select class="form-input" id="stage-filter" name="stage"><option value="">All stages</option>@foreach($stages as $stage)<option value="{{ $stage->semantic_kind }}" @selected(request('stage')===$stage->semantic_kind)>{{ $stage->name }}</option>@endforeach</select></div>
-            <div><label class="form-label" for="owner-filter">Owner</label><select class="form-input" id="owner-filter" name="owner"><option value="">All owners</option>@foreach($members as $member)<option value="{{ $member->id }}" @selected((string)request('owner')===(string)$member->id)>{{ $member->name }}</option>@endforeach</select></div>
-            <div><label class="form-label" for="priority-filter">Priority</label><select class="form-input" id="priority-filter" name="priority"><option value="">All priorities</option>@foreach(App\Domain\Commercial\OpportunityWorkflow::PRIORITIES as $priority)<option value="{{ $priority }}" @selected(request('priority')===$priority)>{{ str($priority)->headline() }}</option>@endforeach</select></div>
-            <input type="hidden" name="view" value="{{ $viewMode }}"><div class="flex gap-2 md:col-span-5"><button class="button-primary">Filter</button><a class="button-secondary" href="{{ route('office.opportunities.index',['view'=>$viewMode]) }}">Clear</a></div>
-        </form>
-    </div>
-    <nav class="mt-5 flex gap-2 border-b border-slate-200" aria-label="Opportunity view">
-        <a class="inline-flex min-h-11 items-center border-b-2 px-4 font-bold {{ $viewMode==='kanban' ? 'border-brand-blue text-brand-blue-dark' : 'border-transparent text-slate-600' }}" @if($viewMode==='kanban') aria-current="page" @endif href="{{ request()->fullUrlWithQuery(['view'=>'kanban']) }}">Kanban</a>
-        <a class="inline-flex min-h-11 items-center border-b-2 px-4 font-bold {{ $viewMode==='list' ? 'border-brand-blue text-brand-blue-dark' : 'border-transparent text-slate-600' }}" @if($viewMode==='list') aria-current="page" @endif href="{{ request()->fullUrlWithQuery(['view'=>'list']) }}">List</a>
-    </nav>
+    @if(session('status'))<x-office.alert>{{ session('status') }}</x-office.alert>@endif
+    @php($activeFilterCount = collect(['search', 'stage', 'owner', 'priority'])->filter(fn ($key) => filled(request($key)))->count())
+    <form method="GET" aria-label="Opportunity filters">
+        <input type="hidden" name="view" value="{{ $viewMode }}">
+        <x-office.primary-toolbar title="Opportunities" eyebrow="Commercial" description="Qualify work and keep the next action visible.">
+            <x-slot:search><label class="sr-only" for="opportunity-search">Search opportunities</label><input class="form-input" id="opportunity-search" name="search" value="{{ request('search') }}" placeholder="Search number, title, customer, or site"></x-slot:search>
+            <x-slot:viewSwitcher>
+                <x-office.view-switcher aria-label="Opportunity view">
+                    <a @if($viewMode==='kanban') aria-current="page" @endif href="{{ request()->fullUrlWithQuery(['view'=>'kanban']) }}">Kanban</a>
+                    <a @if($viewMode==='list') aria-current="page" @endif href="{{ request()->fullUrlWithQuery(['view'=>'list']) }}">List</a>
+                </x-office.view-switcher>
+            </x-slot:viewSwitcher>
+            <x-slot:filters>
+                <x-office.filter-panel :active-count="$activeFilterCount">
+                    <div class="grid gap-3 sm:grid-cols-3">
+                        <div><label class="form-label" for="stage-filter">Stage</label><select class="form-input" id="stage-filter" name="stage"><option value="">All stages</option>@foreach($stages as $stage)<option value="{{ $stage->semantic_kind }}" @selected(request('stage')===$stage->semantic_kind)>{{ $stage->name }}</option>@endforeach</select></div>
+                        <div><label class="form-label" for="owner-filter">Owner</label><select class="form-input" id="owner-filter" name="owner"><option value="">All owners</option>@foreach($members as $member)<option value="{{ $member->id }}" @selected((string)request('owner')===(string)$member->id)>{{ $member->name }}</option>@endforeach</select></div>
+                        <div><label class="form-label" for="priority-filter">Priority</label><select class="form-input" id="priority-filter" name="priority"><option value="">All priorities</option>@foreach(App\Domain\Commercial\OpportunityWorkflow::PRIORITIES as $priority)<option value="{{ $priority }}" @selected(request('priority')===$priority)>{{ str($priority)->headline() }}</option>@endforeach</select></div>
+                    </div>
+                    <div class="mt-4 flex flex-wrap justify-end gap-2"><a class="button-secondary" href="{{ route('office.opportunities.index',['view'=>$viewMode]) }}">Clear all</a><button class="button-primary">Apply filters</button></div>
+                </x-office.filter-panel>
+            </x-slot:filters>
+            @can('create', [App\Models\Opportunity::class, $organization])
+                <x-slot:primaryAction><a class="button-primary" href="{{ route('office.opportunities.create') }}">New opportunity</a></x-slot:primaryAction>
+            @endcan
+            @if($activeFilterCount)
+                <x-slot:chips>
+                    <span class="text-xs font-bold uppercase tracking-wide text-slate-500">Active filters</span>
+                    @if(filled(request('search')))<x-office.filter-chip label="Search: {{ request('search') }}" :remove-url="route('office.opportunities.index', request()->except(['search', 'page']))" />@endif
+                    @if(filled(request('stage')))<x-office.filter-chip label="Stage: {{ Str::headline(request('stage')) }}" :remove-url="route('office.opportunities.index', request()->except(['stage', 'page']))" />@endif
+                    @if(filled(request('owner')))<x-office.filter-chip label="Owner: {{ optional($members->firstWhere('id', (int) request('owner')))->name ?? 'Selected' }}" :remove-url="route('office.opportunities.index', request()->except(['owner', 'page']))" />@endif
+                    @if(filled(request('priority')))<x-office.filter-chip label="Priority: {{ Str::headline(request('priority')) }}" :remove-url="route('office.opportunities.index', request()->except(['priority', 'page']))" />@endif
+                    <a href="{{ route('office.opportunities.index', ['view' => $viewMode]) }}" class="inline-flex min-h-9 items-center px-2 text-xs font-bold text-brand-blue underline">Clear all</a>
+                </x-slot:chips>
+            @endif
+        </x-office.primary-toolbar>
+    </form>
     @if($opportunities->isEmpty())
-        <div class="surface mt-6 p-10 text-center"><h2 class="text-xl font-bold">No matching opportunities</h2><p class="mt-2 text-slate-600">Create the first Opportunity or adjust the filters.</p></div>
+        <x-office.state-panel class="mt-5" title="No matching opportunities" message="Create the first Opportunity or adjust the filters." />
     @elseif($viewMode==='kanban')
         <div class="mt-6 overflow-x-auto pb-3" tabindex="0" aria-label="Opportunity Kanban board">
             <div class="grid min-w-[1200px] grid-cols-6 gap-4">
@@ -29,8 +48,8 @@
             </div>
         </div>
     @else
-        <div class="mt-6 hidden overflow-hidden rounded-lg border border-slate-200 bg-white lg:block"><table class="w-full"><thead class="bg-slate-50 text-left text-xs uppercase tracking-wide text-slate-600"><tr><th class="p-3">Opportunity</th><th class="p-3">Customer / site</th><th class="p-3">Stage</th><th class="p-3">Owner</th><th class="p-3 text-right">Estimate</th><th class="p-3"><span class="sr-only">Open</span></th></tr></thead><tbody class="divide-y divide-slate-200">@foreach($opportunities as $opportunity)<tr><td class="p-3"><strong>{{ $opportunity->title }}</strong><span class="block text-xs text-slate-500">{{ $opportunity->opportunity_number }}</span></td><td class="p-3">{{ $opportunity->customer->display_name }}<span class="block text-xs text-slate-500">{{ $opportunity->serviceLocation?->name ?? 'Customer-wide' }}</span></td><td class="p-3">{{ $opportunity->stage->name }}</td><td class="p-3">{{ $opportunity->owner?->name ?? 'Unassigned' }}</td><td class="p-3 text-right font-semibold">${{ number_format($opportunity->estimated_value_cents/100,2) }}</td><td class="p-3 text-right"><a class="button-secondary" href="{{ route('office.opportunities.show',$opportunity) }}">Open</a></td></tr>@endforeach</tbody></table></div>
-        <div class="mt-6 grid gap-3 lg:hidden">@foreach($opportunities as $opportunity)<article class="surface p-4"><div class="flex justify-between gap-3"><div><p class="text-xs font-bold text-brand-blue-dark">{{ $opportunity->opportunity_number }}</p><h2 class="mt-1 font-bold">{{ $opportunity->title }}</h2><p class="mt-1 text-sm text-slate-600">{{ $opportunity->customer->display_name }} · {{ $opportunity->stage->name }}</p></div><strong>${{ number_format($opportunity->estimated_value_cents/100,2) }}</strong></div><a class="button-secondary mt-4 w-full" href="{{ route('office.opportunities.show',$opportunity) }}">Open opportunity</a></article>@endforeach</div>
+        <div class="office-table-wrap"><table class="office-data-table"><thead><tr><th>Opportunity</th><th>Customer / site</th><th>Stage</th><th>Owner</th><th class="text-right">Estimate</th><th><span class="sr-only">Open</span></th></tr></thead><tbody>@foreach($opportunities as $opportunity)<tr><td><strong>{{ $opportunity->title }}</strong><span class="block text-xs text-slate-500">{{ $opportunity->opportunity_number }}</span></td><td>{{ $opportunity->customer->display_name }}<span class="block text-xs text-slate-500">{{ $opportunity->serviceLocation?->name ?? 'Customer-wide' }}</span></td><td>{{ $opportunity->stage->name }}</td><td>{{ $opportunity->owner?->name ?? 'Unassigned' }}</td><td class="text-right font-semibold">${{ number_format($opportunity->estimated_value_cents/100,2) }}</td><td class="text-right"><a class="button-secondary" href="{{ route('office.opportunities.show',$opportunity) }}">Open</a></td></tr>@endforeach</tbody></table></div>
+        <div class="office-mobile-list">@foreach($opportunities as $opportunity)<article class="office-mobile-card"><div class="flex justify-between gap-3"><div><p class="text-xs font-bold text-brand-blue-dark">{{ $opportunity->opportunity_number }}</p><h2 class="mt-1 font-bold">{{ $opportunity->title }}</h2><p class="mt-1 text-sm text-slate-600">{{ $opportunity->customer->display_name }} · {{ $opportunity->stage->name }}</p></div><strong>${{ number_format($opportunity->estimated_value_cents/100,2) }}</strong></div><a class="button-secondary mt-4 w-full" href="{{ route('office.opportunities.show',$opportunity) }}">Open opportunity</a></article>@endforeach</div>
         <div class="mt-5">{{ $opportunities->links() }}</div>
     @endif
 </x-layouts.office>

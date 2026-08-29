@@ -1,34 +1,34 @@
 <x-layouts.office title="Customers" width="workspace">
-    <x-office.page-header title="Customers" description="Manage customer accounts, contacts, and service locations.">
-        @if ($activeMembership->hasCapability('customers.manage'))
-            <x-slot:actions><a href="{{ route('office.customers.create') }}" class="button-primary">Add customer</a></x-slot:actions>
-        @endif
-    </x-office.page-header>
-    <x-office.customer-workspace-tabs />
-
-    <form method="GET" class="office-filter-toolbar lg:grid-cols-[minmax(320px,1fr)_160px_190px_auto]" aria-label="Customer filters">
-        <div>
-            <label for="search" class="form-label">Search</label>
-            <input id="search" name="search" class="form-input" value="{{ request('search') }}" placeholder="Name, phone, email, or address">
-        </div>
-        <div>
-            <label for="status" class="form-label">Status</label>
-            <select id="status" name="status" class="form-input">
-                <option value="">All statuses</option>
-                @foreach ($statuses as $value => $label)<option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>@endforeach
-            </select>
-        </div>
-        <div>
-            <label for="type" class="form-label">Customer type</label>
-            <select id="type" name="type" class="form-input">
-                <option value="">All types</option>
-                @foreach ($types as $value => $label)<option value="{{ $value }}" @selected(request('type') === $value)>{{ $label }}</option>@endforeach
-            </select>
-        </div>
-        <div class="flex flex-wrap gap-2">
-            <button class="button-secondary">Filter</button>
-            @if(request()->hasAny(['search', 'status', 'type']))<a href="{{ route('office.customers.index') }}" class="inline-flex min-h-11 items-center px-2 text-sm font-bold text-brand-blue underline">Clear</a>@endif
-        </div>
+    @php($activeFilterCount = collect(['search', 'status', 'type'])->filter(fn ($key) => filled(request($key)))->count())
+    <form method="GET" aria-label="Customer filters">
+        <x-office.primary-toolbar title="Customers" description="Customer accounts, contacts, and service locations.">
+            <x-slot:search>
+                <label for="search" class="sr-only">Search customers</label>
+                <input id="search" name="search" class="form-input" value="{{ request('search') }}" placeholder="Search name, phone, email, or address">
+            </x-slot:search>
+            <x-slot:viewSwitcher><x-office.customer-workspace-tabs /></x-slot:viewSwitcher>
+            <x-slot:filters>
+                <x-office.filter-panel :active-count="$activeFilterCount">
+                    <div class="grid gap-3 sm:grid-cols-2">
+                        <div><label for="status" class="form-label">Status</label><select id="status" name="status" class="form-input"><option value="">All statuses</option>@foreach ($statuses as $value => $label)<option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>@endforeach</select></div>
+                        <div><label for="type" class="form-label">Customer type</label><select id="type" name="type" class="form-input"><option value="">All types</option>@foreach ($types as $value => $label)<option value="{{ $value }}" @selected(request('type') === $value)>{{ $label }}</option>@endforeach</select></div>
+                    </div>
+                    <div class="mt-4 flex flex-wrap justify-end gap-2"><a href="{{ route('office.customers.index') }}" class="button-secondary">Clear all</a><button class="button-primary">Apply filters</button></div>
+                </x-office.filter-panel>
+            </x-slot:filters>
+            @if ($activeMembership->hasCapability('customers.manage'))
+                <x-slot:primaryAction><a href="{{ route('office.customers.create') }}" class="button-primary">Add customer</a></x-slot:primaryAction>
+            @endif
+            @if($activeFilterCount)
+                <x-slot:chips>
+                    <span class="text-xs font-bold uppercase tracking-wide text-slate-500">Active filters</span>
+                    @if(filled(request('search')))<x-office.filter-chip label="Search: {{ request('search') }}" :remove-url="route('office.customers.index', request()->except(['search', 'page']))" />@endif
+                    @if(filled(request('status')))<x-office.filter-chip label="Status: {{ $statuses[request('status')] ?? Str::headline(request('status')) }}" :remove-url="route('office.customers.index', request()->except(['status', 'page']))" />@endif
+                    @if(filled(request('type')))<x-office.filter-chip label="Type: {{ $types[request('type')] ?? Str::headline(request('type')) }}" :remove-url="route('office.customers.index', request()->except(['type', 'page']))" />@endif
+                    <a href="{{ route('office.customers.index') }}" class="inline-flex min-h-9 items-center px-2 text-xs font-bold text-brand-blue underline">Clear all</a>
+                </x-slot:chips>
+            @endif
+        </x-office.primary-toolbar>
     </form>
 
     <div class="office-table-wrap" data-office-table>
@@ -52,7 +52,7 @@
                         <td class="text-right"><a href="{{ route('office.customers.show', $customer) }}" class="inline-flex min-h-11 items-center font-bold text-brand-blue">Open<span class="sr-only"> {{ $customer->display_name }}</span></a></td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="py-10 text-center"><p class="font-bold text-slate-900">No customers found</p><p class="mt-1 text-sm text-slate-500">Clear filters or add the first customer.</p></td></tr>
+                    <tr><td colspan="6" class="p-3"><x-office.state-panel title="No customers found" message="Clear filters or add the first customer." /></td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -65,7 +65,7 @@
                 <dl class="mt-3 grid gap-2 text-sm sm:grid-cols-2"><div><dt class="font-semibold text-slate-500">Preferred contact</dt><dd class="mt-0.5 text-slate-800">{{ $customer->preferredContact?->name ?: $customer->email ?: $customer->phone ?: 'Not provided' }}</dd></div><div><dt class="font-semibold text-slate-500">Locations</dt><dd class="mt-0.5 text-slate-800">{{ $customer->service_locations_count }}</dd></div></dl>
             </a>
         @empty
-            <div class="surface p-8 text-center"><p class="font-bold text-slate-900">No customers found</p><p class="mt-1 text-sm text-slate-500">Clear filters or add the first customer.</p></div>
+            <x-office.state-panel title="No customers found" message="Clear filters or add the first customer." />
         @endforelse
     </div>
     <div class="mt-5">{{ $customers->links() }}</div>

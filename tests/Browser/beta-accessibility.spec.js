@@ -740,13 +740,14 @@ test.describe('desktop beta', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await page.goto('/office/billing-handoffs');
         await expect(page).toHaveURL(/\/office\/invoices\?workspace=ready_to_invoice/);
+        await page.locator('summary', { hasText: 'View:' }).click();
         await expect(page.getByRole('navigation', { name: 'Billing and invoice status' }).getByRole('link', { name: /Ready to Invoice/ })).toHaveAttribute('aria-current', 'page');
         await page.getByRole('navigation', { name: 'Billing and invoice status' }).getByRole('link', { name: 'All' }).click();
         await expect(page.getByRole('heading', { name: 'Billing / Invoices' })).toBeVisible();
         await expect(page.locator('[data-office-table]')).toBeVisible();
         await expect(page.locator('[data-office-mobile-list]')).toBeHidden();
-        await page.getByLabel('Invoice number').fill('NDT-INV-2026-0001');
-        await page.getByRole('button', { name: 'Filter' }).click();
+        await page.getByLabel('Search invoice number').fill('NDT-INV-2026-0001');
+        await page.getByLabel('Search invoice number').press('Enter');
         await expect(page.getByRole('link', { name: 'NDT-INV-2026-0001' }).first()).toBeVisible();
         await expectAccessible(page);
         await page.setViewportSize({ width: 390, height: 844 });
