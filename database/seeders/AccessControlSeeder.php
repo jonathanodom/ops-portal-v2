@@ -65,6 +65,7 @@ class AccessControlSeeder extends Seeder
         'quotes.approve' => 'Approve Quote pricing and terms exceptions',
         'proposal.engagement.view' => 'View Proposal recipients and delivery activity',
         'proposal.templates.manage' => 'Manage Proposal templates, content, terms, and defaults',
+        'commercial.convert' => 'Convert accepted commercial scope into Projects',
     ];
 
     private const ROLES = [

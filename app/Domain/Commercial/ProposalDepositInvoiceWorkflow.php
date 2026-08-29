@@ -25,26 +25,29 @@ final class ProposalDepositInvoiceWorkflow
 
     public function createForAcceptance(ProposalAcceptance $acceptance, ?User $actor): ?Invoice
     {
-        return DB::transaction(function () use ($acceptance, $actor): ?Invoice {
-            $acceptance = ProposalAcceptance::query()
-                ->with('publication.revision.document.opportunity')
-                ->lockForUpdate()
-                ->findOrFail($acceptance->id);
-            $milestone = AcceptedPaymentMilestone::query()
-                ->where('proposal_acceptance_id', $acceptance->id)
-                ->orderBy('sort_order')
-                ->lockForUpdate()
-                ->first();
-            if (! $milestone) {
-                return null;
-            }
+        $milestone = AcceptedPaymentMilestone::query()
+            ->where('proposal_acceptance_id', $acceptance->id)
+            ->orderBy('sort_order')
+            ->first();
+
+        return $milestone ? $this->createForMilestone($milestone, $actor) : null;
+    }
+
+    public function createForMilestone(AcceptedPaymentMilestone $milestone, ?User $actor): Invoice
+    {
+        return DB::transaction(function () use ($milestone, $actor): Invoice {
+            $milestone = AcceptedPaymentMilestone::query()->lockForUpdate()->findOrFail($milestone->id);
             if ($milestone->invoice_id) {
                 return Invoice::query()->findOrFail($milestone->invoice_id);
             }
-            if (! $actor || $actor->status !== 'active') {
-                throw ValidationException::withMessages(['proposal' => 'An active Opportunity owner is required before the deposit invoice can be created.']);
+            $acceptance = ProposalAcceptance::query()
+                ->with('publication.revision.document.opportunity')
+                ->lockForUpdate()
+                ->findOrFail($milestone->proposal_acceptance_id);
+            $actor = $actor ? User::query()->whereKey($actor->id)->where('status', 'active')->whereHas('memberships', fn ($query) => $query->where('organization_id', $acceptance->organization_id)->where('status', 'active'))->first() : null;
+            if (! $actor) {
+                throw ValidationException::withMessages(['proposal' => 'An active Opportunity owner is required before the milestone invoice can be created.']);
             }
-
             /** @var Opportunity $opportunity */
             $opportunity = $acceptance->publication->revision->document->opportunity;
             if (! $opportunity->service_location_id) {
@@ -69,7 +72,7 @@ final class ProposalDepositInvoiceWorkflow
                 $invoice->lines()->create([
                     'organization_id' => $invoice->organization_id,
                     'line_type' => 'service',
-                    'description' => 'Deposit — '.($component['taxable'] ? 'taxable accepted scope' : 'non-taxable accepted scope'),
+                    'description' => $milestone->name.' — '.($component['taxable'] ? 'taxable accepted scope' : 'non-taxable accepted scope'),
                     'quantity_millis' => 1000,
                     'unit' => 'deposit',
                     'unit_price_cents' => $component['amount_cents'],
