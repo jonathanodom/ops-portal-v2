@@ -46,10 +46,18 @@ final class CommercialCalculator
         $profit = $costComplete ? $netSell - $cost : null;
         $margin = $profit !== null && $netSell > 0 ? $this->roundRatio($profit * 10000, $netSell) : null;
         $markup = $profit !== null && $cost > 0 ? $this->roundRatio($profit * 10000, $cost) : null;
+        $document = $revision->document()->with('project')->firstOrFail();
+        $delta = 0;
+        $resultingProjectTotal = 0;
+        if ($document->document_type === 'change_order') {
+            $delta = (int) $included->sum(fn (CommercialRevisionLine $line): int => in_array($line->change_effect, ['remove', 'substitute_remove'], true) ? -$line->total_cents : $line->total_cents);
+            $resultingProjectTotal = max(0, $document->project->currentContractTotalCents() + $delta);
+        }
         $revision->forceFill([
             'subtotal_cents' => $subtotal, 'line_discount_total_cents' => $lineDiscountTotal,
             'quote_discount_total_cents' => $quoteDiscount, 'tax_total_cents' => $taxTotal,
-            'total_cents' => $netSell + $taxTotal, 'resolved_cost_cents' => $cost,
+            'total_cents' => $netSell + $taxTotal, 'change_order_delta_cents' => $delta,
+            'resulting_project_total_cents' => $resultingProjectTotal, 'resolved_cost_cents' => $cost,
             'cost_complete' => $costComplete, 'gross_profit_cents' => $profit,
             'gross_margin_basis_points' => $margin, 'markup_basis_points' => $markup,
         ])->save();
@@ -141,18 +149,19 @@ final class CommercialCalculator
         if ($milestones->isEmpty()) {
             return;
         }
+        $targetTotal = $revision->document->document_type === 'change_order' ? abs((int) $revision->change_order_delta_cents) : (int) $revision->total_cents;
         $allocated = 0;
         $balancing = $milestones->firstWhere('is_balancing', true);
         foreach ($milestones as $milestone) {
             if ($milestone->is_balancing) {
                 continue;
             }
-            $amount = $milestone->amount_type === 'percent' ? $this->roundRatio($revision->total_cents * $milestone->amount_value, 10000) : min($revision->total_cents, $milestone->amount_value);
+            $amount = $milestone->amount_type === 'percent' ? $this->roundRatio($targetTotal * $milestone->amount_value, 10000) : min($targetTotal, $milestone->amount_value);
             $milestone->update(['allocated_cents' => $amount]);
             $allocated += $amount;
         }
         if ($balancing) {
-            $balancing->update(['allocated_cents' => max(0, $revision->total_cents - $allocated)]);
+            $balancing->update(['allocated_cents' => max(0, $targetTotal - $allocated)]);
         }
     }
 

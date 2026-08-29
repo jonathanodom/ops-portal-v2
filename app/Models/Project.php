@@ -77,6 +77,24 @@ class Project extends Model
         return $this->hasMany(ProjectCommercialScope::class);
     }
 
+    public function changeOrders(): HasMany
+    {
+        return $this->hasMany(CommercialDocument::class)->where('document_type', 'change_order')->latest();
+    }
+
+    public function allowanceResolutions(): HasMany
+    {
+        return $this->hasMany(ProjectAllowanceResolution::class);
+    }
+
+    public function currentContractTotalCents(): int
+    {
+        $scopes = $this->relationLoaded('commercialScopes') ? $this->commercialScopes->sortBy('id') : $this->commercialScopes()->orderBy('id')->get();
+        $baseline = (int) ($scopes->firstWhere('scope_type', 'baseline')?->accepted_total_cents ?? 0);
+
+        return max(0, $baseline + (int) $scopes->where('scope_type', 'change_order')->sum('contract_delta_cents'));
+    }
+
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
     {
         return $query->where('organization_id', $organizationId);

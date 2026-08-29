@@ -183,6 +183,8 @@ final class QuoteWorkflow
             $newPrice = $this->resolveSellPrice($line, $data);
             $line->update([
                 'description' => $data['description'], 'customer_description' => $data['customer_description'] ?? null,
+                'change_effect' => $locked->document->document_type === 'change_order' ? ($data['change_effect'] ?? 'add') : 'add',
+                'substitution_group' => $locked->document->document_type === 'change_order' ? ($data['substitution_group'] ?? null) : null,
                 'quantity_millis' => (int) $data['quantity_millis'], 'effective_unit_sell_cents' => $newPrice,
                 'sell_price_overridden' => $line->catalog_unit_sell_cents !== null && $newPrice !== (int) $line->catalog_unit_sell_cents,
                 'discount_type' => $data['discount_type'] ?: null, 'discount_value' => (int) ($data['discount_value'] ?? 0),
@@ -238,6 +240,28 @@ final class QuoteWorkflow
                 $line->update($changes);
             }
         }, 'quote.lines_bulk_assigned', ['line_ids' => array_map('intval', $data['line_ids']), 'changed_fields' => ['dimensions']]);
+    }
+
+    /** @param array<int|string,string> $effects @param array<int|string,string|null> $groups */
+    public function updateChangeEffects(CommercialRevision $revision, User $actor, int $contentVersion, array $effects, array $groups): CommercialRevision
+    {
+        return $this->mutate($revision, $actor, $contentVersion, function (CommercialRevision $locked) use ($effects, $groups): void {
+            if ($locked->document->document_type !== 'change_order') {
+                throw ValidationException::withMessages(['change_effects' => 'Change effects apply only to Change Orders.']);
+            }
+            $lines = $locked->lines()->whereIn('id', array_map('intval', array_keys($effects)))->lockForUpdate()->get();
+            if ($lines->count() !== count($effects)) {
+                throw ValidationException::withMessages(['change_effects' => 'One or more lines do not belong to this Change Order.']);
+            }
+            foreach ($lines as $line) {
+                $effect = $effects[$line->id] ?? 'add';
+                $group = trim((string) ($groups[$line->id] ?? '')) ?: null;
+                if (str_starts_with($effect, 'substitute_') && $group === null) {
+                    throw ValidationException::withMessages(["substitution_groups.{$line->id}" => 'Substitution lines require a shared group label.']);
+                }
+                $line->update(['change_effect' => $effect, 'substitution_group' => $group]);
+            }
+        }, 'change_order.effects_updated', ['line_ids' => array_map('intval', array_keys($effects)), 'changed_fields' => ['change_effect', 'substitution_group']]);
     }
 
     /** @param array<string,mixed> $data */
@@ -385,7 +409,8 @@ final class QuoteWorkflow
                 }
                 $this->refresh($target, $actor, false);
                 $document->update(['status' => 'draft', 'updated_by_id' => $actor?->id]);
-                $this->audit->record($document->opportunity->organization, $actor, 'quote.revision_cloned', $document->opportunity, ['quote_id' => $document->id, 'source_revision_id' => $source->id, 'revision_id' => $target->id, 'version' => $version]);
+                $subject = $document->auditSubject();
+                $this->audit->record($subject->organization, $actor, $document->document_type === 'change_order' ? 'change_order.revision_cloned' : 'quote.revision_cloned', $subject, ['commercial_document_id' => $document->id, 'source_revision_id' => $source->id, 'revision_id' => $target->id, 'version' => $version]);
 
                 return $target->fresh();
             });
@@ -409,13 +434,15 @@ final class QuoteWorkflow
             }
             $callback($locked);
             $this->refresh($locked, $actor);
-            $this->audit->record($locked->document->opportunity->organization, $actor, $event, $locked->document->opportunity, ['quote_id' => $locked->commercial_document_id, 'revision_id' => $locked->id] + $metadata);
+            $subject = $locked->document->auditSubject();
+            $event = $locked->document->document_type === 'change_order' ? str_replace('quote.', 'change_order.', $event) : $event;
+            $this->audit->record($subject->organization, $actor, $event, $subject, ['commercial_document_id' => $locked->commercial_document_id, 'revision_id' => $locked->id] + $metadata);
 
             return $locked->fresh();
         });
     }
 
-    private function refresh(CommercialRevision $revision, ?User $actor, bool $increment = true): void
+    public function refresh(CommercialRevision $revision, ?User $actor, bool $increment = true): void
     {
         $this->calculator->recalculate($revision);
         $version = $increment ? $revision->content_version + 1 : $revision->content_version;

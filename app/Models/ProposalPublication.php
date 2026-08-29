@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['organization_id', 'commercial_revision_id', 'proposal_template_id', 'status', 'revision_content_hash', 'publication_hash', 'snapshot', 'subtotal_cents', 'discount_cents', 'tax_cents', 'total_cents', 'acceptance_enabled', 'show_line_details', 'show_location_totals', 'labor_grouping', 'show_manufacturer_model', 'show_product_images', 'show_package_components', 'brand_asset_id', 'expires_at', 'pdf_status', 'pdf_disk', 'pdf_key', 'pdf_sha256', 'pdf_failure_code', 'published_by_id', 'published_at', 'first_viewed_at', 'changes_requested_at', 'accepted_at', 'superseded_at', 'extended_at', 'extended_by_id', 'extension_review_snapshot', 'withdrawn_by_id', 'withdrawn_at'])]
+#[Fillable(['organization_id', 'commercial_revision_id', 'proposal_template_id', 'status', 'revision_content_hash', 'publication_hash', 'snapshot', 'subtotal_cents', 'discount_cents', 'tax_cents', 'total_cents', 'change_order_delta_cents', 'resulting_project_total_cents', 'acceptance_enabled', 'show_line_details', 'show_location_totals', 'labor_grouping', 'show_manufacturer_model', 'show_product_images', 'show_package_components', 'brand_asset_id', 'expires_at', 'pdf_status', 'pdf_disk', 'pdf_key', 'pdf_sha256', 'pdf_failure_code', 'published_by_id', 'published_at', 'first_viewed_at', 'changes_requested_at', 'accepted_at', 'superseded_at', 'extended_at', 'extended_by_id', 'extension_review_snapshot', 'withdrawn_by_id', 'withdrawn_at'])]
 class ProposalPublication extends Model
 {
     protected function casts(): array

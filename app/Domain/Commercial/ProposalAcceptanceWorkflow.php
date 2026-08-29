@@ -50,7 +50,7 @@ final class ProposalAcceptanceWorkflow
         }
         try {
             $acceptance = DB::transaction(function () use ($access, $request, $data, $selections, $decoded, $disk, $key): ProposalAcceptance {
-                $publication = ProposalPublication::query()->with('revision.document.opportunity.organization')->whereKey($access->publication->id)->lockForUpdate()->firstOrFail();
+                $publication = ProposalPublication::query()->with(['revision.document.opportunity.organization', 'revision.document.project.organization'])->whereKey($access->publication->id)->lockForUpdate()->firstOrFail();
                 $existing = ProposalAcceptance::query()->where('proposal_publication_id', $publication->id)->first();
                 if ($existing) {
                     if ($existing->idempotency_token === $data['idempotency_token']) {
@@ -68,10 +68,18 @@ final class ProposalAcceptanceWorkflow
                     throw ValidationException::withMessages(['proposal' => 'The immutable Proposal identity could not be verified.']);
                 }
                 $totals = $this->calculator->calculate($publication->snapshot, $selections);
-                $milestones = $this->milestones($publication->snapshot['milestones'] ?? [], $totals['total_cents']);
+                $isChangeOrder = $publication->revision->document->document_type === 'change_order';
+                $changeOrderDelta = $isChangeOrder ? (int) collect($totals['lines'])->where('included', true)->sum(fn (array $line): int => in_array($line['change_effect'] ?? 'add', ['remove', 'substitute_remove'], true) ? -(int) $line['total_cents'] : (int) $line['total_cents']) : 0;
+                if ($isChangeOrder && $publication->revision->document->project->currentContractTotalCents() + $changeOrderDelta < 0) {
+                    throw ValidationException::withMessages(['proposal' => 'The Change Order credit cannot exceed the current Project contract total.']);
+                }
+                $resultingProjectTotal = $isChangeOrder ? max(0, $publication->revision->document->project->currentContractTotalCents() + $changeOrderDelta) : 0;
+                $milestones = $this->milestones($publication->snapshot['milestones'] ?? [], $isChangeOrder ? abs($changeOrderDelta) : $totals['total_cents']);
                 $acceptedSnapshot = $publication->snapshot;
                 $acceptedSnapshot['accepted_options'] = collect($totals['lines'])->map(fn ($line) => ['line_id' => $line['id'], 'optional' => $line['optional'], 'included' => $line['included']])->all();
                 $acceptedSnapshot['accepted_totals'] = collect($totals)->except('lines')->all();
+                $acceptedSnapshot['accepted_totals']['change_order_delta_cents'] = $changeOrderDelta;
+                $acceptedSnapshot['accepted_totals']['resulting_project_total_cents'] = $resultingProjectTotal;
                 $acceptedSnapshot['accepted_payment_milestones'] = $milestones;
                 $acceptedHash = hash('sha256', json_encode($acceptedSnapshot, JSON_THROW_ON_ERROR));
                 $ip = $request->ip();
@@ -82,6 +90,7 @@ final class ProposalAcceptanceWorkflow
                     'revision_content_hash' => $publication->revision_content_hash, 'accepted_snapshot' => $acceptedSnapshot,
                     'accepted_snapshot_hash' => $acceptedHash, 'subtotal_cents' => $totals['subtotal_cents'],
                     'discount_cents' => $totals['discount_cents'], 'tax_cents' => $totals['tax_cents'], 'total_cents' => $totals['total_cents'],
+                    'change_order_delta_cents' => $changeOrderDelta, 'resulting_project_total_cents' => $resultingProjectTotal,
                     'signer_name' => $data['signer_name'], 'signer_email' => strtolower(trim($data['signer_email'])), 'signer_title' => $data['signer_title'],
                     'consent_statement' => $publication->snapshot['acceptance']['statement'], 'consent_version' => $publication->snapshot['acceptance']['version'],
                     'signature_disk' => $disk, 'signature_key' => $key, 'signature_mime_type' => 'image/png',
@@ -98,15 +107,18 @@ final class ProposalAcceptanceWorkflow
                 }
                 $publication->update(['status' => 'accepted', 'accepted_at' => now()]);
                 $opportunity = Opportunity::query()->whereKey($publication->revision->document->opportunity_id)->lockForUpdate()->firstOrFail();
-                $this->opportunities->won($opportunity, $publication->id);
-                $this->depositInvoices->createForAcceptance($acceptance, $opportunity->owner);
+                if (! $isChangeOrder) {
+                    $this->opportunities->won($opportunity, $publication->id);
+                    $this->depositInvoices->createForAcceptance($acceptance, $opportunity->owner);
+                }
                 $event = ProposalEngagementEvent::query()->create([
                     'organization_id' => $publication->organization_id, 'proposal_publication_id' => $publication->id,
                     'proposal_recipient_id' => $access->recipientId(), 'proposal_share_link_id' => $access->shareLinkId(),
                     'event_type' => 'accepted', 'encrypted_ip' => $ip, 'ip_hash' => $ip ? hash('sha256', strtolower(trim($ip))) : null,
                     'user_agent' => Str::limit((string) $request->userAgent(), 512, ''), 'safe_metadata' => ['acceptance_id' => $acceptance->id, 'accepted_snapshot_hash' => $acceptedHash, 'total_cents' => $totals['total_cents']], 'occurred_at' => now(),
                 ]);
-                $this->audit->record($publication->revision->document->opportunity->organization, null, 'proposal.accepted', $publication->revision->document->opportunity, ['publication_id' => $publication->id, 'revision_id' => $publication->commercial_revision_id, 'acceptance_id' => $acceptance->id, 'accepted_snapshot_hash' => $acceptedHash, 'total_cents' => $totals['total_cents']]);
+                $subject = $isChangeOrder ? $publication->revision->document->project : $publication->revision->document->opportunity;
+                $this->audit->record($subject->organization, null, $isChangeOrder ? 'change_order.accepted' : 'proposal.accepted', $subject, ['publication_id' => $publication->id, 'revision_id' => $publication->commercial_revision_id, 'acceptance_id' => $acceptance->id, 'accepted_snapshot_hash' => $acceptedHash, 'total_cents' => $totals['total_cents'], 'change_order_delta_cents' => $changeOrderDelta]);
                 NotifyProposalOwner::dispatch($event->id)->afterCommit();
 
                 return $acceptance->fresh(['selections', 'milestones']);

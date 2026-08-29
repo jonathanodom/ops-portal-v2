@@ -57,6 +57,9 @@ final class ProjectConversionWorkflow
                 'project_conversion_template_id' => $template?->id,
                 'accepted_snapshot_hash' => $acceptance->accepted_snapshot_hash,
                 'accepted_total_cents' => $acceptance->total_cents,
+                'scope_type' => 'baseline',
+                'contract_delta_cents' => 0,
+                'resulting_contract_total_cents' => $acceptance->total_cents,
                 'converted_by_id' => $actor->id,
                 'converted_at' => now(),
             ]);

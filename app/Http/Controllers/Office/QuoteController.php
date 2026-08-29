@@ -113,7 +113,7 @@ final class QuoteController extends Controller
         [$quote,$revision] = $this->scoped($request, $quote, $revision);
         Gate::authorize('update', $quote);
         abort_unless((int) $line->commercial_revision_id === (int) $revision->id, 404);
-        $data = $request->validate(['content_version' => ['required', 'integer'], 'description' => ['required', 'string', 'max:255'], 'customer_description' => ['nullable', 'string', 'max:2000'], 'quantity' => ['required', 'regex:/^\d{1,12}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'], 'pricing_mode' => ['required', Rule::in(['catalog', 'direct', 'markup', 'margin'])], 'effective_unit_sell' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'pricing_value_percent' => ['nullable', 'regex:/^\d{1,4}(\.\d{1,2})?$/'], 'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_amount' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean'], 'included' => ['nullable', 'boolean'], 'taxable' => ['nullable', 'boolean']]);
+        $data = $request->validate(['content_version' => ['required', 'integer'], 'description' => ['required', 'string', 'max:255'], 'customer_description' => ['nullable', 'string', 'max:2000'], 'change_effect' => ['nullable', Rule::in(['add', 'remove', 'substitute_add', 'substitute_remove'])], 'substitution_group' => ['nullable', 'string', 'max:64'], 'quantity' => ['required', 'regex:/^\d{1,12}(\.\d{1,3})?$/', 'not_in:0,0.0,0.00,0.000'], 'pricing_mode' => ['required', Rule::in(['catalog', 'direct', 'markup', 'margin'])], 'effective_unit_sell' => ['required', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'pricing_value_percent' => ['nullable', 'regex:/^\d{1,4}(\.\d{1,2})?$/'], 'discount_type' => ['nullable', Rule::in(['fixed', 'percent'])], 'discount_amount' => ['nullable', 'regex:/^\d{1,9}(\.\d{1,2})?$/'], 'location_id' => ['nullable', 'integer'], 'system_id' => ['nullable', 'integer'], 'phase_id' => ['nullable', 'integer'], 'optional' => ['nullable', 'boolean'], 'included' => ['nullable', 'boolean'], 'taxable' => ['nullable', 'boolean']]);
         $data['quantity_millis'] = FixedPoint::quantityToMillis($data['quantity']);
         $data['effective_unit_sell_cents'] = FixedPoint::dollarsToCents($data['effective_unit_sell']);
         $data['pricing_value_basis_points'] = filled($data['pricing_value_percent'] ?? null) ? FixedPoint::percentToBasisPoints($data['pricing_value_percent']) : 0;
@@ -157,6 +157,23 @@ final class QuoteController extends Controller
         $workflow->bulkAssign($revision, $request->user(), $data);
 
         return $this->back($quote, $revision, 'Selected lines moved.');
+    }
+
+    public function updateChangeEffects(Request $request, CommercialDocument $quote, CommercialRevision $revision, QuoteWorkflow $workflow): RedirectResponse
+    {
+        [$quote, $revision] = $this->scoped($request, $quote, $revision);
+        Gate::authorize('update', $quote);
+        abort_unless($quote->document_type === 'change_order', 404);
+        $data = $request->validate([
+            'content_version' => ['required', 'integer'],
+            'change_effects' => ['required', 'array', 'min:1'],
+            'change_effects.*' => ['required', Rule::in(['add', 'remove', 'substitute_add', 'substitute_remove'])],
+            'substitution_groups' => ['nullable', 'array'],
+            'substitution_groups.*' => ['nullable', 'string', 'max:64'],
+        ]);
+        $workflow->updateChangeEffects($revision, $request->user(), (int) $data['content_version'], $data['change_effects'], $data['substitution_groups'] ?? []);
+
+        return $this->back($quote, $revision, 'Change Order effects updated.');
     }
 
     public function updateComponent(Request $request, CommercialDocument $quote, CommercialRevision $revision, CommercialRevisionLine $line, CommercialRevisionLineComponent $component, QuoteWorkflow $workflow): RedirectResponse
@@ -261,7 +278,7 @@ final class QuoteController extends Controller
     private function scoped(Request $request, CommercialDocument $quote, CommercialRevision $revision): array
     {
         $organization = $request->attributes->get('organization');
-        $quote = CommercialDocument::query()->forOrganization($organization->id)->where('document_type', 'quote')->findOrFail($quote->id);
+        $quote = CommercialDocument::query()->forOrganization($organization->id)->whereIn('document_type', ['quote', 'change_order'])->findOrFail($quote->id);
         $revision = $quote->revisions()->whereKey($revision->id)->firstOrFail();
 
         return [$quote, $revision];

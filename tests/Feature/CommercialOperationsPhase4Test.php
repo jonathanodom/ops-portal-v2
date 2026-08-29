@@ -2,9 +2,12 @@
 
 namespace Tests\Feature;
 
+use App\Domain\Commercial\ChangeOrderApplicationWorkflow;
+use App\Domain\Commercial\ChangeOrderWorkflow;
 use App\Domain\Commercial\CommercialApprovalWorkflow;
 use App\Domain\Commercial\CommercialDefaults;
 use App\Domain\Commercial\CommercialRevisionMediaWorkflow;
+use App\Domain\Commercial\ProjectAllowanceWorkflow;
 use App\Domain\Commercial\ProjectConversionWorkflow;
 use App\Domain\Commercial\ProposalPublicationWorkflow;
 use App\Domain\Commercial\QuoteWorkflow;
@@ -294,6 +297,89 @@ class CommercialOperationsPhase4Test extends TestCase
         Storage::disk('local')->assertExists($draft->media->sole()->storage_key);
         $this->assertDatabaseHas('proposal_option_selections', ['proposal_share_link_id' => $link->id, 'publication_line_id' => $line->id, 'included' => true]);
         $this->assertStringNotContainsString('Please revise', json_encode(AuditEvent::query()->where('subject_type', $opportunity->getMorphClass())->where('subject_id', $opportunity->id)->pluck('metadata')->all(), JSON_THROW_ON_ERROR));
+    }
+
+    public function test_negative_change_order_requires_extra_approval_and_applies_once_as_signed_project_delta(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        [$organization, $admin, $opportunity, $revision, $terms] = $this->context(8000, 10000);
+        $location = ServiceLocation::factory()->create(['organization_id' => $organization->id, 'customer_id' => $opportunity->customer_id, 'active' => true]);
+        $opportunity->update(['service_location_id' => $location->id]);
+        foreach (['Exact allowance', 'Positive variance allowance', 'Negative variance allowance'] as $allowanceName) {
+            app(QuoteWorkflow::class)->addAllowance($revision, $admin, ['content_version' => $revision->content_version, 'description' => $allowanceName, 'amount_cents' => 5000, 'optional' => false, 'taxable' => false]);
+            $revision = $revision->fresh();
+        }
+        app(QuoteWorkflow::class)->updateTerms($revision, $terms, $admin, $revision->content_version, null);
+        app(CommercialApprovalWorkflow::class)->submit($revision->fresh(), $admin);
+        $template = ProposalTemplate::query()->forOrganization($organization->id)->where('template_type', 'budgetary_estimate')->sole();
+        $publication = app(ProposalPublicationWorkflow::class)->publish($revision->fresh(), $template, $admin, ['expires_at' => now()->addDays(30), 'acceptance_enabled' => true, 'labor_grouping' => 'location']);
+        [, $token] = app(ProposalPublicationWorkflow::class)->addRecipient($publication, $admin, 'customer@example.test', 'Customer');
+        $this->post(route('proposals.accept', $token), ['signer_name' => 'Customer Person', 'signer_email' => 'customer@example.test', 'signer_title' => 'Owner', 'consent' => '1', 'signature_data' => $this->signaturePng(), 'idempotency_token' => (string) Str::uuid()])->assertOk();
+        $baselineAcceptance = ProposalAcceptance::query()->where('proposal_publication_id', $publication->id)->with(['selections', 'milestones'])->sole();
+        $baseline = app(ProjectConversionWorkflow::class)->convert($baselineAcceptance, $admin, ['project_mode' => 'new', 'project_name' => 'Accepted Installation', 'project_type' => 'installation_project', 'project_conversion_template_id' => null, 'confirm_location_mismatch' => false, 'ticket_line_ids' => []]);
+        $allowances = $baselineAcceptance->selections->filter(fn ($selection) => ($selection->line_snapshot['type'] ?? null) === 'allowance')->values();
+        $exact = app(ProjectAllowanceWorkflow::class)->resolve($baseline->project, $baseline, $allowances[0]->publication_line_id, 5000, $admin);
+        $positiveVariance = app(ProjectAllowanceWorkflow::class)->resolve($baseline->project, $baseline, $allowances[1]->publication_line_id, 6000, $admin);
+        $negativeVariance = app(ProjectAllowanceWorkflow::class)->resolve($baseline->project, $baseline, $allowances[2]->publication_line_id, 4000, $admin);
+        $this->assertSame('resolved_within_allowance', $exact->status);
+        $this->assertSame(1000, $positiveVariance->variance_cents);
+        $this->assertSame(-1000, $negativeVariance->variance_cents);
+        $this->assertSame('change_order_required', $positiveVariance->status);
+        $this->assertSame(25000, $baseline->project->currentContractTotalCents());
+
+        $product = CatalogProduct::query()->where('organization_id', $organization->id)->sole();
+        $zeroOrder = app(ChangeOrderWorkflow::class)->create($baseline->project, $admin, 'Substitute equipment');
+        $zeroRevision = $zeroOrder->revisions()->sole();
+        app(QuoteWorkflow::class)->addCatalogLine($zeroRevision, $admin, ['content_version' => $zeroRevision->content_version, 'catalog_item_type' => 'product', 'catalog_item_id' => $product->id, 'quantity_millis' => 1000]);
+        $zeroRevision = $zeroRevision->fresh();
+        app(QuoteWorkflow::class)->addCatalogLine($zeroRevision, $admin, ['content_version' => $zeroRevision->content_version, 'catalog_item_type' => 'product', 'catalog_item_id' => $product->id, 'quantity_millis' => 1000]);
+        $zeroRevision = $zeroRevision->fresh();
+        $zeroLines = $zeroRevision->lines()->orderBy('id')->get();
+        app(QuoteWorkflow::class)->updateChangeEffects($zeroRevision, $admin, $zeroRevision->content_version, [$zeroLines[0]->id => 'substitute_remove', $zeroLines[1]->id => 'substitute_add'], [$zeroLines[0]->id => 'equipment', $zeroLines[1]->id => 'equipment']);
+        $this->assertSame(0, $zeroRevision->fresh()->change_order_delta_cents);
+        $this->assertSame(25000, $zeroRevision->fresh()->resulting_project_total_cents);
+
+        $positiveOrder = app(ChangeOrderWorkflow::class)->create($baseline->project, $admin, 'Add equipment');
+        $positiveRevision = $positiveOrder->revisions()->sole();
+        app(QuoteWorkflow::class)->addCatalogLine($positiveRevision, $admin, ['content_version' => $positiveRevision->content_version, 'catalog_item_type' => 'product', 'catalog_item_id' => $product->id, 'quantity_millis' => 1000]);
+        $this->assertSame(10000, $positiveRevision->fresh()->change_order_delta_cents);
+        $this->assertSame(35000, $positiveRevision->fresh()->resulting_project_total_cents);
+
+        $changeOrder = app(ChangeOrderWorkflow::class)->create($baseline->project, $admin, 'Remove unused equipment');
+        $changeRevision = $changeOrder->revisions()->sole();
+        $this->assertSame('CO-2026-0003', $changeOrder->document_number);
+        app(QuoteWorkflow::class)->addCatalogLine($changeRevision, $admin, ['content_version' => $changeRevision->content_version, 'catalog_item_type' => 'product', 'catalog_item_id' => $product->id, 'quantity_millis' => 1000]);
+        $changeRevision = $changeRevision->fresh();
+        $changeLine = $changeRevision->lines()->sole();
+        app(QuoteWorkflow::class)->updateChangeEffects($changeRevision, $admin, $changeRevision->content_version, [$changeLine->id => 'remove'], []);
+        $changeRevision = $changeRevision->fresh();
+        $this->assertSame(-10000, $changeRevision->change_order_delta_cents);
+        $this->assertSame(15000, $changeRevision->resulting_project_total_cents);
+        app(QuoteWorkflow::class)->updateTerms($changeRevision, $terms, $admin, $changeRevision->content_version, null);
+        $approval = app(CommercialApprovalWorkflow::class)->submit($changeRevision->fresh(), $admin);
+        $this->assertEqualsCanonicalizing(['change_order_manager_review', 'negative_change_order'], collect($approval->trigger_snapshot)->pluck('kind')->all());
+        [$dispatcher, $dispatcherMembership] = $this->member($organization, 'dispatcher');
+        $dispatcherMembership->capabilityOverrides()->attach(Capability::query()->where('key', 'quotes.approve')->sole(), ['effect' => 'grant']);
+        $this->actingAs($dispatcher)->post(route('office.quote-approvals.decide', $approval), ['decision' => 'approved', 'reason' => 'Not authorized for credits.'])->assertForbidden();
+        app(CommercialApprovalWorkflow::class)->decide($approval, $admin, 'approved', 'Approved customer credit.');
+        $changePublication = app(ProposalPublicationWorkflow::class)->publish($changeRevision->fresh(), $template, $admin, ['expires_at' => now()->addDays(30), 'acceptance_enabled' => true, 'labor_grouping' => 'location']);
+        [, $changeToken] = app(ProposalPublicationWorkflow::class)->addRecipient($changePublication, $admin, 'customer@example.test', 'Customer');
+        $invoiceCount = Invoice::query()->count();
+        $this->post(route('proposals.accept', $changeToken), ['signer_name' => 'Customer Person', 'signer_email' => 'customer@example.test', 'signer_title' => 'Owner', 'consent' => '1', 'signature_data' => $this->signaturePng(), 'idempotency_token' => (string) Str::uuid()])->assertOk()->assertSee('Acceptance recorded');
+        $changeAcceptance = ProposalAcceptance::query()->where('proposal_publication_id', $changePublication->id)->sole();
+        $this->assertSame(-10000, $changeAcceptance->change_order_delta_cents);
+        $this->assertSame($invoiceCount, Invoice::query()->count());
+
+        $scope = app(ChangeOrderApplicationWorkflow::class)->apply($changeAcceptance, $admin);
+        $retry = app(ChangeOrderApplicationWorkflow::class)->apply($changeAcceptance, $admin);
+        $this->assertSame($scope->id, $retry->id);
+        $this->assertSame('change_order', $scope->scope_type);
+        $this->assertSame(-10000, $scope->contract_delta_cents);
+        $this->assertSame(15000, $scope->resulting_contract_total_cents);
+        $this->assertSame(-1000, $scope->materialItems()->sole()->delta_quantity_millis);
+        $this->assertSame(15000, $baseline->project->currentContractTotalCents());
+        $this->assertDatabaseCount('project_commercial_scopes', 2);
     }
 
     public function test_reminder_job_is_organization_local_and_idempotent(): void

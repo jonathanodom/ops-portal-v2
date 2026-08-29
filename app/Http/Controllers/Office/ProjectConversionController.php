@@ -65,6 +65,7 @@ final class ProjectConversionController extends Controller
         abort_unless((int) $publication->organization_id === (int) $request->attributes->get('organization')->id, 404);
         $this->requireCapabilities($request, ['commercial.convert', 'projects.manage']);
         $publication->load('revision.document.opportunity');
+        abort_unless($publication->revision->document->document_type === 'quote', 404);
         $acceptance = ProposalAcceptance::query()->where('organization_id', $publication->organization_id)->where('proposal_publication_id', $publication->id)->with('projectScope')->firstOrFail();
 
         return [$publication, $acceptance];

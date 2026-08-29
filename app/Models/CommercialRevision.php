@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['organization_id', 'commercial_document_id', 'version', 'source_revision_id', 'status', 'currency', 'commercial_terms_set_id', 'terms_name_snapshot', 'terms_version_snapshot', 'terms_body_snapshot', 'terms_overridden', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'tax_rate_overridden', 'tax_override_reason', 'customer_tax_exempt', 'tax_exemption_reference', 'subtotal_cents', 'line_discount_total_cents', 'quote_discount_total_cents', 'tax_total_cents', 'total_cents', 'resolved_cost_cents', 'cost_complete', 'gross_profit_cents', 'gross_margin_basis_points', 'markup_basis_points', 'content_version', 'content_hash', 'locked_at', 'created_by_id', 'updated_by_id'])]
+#[Fillable(['organization_id', 'commercial_document_id', 'version', 'source_revision_id', 'status', 'currency', 'commercial_terms_set_id', 'terms_name_snapshot', 'terms_version_snapshot', 'terms_body_snapshot', 'terms_overridden', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'tax_rate_overridden', 'tax_override_reason', 'customer_tax_exempt', 'tax_exemption_reference', 'subtotal_cents', 'line_discount_total_cents', 'quote_discount_total_cents', 'tax_total_cents', 'total_cents', 'change_order_delta_cents', 'resulting_project_total_cents', 'resolved_cost_cents', 'cost_complete', 'gross_profit_cents', 'gross_margin_basis_points', 'markup_basis_points', 'content_version', 'content_hash', 'locked_at', 'created_by_id', 'updated_by_id'])]
 class CommercialRevision extends Model
 {
     public const STATUSES = ['draft', 'pending_approval', 'approved', 'published'];

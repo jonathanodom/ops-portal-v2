@@ -53,7 +53,7 @@
                     <tbody>
                     @foreach($snapshot['lines'] as $line)
                         @if(! $line['optional'] || $line['included'])
-                            <tr><td><strong>{{ $line['description'] }}</strong><br><span class="muted">{{ $line['customer_description'] }}</span></td><td>{{ rtrim(rtrim(number_format($line['quantity_millis'] / 1000, 3, '.', ''), '0'), '.') }} {{ $line['unit_name'] }}</td>@if($presentation['show_line_details'])<td class="right">${{ number_format($line['total_cents'] / 100, 2) }}</td>@endif</tr>
+                            <tr><td><strong>{{ $line['description'] }}</strong>@if(($snapshot['document']['type'] ?? 'quote') === 'change_order')<br><span class="muted">{{ str($line['change_effect'] ?? 'add')->replace('_',' ')->headline() }}</span>@endif<br><span class="muted">{{ $line['customer_description'] }}</span></td><td>{{ rtrim(rtrim(number_format($line['quantity_millis'] / 1000, 3, '.', ''), '0'), '.') }} {{ $line['unit_name'] }}</td>@if($presentation['show_line_details'])<td class="right">${{ number_format($line['total_cents'] / 100, 2) }}</td>@endif</tr>
                         @endif
                     @endforeach
                     </tbody>
@@ -63,6 +63,7 @@
                     <p>Discount <span style="float:right">−${{ number_format(($snapshot['totals']['line_discount_cents'] + $snapshot['totals']['quote_discount_cents']) / 100, 2) }}</span></p>
                     <p>Tax <span style="float:right">${{ number_format($snapshot['totals']['tax_cents'] / 100, 2) }}</span></p>
                     <p class="total">Total <span style="float:right">${{ number_format($snapshot['totals']['total_cents'] / 100, 2) }}</span></p>
+                    @if(($snapshot['document']['type'] ?? 'quote') === 'change_order')<p>Change Order delta <span style="float:right">{{ $snapshot['totals']['change_order_delta_cents'] < 0 ? '−' : '+' }}${{ number_format(abs($snapshot['totals']['change_order_delta_cents']) / 100, 2) }}</span></p><p class="total">Revised Project total <span style="float:right">${{ number_format($snapshot['totals']['resulting_project_total_cents'] / 100, 2) }}</span></p>@endif
                 </div>
             </section>
             @break
