@@ -176,14 +176,14 @@ test.describe('Projects V1', () => {
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             const bodyPadding = await page.locator('.office-detail-form-body').evaluateAll((forms) => forms.map((form) => Number.parseFloat(getComputedStyle(form).paddingLeft)));
             expect(bodyPadding.length).toBeGreaterThan(0);
-            expect(bodyPadding.every((padding) => padding === 20)).toBeTruthy();
+            expect(bodyPadding.every((padding) => padding === 16)).toBeTruthy();
             await page.getByText('Edit Workstream', { exact: true }).first().click();
             const insetTreatment = await page.locator('form.office-detail-form-inset:visible').first().evaluate((form) => ({
                 padding: Number.parseFloat(getComputedStyle(form).paddingLeft),
                 border: Number.parseFloat(getComputedStyle(form).borderLeftWidth),
                 background: getComputedStyle(form).backgroundColor,
             }));
-            expect(insetTreatment.padding).toBeGreaterThanOrEqual(16);
+            expect(insetTreatment.padding).toBeGreaterThanOrEqual(viewport.width < 640 ? 12 : 16);
             expect(insetTreatment.border).toBe(1);
             expect(insetTreatment.background).not.toBe('rgba(0, 0, 0, 0)');
             const shortControls = await page.locator('form:visible input, form:visible select, form:visible textarea, form:visible button').evaluateAll((elements) => elements
@@ -387,7 +387,7 @@ test.describe('desktop beta', () => {
         await captureFieldTest(page, 'office-ticket-directory-1440x900.png');
 
         await page.goto('/office/service-tickets?status=open');
-        await expect(page.getByLabel('Status')).toHaveValue('open');
+        await expect(page.getByLabel('Status', { exact: true })).toHaveValue('open');
         await expect(page.getByText('No service tickets found.')).toHaveCount(0);
         await expectAccessible(page);
         await captureFieldTest(page, 'office-open-tickets-1440x900.png');
@@ -740,13 +740,14 @@ test.describe('desktop beta', () => {
         await page.setViewportSize({ width: 1440, height: 900 });
         await page.goto('/office/billing-handoffs');
         await expect(page).toHaveURL(/\/office\/invoices\?workspace=ready_to_invoice/);
+        await page.locator('summary', { hasText: 'View:' }).click();
         await expect(page.getByRole('navigation', { name: 'Billing and invoice status' }).getByRole('link', { name: /Ready to Invoice/ })).toHaveAttribute('aria-current', 'page');
         await page.getByRole('navigation', { name: 'Billing and invoice status' }).getByRole('link', { name: 'All' }).click();
         await expect(page.getByRole('heading', { name: 'Billing / Invoices' })).toBeVisible();
         await expect(page.locator('[data-office-table]')).toBeVisible();
         await expect(page.locator('[data-office-mobile-list]')).toBeHidden();
-        await page.getByLabel('Invoice number').fill('NDT-INV-2026-0001');
-        await page.getByRole('button', { name: 'Filter' }).click();
+        await page.getByLabel('Search invoice number').fill('NDT-INV-2026-0001');
+        await page.getByLabel('Search invoice number').press('Enter');
         await expect(page.getByRole('link', { name: 'NDT-INV-2026-0001' }).first()).toBeVisible();
         await expectAccessible(page);
         await page.setViewportSize({ width: 390, height: 844 });

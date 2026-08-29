@@ -2,7 +2,7 @@
     id="quick-customer-dialog"
     data-quick-customer-dialog
     aria-labelledby="quick-customer-title"
-    class="m-0 h-dvh w-dvw max-h-none max-w-none bg-canvas p-0 text-ink sm:m-auto sm:h-[92dvh] sm:w-[96vw] sm:rounded-xl sm:border sm:border-slate-300"
+    class="office-standard-dialog"
 >
     <form method="POST" action="{{ route('office.service-tickets.quick-customers.store') }}" data-quick-customer-form class="flex h-full min-h-0 flex-col">
         @csrf

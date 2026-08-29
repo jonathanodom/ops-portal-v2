@@ -241,11 +241,221 @@
     }
 
     .office-page-header {
-        @apply flex flex-col gap-4 sm:flex-row sm:items-end sm:justify-between;
+        @apply flex flex-col gap-3 border-b border-slate-200 pb-3 sm:flex-row sm:items-end sm:justify-between;
+    }
+
+    .office-primary-toolbar {
+        @apply grid items-center gap-2 border border-slate-200 bg-white p-2 lg:grid-cols-[minmax(170px,auto)_minmax(200px,1fr)_minmax(0,auto)_auto_auto_auto];
+    }
+
+    .office-primary-toolbar-heading {
+        @apply min-w-0;
+    }
+
+    .office-primary-toolbar-eyebrow {
+        @apply text-[0.68rem] font-bold uppercase tracking-[0.12em] text-brand-blue-dark;
+    }
+
+    .office-primary-toolbar-title {
+        @apply truncate text-xl font-bold tracking-tight text-slate-950;
+    }
+
+    .office-primary-toolbar-description {
+        @apply mt-0.5 line-clamp-1 text-xs text-slate-600;
+    }
+
+    .office-primary-toolbar-search {
+        @apply min-w-0;
+    }
+
+    .office-primary-toolbar-search .form-input {
+        @apply text-sm;
+    }
+
+    .office-primary-toolbar-views,
+    .office-primary-toolbar-filters,
+    .office-primary-toolbar-secondary,
+    .office-primary-toolbar-primary {
+        @apply flex items-center gap-2;
+    }
+
+    .office-primary-toolbar-views {
+        @apply min-w-0 overflow-x-auto;
+    }
+
+    .office-primary-toolbar-primary {
+        @apply lg:justify-end;
+    }
+
+    .office-primary-toolbar-chips {
+        @apply flex flex-wrap items-center gap-1.5 border-t border-slate-200 pt-2 lg:col-span-6;
+    }
+
+    .office-primary-toolbar .office-workspace-tabs {
+        @apply mt-0 min-h-11 border border-slate-300 bg-slate-50 p-0;
+    }
+
+    .office-primary-toolbar .office-workspace-tab {
+        @apply min-h-11 border-0 px-3;
+    }
+
+    .office-primary-toolbar .office-workspace-tab-active {
+        @apply bg-white text-brand-blue-dark shadow-sm;
+    }
+
+    .office-filter-disclosure {
+        @apply relative;
+    }
+
+    .office-filter-disclosure summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .office-filter-count {
+        @apply ml-2 inline-flex min-h-5 min-w-5 items-center justify-center rounded-full bg-brand-blue-dark px-1.5 text-[0.68rem] font-bold text-white;
+    }
+
+    .office-filter-panel {
+        @apply absolute right-0 top-[calc(100%+0.25rem)] z-30 w-[min(44rem,calc(100vw-1rem))] border border-slate-300 bg-white p-3 shadow-none;
+    }
+
+    .office-filter-chip {
+        @apply inline-flex min-h-9 items-center gap-2 rounded-full border border-blue-200 bg-blue-50 px-3 text-xs font-bold text-brand-blue-dark hover:border-brand-blue hover:bg-blue-100;
+    }
+
+    .office-view-switcher {
+        @apply inline-flex min-h-11 items-center border border-slate-300 bg-slate-50 p-0;
+    }
+
+    .office-view-switcher a {
+        @apply inline-flex min-h-10 items-center px-3 text-sm font-bold text-slate-600 hover:text-slate-950;
+    }
+
+    .office-view-switcher a[aria-current="page"] {
+        @apply bg-white text-brand-blue-dark shadow-sm;
+    }
+
+    .office-view-menu {
+        @apply relative;
+    }
+
+    .office-view-menu summary::-webkit-details-marker {
+        display: none;
+    }
+
+    .office-view-menu-panel {
+        @apply absolute left-0 top-[calc(100%+0.25rem)] z-30 grid min-w-56 border border-slate-300 bg-white p-0 shadow-none;
+    }
+
+    .office-view-menu-panel a {
+        @apply inline-flex min-h-11 items-center px-3 text-sm font-bold text-slate-700 hover:bg-blue-50 hover:text-brand-blue-dark;
+    }
+
+    .office-view-menu-panel a[aria-current="page"] {
+        @apply bg-blue-50 text-brand-blue-dark;
+    }
+
+    .office-state-panel {
+        @apply border border-slate-200 bg-white px-4 py-6 text-center;
+    }
+
+    .office-state-panel-title {
+        @apply text-base font-bold text-slate-950;
+    }
+
+    .office-state-panel-message {
+        @apply mx-auto mt-1 max-w-xl text-sm text-slate-600;
+    }
+
+    .office-state-panel-actions {
+        @apply mt-4 flex flex-wrap justify-center gap-2;
+    }
+
+    .office-state-panel-error,
+    .office-state-panel-permission {
+        @apply border-red-200 bg-red-50;
+    }
+
+    .office-state-panel-confirmation {
+        @apply border-orange-300 bg-orange-50;
+    }
+
+    .office-state-panel-loading {
+        @apply animate-pulse bg-slate-50;
+    }
+
+    .office-alert {
+        @apply mb-3 border px-3 py-2 text-sm font-semibold;
+    }
+
+    .office-alert-success {
+        @apply border-emerald-300 bg-emerald-50 text-emerald-900;
+    }
+
+    .office-alert-warning {
+        @apply border-amber-300 bg-amber-50 text-amber-950;
+    }
+
+    .office-alert-error {
+        @apply border-red-300 bg-red-50 text-red-900;
+    }
+
+    @media (min-width: 1024px) and (max-width: 1199px) {
+        .office-primary-toolbar {
+            grid-template-columns: minmax(170px, auto) minmax(200px, 1fr) auto auto;
+        }
+
+        .office-primary-toolbar-heading { grid-column: 1; grid-row: 1; }
+        .office-primary-toolbar-search { grid-column: 2; grid-row: 1; }
+        .office-primary-toolbar-filters { grid-column: 3; grid-row: 1; }
+        .office-primary-toolbar-primary { grid-column: 4; grid-row: 1; }
+        .office-primary-toolbar-views { grid-column: 1 / span 3; grid-row: 2; }
+        .office-primary-toolbar-secondary { grid-column: 4; grid-row: 2; justify-content: flex-end; }
+        .office-primary-toolbar-chips { grid-column: 1 / -1; }
+    }
+
+    @media (max-width: 1023px) {
+        .office-primary-toolbar {
+            @apply grid-cols-[minmax(0,1fr)_auto];
+        }
+
+        .office-primary-toolbar-search,
+        .office-primary-toolbar-chips {
+            @apply col-span-2;
+        }
+
+        .office-primary-toolbar-primary {
+            @apply row-start-1 justify-end;
+        }
+    }
+
+    @media (max-width: 639px) {
+        .office-primary-toolbar {
+            @apply grid-cols-1;
+        }
+
+        .office-primary-toolbar-heading,
+        .office-primary-toolbar-search,
+        .office-primary-toolbar-views,
+        .office-primary-toolbar-filters,
+        .office-primary-toolbar-secondary,
+        .office-primary-toolbar-primary,
+        .office-primary-toolbar-chips {
+            @apply col-span-1 row-auto;
+        }
+
+        .office-primary-toolbar-primary .button-primary,
+        .office-primary-toolbar-primary .button-secondary {
+            @apply w-full;
+        }
+
+        .office-primary-toolbar-views {
+            @apply overflow-x-auto;
+        }
     }
 
     .office-workspace-tabs {
-        @apply mt-5 flex min-h-11 gap-1 overflow-x-auto border-b border-slate-300;
+        @apply mt-3 flex min-h-11 gap-0 overflow-x-auto border-b border-slate-300;
     }
 
     .office-workspace-tab {
@@ -257,11 +467,11 @@
     }
 
     .office-filter-toolbar {
-        @apply mt-5 grid gap-3 rounded-lg border border-slate-200 bg-white p-3 lg:items-end;
+        @apply mt-3 grid gap-2 border border-slate-200 bg-white p-2 lg:items-end;
     }
 
     .office-table-wrap {
-        @apply mt-5 hidden overflow-hidden rounded-lg border border-slate-200 bg-white lg:block;
+        @apply mt-3 hidden overflow-hidden border border-slate-200 bg-white lg:block;
     }
 
     .office-data-table {
@@ -273,11 +483,11 @@
     }
 
     .office-data-table th {
-        @apply border-b border-slate-200 px-4 py-3 text-xs font-bold uppercase tracking-[0.08em] text-slate-600;
+        @apply border-b border-slate-200 px-3 py-2 text-xs font-bold uppercase tracking-[0.08em] text-slate-600;
     }
 
     .office-data-table td {
-        @apply border-b border-slate-200 px-4 py-3 align-middle text-sm text-slate-700;
+        @apply border-b border-slate-200 px-3 py-2.5 align-middle text-sm text-slate-700;
     }
 
     .office-data-table tbody tr:last-child td {
@@ -301,11 +511,11 @@
     }
 
     .office-mobile-list {
-        @apply mt-5 space-y-3 lg:hidden;
+        @apply mt-3 space-y-1 lg:hidden;
     }
 
     .office-mobile-card {
-        @apply block min-h-11 rounded-lg border border-slate-200 bg-white p-4 transition-colors hover:border-slate-300 hover:bg-slate-50;
+        @apply block min-h-11 border border-slate-200 bg-white p-3 transition-colors hover:border-slate-300 hover:bg-slate-50;
     }
 
     .office-mobile-primary-nav {
@@ -317,7 +527,7 @@
     }
 
     .office-record-header {
-        @apply scroll-mt-6;
+        @apply scroll-mt-6 border-b border-slate-200 pb-3;
     }
 
     .office-record-back {
@@ -337,24 +547,89 @@
         @apply inline-flex min-h-11 shrink-0 items-center border-b-3 border-transparent px-4 text-sm font-bold text-slate-600 hover:border-slate-300 hover:text-slate-950;
     }
 
+    .office-form-shell {
+        @apply mt-3 border border-slate-200 bg-white;
+    }
+
+    .office-shell [data-office-width="form"] > form.surface {
+        @apply mt-3 p-4;
+    }
+
+    .office-form-section {
+        @apply border-b border-slate-200 last:border-b-0;
+    }
+
+    .office-form-section-header {
+        @apply border-b border-slate-200 bg-slate-50 px-4 py-3;
+    }
+
+    .office-form-section-title {
+        @apply text-base font-bold text-slate-950;
+    }
+
+    .office-form-section-description {
+        @apply mt-1 text-sm text-slate-600;
+    }
+
+    .office-form-section-body {
+        @apply p-4;
+    }
+
+    .office-form-actions {
+        @apply sticky bottom-0 z-20 mt-3 flex flex-col gap-2 border border-slate-300 bg-white p-2 sm:flex-row sm:items-center sm:justify-between;
+    }
+
+    .office-form-actions-message {
+        @apply text-xs font-semibold text-slate-500;
+    }
+
+    .office-form-actions-controls {
+        @apply flex flex-col-reverse gap-2 sm:ml-auto sm:flex-row sm:flex-wrap sm:justify-end;
+    }
+
+    .office-standard-dialog {
+        @apply m-0 h-dvh max-h-none w-dvw max-w-none border-0 bg-white p-0 text-ink backdrop:bg-slate-950/55 sm:m-auto sm:h-[92dvh] sm:w-[96vw] sm:border sm:border-slate-300;
+    }
+
+    .office-standard-dialog-panel {
+        @apply grid h-full grid-rows-[auto_minmax(0,1fr)_auto];
+    }
+
+    .office-standard-dialog-header,
+    .office-standard-dialog-footer {
+        @apply flex items-center justify-between gap-3 border-slate-200 bg-white px-3 py-2 sm:px-4;
+    }
+
+    .office-standard-dialog-header {
+        @apply border-b;
+    }
+
+    .office-standard-dialog-footer {
+        @apply border-t;
+    }
+
+    .office-standard-dialog-body {
+        @apply overflow-y-auto p-3 sm:p-4;
+    }
+
     .office-detail-grid {
-        @apply mt-6 grid gap-6 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)];
+        @apply mt-4 grid gap-4 xl:grid-cols-[minmax(0,1fr)_minmax(280px,360px)];
     }
 
     .office-detail-main {
-        @apply min-w-0 space-y-6;
+        @apply min-w-0 space-y-4;
     }
 
     .office-detail-rail {
-        @apply min-w-0 space-y-4 xl:sticky xl:top-6 xl:self-start;
+        @apply min-w-0 space-y-3 xl:sticky xl:top-4 xl:self-start;
     }
 
     .office-detail-section {
-        @apply scroll-mt-6 overflow-hidden rounded-lg border border-slate-200 bg-white;
+        @apply scroll-mt-4 overflow-hidden border border-slate-200 bg-white;
     }
 
     .office-detail-section-header {
-        @apply flex flex-col gap-3 border-b border-slate-200 px-5 py-4 sm:flex-row sm:items-center sm:justify-between;
+        @apply flex flex-col gap-2 border-b border-slate-200 px-4 py-3 sm:flex-row sm:items-center sm:justify-between;
     }
 
     .office-detail-section-title {
@@ -366,7 +641,7 @@
     }
 
     .office-detail-row {
-        @apply min-h-16 px-5 py-4 transition-colors hover:bg-blue-50/45 focus-within:bg-blue-50/60;
+        @apply min-h-14 px-4 py-3 transition-colors hover:bg-blue-50/45 focus-within:bg-blue-50/60;
     }
 
     .office-detail-empty {
@@ -374,7 +649,7 @@
     }
 
     .office-detail-form-body {
-        @apply px-5 py-5;
+        @apply px-4 py-4;
     }
 
     .office-detail-form-separated {
@@ -382,7 +657,7 @@
     }
 
     .office-detail-form-inset {
-        @apply mt-3 rounded-lg border border-slate-200 bg-slate-50 p-4 sm:p-5;
+        @apply mt-2 border border-slate-200 bg-slate-50 p-3 sm:p-4;
     }
 
     .office-detail-form-grid {
@@ -402,7 +677,7 @@
     }
 
     .invoice-command-bar {
-        @apply sticky top-0 z-30 -mx-4 flex flex-col gap-3 border-y border-slate-200 bg-white px-4 py-3 shadow-sm sm:-mx-6 sm:px-6 lg:-mx-8 lg:grid lg:grid-cols-[minmax(260px,1fr)_auto_minmax(320px,auto)] lg:items-center lg:px-8;
+        @apply sticky top-0 z-30 -mx-2 flex flex-col gap-3 border-y border-slate-200 bg-white px-2 py-3 sm:-mx-3 sm:px-3 lg:-mx-4 lg:grid lg:grid-cols-[minmax(260px,1fr)_auto_minmax(320px,auto)] lg:items-center lg:px-4;
     }
 
     .invoice-command-bar-identity {
@@ -430,7 +705,7 @@
     }
 
     .invoice-billing-summary {
-        @apply mt-5 grid gap-5 rounded-lg border border-slate-200 bg-white p-5 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_minmax(520px,1.7fr)_auto] xl:items-center;
+        @apply mt-3 grid gap-3 border border-slate-200 bg-white p-3 sm:grid-cols-2 xl:grid-cols-[minmax(280px,1fr)_minmax(520px,1.7fr)_auto] xl:items-center;
     }
 
     .invoice-billing-meta {
@@ -446,7 +721,7 @@
     }
 
     .invoice-workspace {
-        @apply mt-6 space-y-6;
+        @apply mt-4 space-y-4;
     }
 
     .invoice-lower-section {
@@ -705,4 +980,32 @@ body:has(dialog[data-payment-overlay][open]) {
     .print-section:first-of-type { break-before: auto; }
     .print-document-footer { break-inside: avoid; }
     a { color: inherit !important; text-decoration: none !important; }
+}
+
+/* Office modernization: dense, flat operational surfaces. Semantic pills stay rounded. */
+@media screen {
+    .office-shell .surface,
+    .office-shell .rounded-xl,
+    .office-shell .rounded-lg,
+    .office-shell .rounded-md,
+    .office-shell .button-primary,
+    .office-shell .button-secondary,
+    .office-shell .button-danger,
+    .office-shell .form-input,
+    .office-shell .form-textarea {
+        border-radius: 0;
+    }
+
+    .office-shell .surface,
+    .office-shell .office-primary-toolbar,
+    .office-shell .office-filter-panel,
+    .office-shell .office-view-menu-panel,
+    .office-shell .office-table-wrap,
+    .office-shell .office-mobile-card,
+    .office-shell .office-detail-section,
+    .office-shell .office-detail-form-inset,
+    .office-shell .invoice-billing-summary,
+    .office-shell .office-form-actions {
+        box-shadow: none;
+    }
 }

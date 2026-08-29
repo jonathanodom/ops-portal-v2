@@ -8,11 +8,11 @@
         <div class="flex flex-wrap items-center gap-1">
             @if ($paginator->onFirstPage())
                 <span role="link" aria-disabled="true" class="inline-flex min-h-11 items-center rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-600">
-                    {{ __('pagination.previous') }}
+                    ← Previous
                 </span>
             @else
                 <a href="{{ $paginator->previousPageUrl() }}" rel="prev" class="button-secondary px-3">
-                    {{ __('pagination.previous') }}
+                    ← Previous
                 </a>
             @endif
 
@@ -32,11 +32,11 @@
 
             @if ($paginator->hasMorePages())
                 <a href="{{ $paginator->nextPageUrl() }}" rel="next" class="button-secondary px-3">
-                    {{ __('pagination.next') }}
+                    Next →
                 </a>
             @else
                 <span role="link" aria-disabled="true" class="inline-flex min-h-11 items-center rounded-lg border border-slate-300 bg-slate-100 px-3 text-sm font-semibold text-slate-600">
-                    {{ __('pagination.next') }}
+                    Next →
                 </span>
             @endif
         </div>

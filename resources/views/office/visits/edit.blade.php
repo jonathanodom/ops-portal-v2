@@ -1,4 +1,8 @@
-<x-layouts.office title="Schedule Visit">
-    <a href="{{ route('office.service-tickets.show', $visit->serviceTicket) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">← {{ $visit->serviceTicket->ticket_number }}</a><h1 class="mt-2 text-3xl font-bold">Schedule {{ $visit->displayNumber() }}</h1>
-    <form method="POST" action="{{ route('office.visits.update', $visit) }}" class="surface mt-6 p-5 sm:p-6">@csrf @method('PUT') @include('office.visits._form')<div class="mt-6 flex gap-3"><button class="button-primary">Save schedule</button><a class="button-secondary" href="{{ route('office.service-tickets.show', $visit->serviceTicket) }}">Cancel</a></div></form>
+<x-layouts.office title="Schedule Visit" width="form">
+    <x-office.record-header :title="'Schedule '.$visit->displayNumber()" :back-href="route('office.service-tickets.show', $visit->serviceTicket)" :back-label="$visit->serviceTicket->ticket_number" :description="$visit->serviceTicket->title" />
+    <x-form-errors />
+    <form method="POST" action="{{ route('office.visits.update', $visit) }}" class="office-form-shell">
+        @csrf @method('PUT') <div class="p-4">@include('office.visits._form')</div>
+        <x-office.form-actions message="Conflict warnings are rechecked when the schedule is saved."><a class="button-secondary" href="{{ route('office.service-tickets.show', $visit->serviceTicket) }}">Cancel</a><button class="button-primary">Save schedule</button></x-office.form-actions>
+    </form>
 </x-layouts.office>

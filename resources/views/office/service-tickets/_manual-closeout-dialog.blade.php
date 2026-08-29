@@ -4,7 +4,7 @@
     $manualParts = $closeout->parts->whereNull('removed_at');
     $manualRequested = request()->integer('manual_closeout_visit') === $visit->id;
 @endphp
-<dialog id="manual-closeout-visit-{{ $visit->id }}" data-manual-closeout-dialog data-visit-id="{{ $visit->id }}" aria-labelledby="manual-closeout-title-{{ $visit->id }}" class="m-0 h-dvh w-dvw max-h-none max-w-none bg-canvas p-0 text-ink sm:m-auto sm:h-[92dvh] sm:w-[96vw] sm:rounded-xl sm:border sm:border-slate-300">
+<dialog id="manual-closeout-visit-{{ $visit->id }}" data-manual-closeout-dialog data-visit-id="{{ $visit->id }}" aria-labelledby="manual-closeout-title-{{ $visit->id }}" class="office-standard-dialog sm:h-[92dvh] sm:w-[96vw]">
     <div class="flex h-full min-h-0 flex-col">
         <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-4 sm:p-5">
             <div><p class="text-sm font-bold text-brand-blue">{{ $ticket->ticket_number }} · {{ $visit->displayLabel() }}</p><h2 id="manual-closeout-title-{{ $visit->id }}" class="mt-1 text-xl font-bold text-slate-950">Administrative closeout</h2><p class="mt-1 text-sm text-slate-600">Resolved outcome · {{ ucfirst(str_replace('_', ' ', $visit->status)) }}</p></div>

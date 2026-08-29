@@ -1,5 +1,5 @@
 <x-layouts.office title="Labor cost defaults" width="detail">
-    <x-office.page-header title="Labor cost defaults" description="Approved estimating defaults for Catalog Services. These values are not payroll or compensation records." eyebrow="Catalog" />
+    <x-office.primary-toolbar title="Labor cost defaults" description="Approved estimating defaults for Catalog Services. These values are not payroll or compensation records." eyebrow="Catalog" />
     <x-office.catalog-tabs />
     <x-form-errors />
     <div class="grid gap-6 xl:grid-cols-[minmax(0,1fr)_420px]">
