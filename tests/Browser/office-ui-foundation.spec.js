@@ -156,3 +156,66 @@ test('checkpoint three forms and record details share compact action contracts',
         }
     }
 });
+
+test('checkpoint four hardens representative Office workspaces across tablet and desktop widths', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'One project controls the hardening viewport matrix.');
+    test.setTimeout(300_000);
+    await login(page);
+
+    const routes = [
+        ['/office/customers', true],
+        ['/office/projects', true],
+        ['/office/opportunities', true],
+        ['/office/service-tickets', true],
+        ['/office/dispatch', true],
+        ['/office/closeout-reviews', true],
+        ['/office/invoices', true],
+        ['/office/catalog/services', true],
+        ['/office/settings/organization', false],
+        ['/office/operations/health', false],
+    ];
+    const metrics = [];
+
+    for (const [code, width, height] of viewports.filter(([candidate]) => ['T', 'L', 'W'].includes(candidate))) {
+        await page.setViewportSize({ width, height });
+
+        for (const [path, usesPrimaryToolbar] of routes) {
+            const response = await page.goto(path);
+            expect(response?.ok(), `${path} should render at ${code}`).toBeTruthy();
+            await expect(page.locator('main')).toBeVisible();
+            await expect(page.locator('h1')).toHaveCount(1);
+            expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+
+            const payloadBytes = (await response.body()).byteLength;
+            expect(payloadBytes, `${path} HTML payload should remain bounded`).toBeLessThan(2_500_000);
+            metrics.push({ code, path, payloadBytes });
+
+            if (usesPrimaryToolbar) {
+                const toolbar = page.locator('.office-primary-toolbar');
+                await expect(toolbar).toBeVisible();
+                if (width >= 1280) {
+                    const box = await toolbar.boundingBox();
+                    expect(box?.height, `${path} toolbar should remain compact at ${code}`).toBeLessThanOrEqual(88);
+                }
+            }
+
+            if (['/office/customers', '/office/service-tickets', '/office/invoices', '/office/settings/organization'].includes(path)) {
+                await expectAccessible(page);
+            }
+        }
+    }
+
+    await page.setViewportSize({ width: 390, height: 844 });
+    await page.goto('/office/customers');
+    const firstAction = page.locator('.office-primary-toolbar a, .office-primary-toolbar button, .office-primary-toolbar summary').first();
+    await firstAction.focus();
+    const focusStyle = await firstAction.evaluate((element) => {
+        const style = getComputedStyle(element);
+        return { boxShadow: style.boxShadow, outlineStyle: style.outlineStyle };
+    });
+    expect(focusStyle.boxShadow !== 'none' || focusStyle.outlineStyle !== 'none').toBeTruthy();
+    expect(await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth)).toBeTruthy();
+
+    const largest = metrics.reduce((current, metric) => metric.payloadBytes > current.payloadBytes ? metric : current, metrics[0]);
+    console.log(`Office UI hardening: ${metrics.length} route/viewport checks; largest HTML payload ${largest.payloadBytes} bytes at ${largest.path} (${largest.code}).`);
+});

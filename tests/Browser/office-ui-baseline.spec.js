@@ -1,7 +1,8 @@
 import { test, expect } from '@playwright/test';
 
 const password = process.env.BETA_DEMO_PASSWORD;
-const outputDir = process.env.OFFICE_UI_BASELINE_DIR;
+const outputDir = process.env.OFFICE_UI_FINAL_DIR || process.env.OFFICE_UI_BASELINE_DIR;
+const captureStage = process.env.OFFICE_UI_FINAL_DIR ? 'final' : 'baseline';
 
 const viewports = [
     ['P', 390, 844],
@@ -66,12 +67,12 @@ async function capture(page, id, name, viewport) {
     expect(response?.ok(), `${id} should render successfully`).toBeTruthy();
     await expect(page.locator('main')).toBeVisible();
     await page.screenshot({
-        path: `${outputDir}/${id}-${name}-index-default-${code}-baseline.png`,
+        path: `${outputDir}/${id}-${name}-index-default-${code}-${captureStage}.png`,
         fullPage: true,
     });
 }
 
-test.skip(!password || !outputDir, 'BETA_DEMO_PASSWORD and OFFICE_UI_BASELINE_DIR are required.');
+test.skip(!password || !outputDir, 'BETA_DEMO_PASSWORD and an Office UI capture directory are required.');
 
 test('capture reachable Office workspace baselines', async ({ page }, testInfo) => {
     test.skip(testInfo.project.name !== 'desktop', 'One project controls the exact viewport matrix.');
@@ -112,7 +113,7 @@ test('capture reachable Office major-detail baselines', async ({ page }, testInf
             expect(response?.ok(), `${id} should render successfully`).toBeTruthy();
             await expect(page.locator('main')).toBeVisible();
             await page.screenshot({
-                path: `${outputDir}/${id}-${name}-detail-default-${code}-baseline.png`,
+                path: `${outputDir}/${id}-${name}-detail-default-${code}-${captureStage}.png`,
                 fullPage: true,
             });
         }
