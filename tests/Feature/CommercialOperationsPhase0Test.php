@@ -39,7 +39,7 @@ class CommercialOperationsPhase0Test extends TestCase
         $this->assertSame(5, Capability::query()->where('key', 'like', 'quotes.%')->count());
         $this->assertSame(2, Capability::query()->where('key', 'like', 'proposal.%')->count());
         $this->assertSame(['commercial.convert'], Capability::query()->where('key', 'like', 'commercial.%')->pluck('key')->all());
-        $this->assertFalse(Capability::query()->where('key', 'like', 'change_orders.%')->exists());
+        $this->assertEqualsCanonicalizing(['change_orders.manage', 'change_orders.approve_negative'], Capability::query()->where('key', 'like', 'change_orders.%')->pluck('key')->all());
     }
 
     public function test_private_storage_is_isolated_from_retained_files_during_tests(): void

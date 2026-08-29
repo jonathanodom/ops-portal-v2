@@ -53,29 +53,32 @@ final class ProposalPublicationController extends Controller
 
     public function show(Request $request, ProposalPublication $publication): View
     {
-        $publication = $this->publication($request, $publication)->load(['revision.document.opportunity.customer', 'template', 'recipients', 'shareLinks', 'deliveries.recipient']);
+        $publication = $this->publication($request, $publication)->load(['revision.document.opportunity.customer', 'revision.document.project', 'template', 'recipients', 'shareLinks', 'deliveries.recipient']);
         Gate::authorize('view', $publication->revision->document);
         $canPublish = Gate::allows('publish', $publication->revision->document);
         $canEngagement = Gate::allows('viewEngagement', $publication->revision->document);
         $canExtend = $canPublish && $request->attributes->get('membership')->hasCapability('opportunities.admin');
-        $canConvert = $request->attributes->get('membership')->hasCapability('commercial.convert') && $request->attributes->get('membership')->hasCapability('projects.manage');
+        $canConvert = $publication->revision->document->document_type === 'quote' && $request->attributes->get('membership')->hasCapability('commercial.convert') && $request->attributes->get('membership')->hasCapability('projects.manage');
+        $canApplyChangeOrder = $publication->revision->document->document_type === 'change_order' && $request->attributes->get('membership')->hasCapability('change_orders.manage') && $request->attributes->get('membership')->hasCapability('projects.admin');
         if ($canEngagement) {
             $publication->load(['engagementEvents.recipient', 'engagementEvents.shareLink', 'comments.staffUser', 'acceptance.milestones.invoice', 'acceptance.projectScope.project']);
         }
-        $opportunity = $publication->revision->document->opportunity;
+        $auditSubject = $publication->revision->document->auditSubject();
         $audits = AuditEvent::query()
             ->where('organization_id', $publication->organization_id)
-            ->where('subject_type', $opportunity->getMorphClass())
-            ->where('subject_id', $opportunity->id)
+            ->where('subject_type', $auditSubject->getMorphClass())
+            ->where('subject_id', $auditSubject->getKey())
             ->where(function ($query): void {
-                $query->where('event_type', 'like', 'quote.%')->orWhere('event_type', 'like', 'proposal.%');
+                $query->where('event_type', 'like', 'quote.%')
+                    ->orWhere('event_type', 'like', 'proposal.%')
+                    ->orWhere('event_type', 'like', 'change_order.%');
             })
             ->with('actor')
             ->latest('occurred_at')
             ->limit(50)
             ->get();
 
-        return view('office.proposal-publications.show', compact('publication', 'canPublish', 'canEngagement', 'canExtend', 'canConvert', 'audits'));
+        return view('office.proposal-publications.show', compact('publication', 'canPublish', 'canEngagement', 'canExtend', 'canConvert', 'canApplyChangeOrder', 'audits'));
     }
 
     public function pdf(Request $request, ProposalPublication $publication): StreamedResponse
@@ -201,7 +204,7 @@ final class ProposalPublicationController extends Controller
 
     private function quote(Request $request, CommercialDocument $quote, CommercialRevision $revision): array
     {
-        $quote = CommercialDocument::query()->forOrganization($request->attributes->get('organization')->id)->where('document_type', 'quote')->findOrFail($quote->id);
+        $quote = CommercialDocument::query()->forOrganization($request->attributes->get('organization')->id)->whereIn('document_type', ['quote', 'change_order'])->findOrFail($quote->id);
 
         return [$quote, $quote->revisions()->findOrFail($revision->id)];
     }

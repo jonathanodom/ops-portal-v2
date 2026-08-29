@@ -42,6 +42,9 @@
                 <section class="surface p-5 sm:p-7" aria-labelledby="scope-heading"><h2 id="scope-heading" class="text-2xl font-bold">Scope of work</h2>@foreach($snapshot['sections'] as $section)<article id="section-{{ $section['id'] }}" class="mt-5 border-t border-slate-200 pt-5 first:border-0 first:pt-0"><h3 class="text-lg font-bold">{{ $section['heading'] }}</h3><p class="mt-2 whitespace-pre-line text-slate-700">{{ $section['body'] }}</p></article>@endforeach</section>
             @endif
 
+            @php($isChangeOrder = ($snapshot['document']['type'] ?? 'quote') === 'change_order')
+            @php($computedDelta = $isChangeOrder ? collect($totals['lines'])->where('included', true)->sum(fn($line) => in_array($line['change_effect'] ?? 'add', ['remove','substitute_remove']) ? -$line['total_cents'] : $line['total_cents']) : 0)
+            @php($contractBefore = $isChangeOrder ? (($snapshot['totals']['resulting_project_total_cents'] ?? 0) - ($snapshot['totals']['change_order_delta_cents'] ?? 0)) : 0)
             <section class="surface overflow-hidden" aria-labelledby="pricing-heading">
                 <header class="border-b border-slate-200 p-5 sm:p-7"><h2 id="pricing-heading" class="text-2xl font-bold">Scope and pricing</h2><p class="mt-1 text-sm text-slate-600">Optional selections update the authoritative Proposal total.</p></header>
                 <form id="proposal-options" method="POST" action="{{ route('proposals.options', $token) }}">@csrf
@@ -49,6 +52,7 @@
                         @foreach($snapshot['lines'] as $line)
                             @php($computed = $computedLines->get($line['id']))
                             <article id="line-{{ $line['id'] }}" class="p-5 sm:p-6">
+                                @if($isChangeOrder)<span class="mb-2 inline-flex rounded-full px-2 py-1 text-xs font-bold {{ in_array($line['change_effect'] ?? 'add',['remove','substitute_remove']) ? 'bg-red-100 text-red-800' : 'bg-emerald-100 text-emerald-800' }}">{{ str($line['change_effect'] ?? 'add')->replace('_',' ')->headline() }}</span>@endif
                                 <div class="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                                     <div class="min-w-0"><h3 class="font-bold">{{ $line['description'] }}</h3>@if($line['customer_description'])<p class="mt-1 text-sm text-slate-600">{{ $line['customer_description'] }}</p>@endif<p class="mt-1 text-xs text-slate-500">{{ rtrim(rtrim(number_format($line['quantity_millis'] / 1000, 3, '.', ''), '0'), '.') }} {{ $line['unit_name'] }}@if($line['location']) · {{ $line['location'] }}@endif</p></div>
                                     @if($snapshot['publication']['show_line_details'])<strong class="text-lg">${{ number_format(($computed['total_cents'] ?? 0) / 100, 2) }}</strong>@endif
@@ -65,6 +69,7 @@
                     <div class="flex justify-between py-1"><dt>Discount</dt><dd id="proposal-discount">−${{ number_format($totals['discount_cents'] / 100, 2) }}</dd></div>
                     <div class="flex justify-between py-1"><dt>Tax</dt><dd id="proposal-tax">${{ number_format($totals['tax_cents'] / 100, 2) }}</dd></div>
                     <div class="mt-2 flex justify-between border-t border-slate-300 pt-3 text-xl font-bold"><dt>Total</dt><dd id="proposal-total">${{ number_format($totals['total_cents'] / 100, 2) }}</dd></div>
+                    @if($isChangeOrder)<div class="mt-4 space-y-2 border-t border-slate-300 pt-3"><div class="flex justify-between"><dt>Change Order delta</dt><dd id="change-order-delta" class="font-bold">{{ $computedDelta < 0 ? '−' : '+' }}${{ number_format(abs($computedDelta) / 100, 2) }}</dd></div><div class="flex justify-between"><dt>Current Project total</dt><dd>${{ number_format($contractBefore / 100, 2) }}</dd></div><div class="flex justify-between text-lg font-bold"><dt>Revised Project total</dt><dd id="resulting-project-total">${{ number_format(max(0, $contractBefore + $computedDelta) / 100, 2) }}</dd></div></div>@endif
                 </dl>
             </section>
 
@@ -108,6 +113,8 @@
             document.getElementById('proposal-discount').textContent = '−' + totals.discount;
             document.getElementById('proposal-tax').textContent = totals.tax;
             document.getElementById('proposal-total').textContent = totals.total;
+            if (document.getElementById('change-order-delta')) document.getElementById('change-order-delta').textContent = totals.change_order_delta;
+            if (document.getElementById('resulting-project-total')) document.getElementById('resulting-project-total').textContent = totals.resulting_project_total;
             status.textContent = 'Selections saved.';
         } catch (_) { status.textContent = navigator.onLine ? 'Selections were not saved. Retry.' : 'Offline. Reconnect and retry.'; }
     });

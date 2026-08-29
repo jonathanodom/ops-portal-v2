@@ -8,7 +8,7 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 use Illuminate\Database\Eloquent\Relations\HasOne;
 
-#[Fillable(['organization_id', 'proposal_publication_id', 'commercial_revision_id', 'proposal_recipient_id', 'proposal_share_link_id', 'publication_hash', 'revision_content_hash', 'accepted_snapshot', 'accepted_snapshot_hash', 'subtotal_cents', 'discount_cents', 'tax_cents', 'total_cents', 'signer_name', 'signer_email', 'signer_title', 'consent_statement', 'consent_version', 'signature_disk', 'signature_key', 'signature_mime_type', 'signature_byte_size', 'signature_width', 'signature_height', 'signature_sha256', 'signed_at', 'encrypted_ip', 'ip_hash', 'user_agent', 'idempotency_token'])]
+#[Fillable(['organization_id', 'proposal_publication_id', 'commercial_revision_id', 'proposal_recipient_id', 'proposal_share_link_id', 'publication_hash', 'revision_content_hash', 'accepted_snapshot', 'accepted_snapshot_hash', 'subtotal_cents', 'discount_cents', 'tax_cents', 'total_cents', 'change_order_delta_cents', 'resulting_project_total_cents', 'signer_name', 'signer_email', 'signer_title', 'consent_statement', 'consent_version', 'signature_disk', 'signature_key', 'signature_mime_type', 'signature_byte_size', 'signature_width', 'signature_height', 'signature_sha256', 'signed_at', 'encrypted_ip', 'ip_hash', 'user_agent', 'idempotency_token'])]
 class ProposalAcceptance extends Model
 {
     protected function casts(): array

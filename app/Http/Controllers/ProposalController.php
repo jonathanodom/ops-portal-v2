@@ -53,7 +53,11 @@ final class ProposalController extends Controller
             return back()->with('status', 'Proposal options updated.');
         }
 
-        return response()->json(['subtotal' => $this->money($totals['subtotal_cents']), 'discount' => $this->money($totals['discount_cents']), 'tax' => $this->money($totals['tax_cents']), 'total' => $this->money($totals['total_cents'])], 200, $this->securityHeaders());
+        $isChangeOrder = ($access->publication->snapshot['document']['type'] ?? 'quote') === 'change_order';
+        $delta = $isChangeOrder ? (int) collect($totals['lines'])->where('included', true)->sum(fn (array $line): int => in_array($line['change_effect'] ?? 'add', ['remove', 'substitute_remove'], true) ? -(int) $line['total_cents'] : (int) $line['total_cents']) : 0;
+        $contractBefore = $isChangeOrder ? (int) (($access->publication->snapshot['totals']['resulting_project_total_cents'] ?? 0) - ($access->publication->snapshot['totals']['change_order_delta_cents'] ?? 0)) : 0;
+
+        return response()->json(['subtotal' => $this->money($totals['subtotal_cents']), 'discount' => $this->money($totals['discount_cents']), 'tax' => $this->money($totals['tax_cents']), 'total' => $this->money($totals['total_cents']), 'change_order_delta' => ($delta < 0 ? '−' : '+').$this->money(abs($delta)), 'resulting_project_total' => $this->money(max(0, $contractBefore + $delta))], 200, $this->securityHeaders());
     }
 
     public function comment(Request $request, string $token, ProposalAccessResolver $resolver, ProposalEngagementWorkflow $engagement): RedirectResponse

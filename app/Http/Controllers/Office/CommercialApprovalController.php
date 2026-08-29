@@ -38,6 +38,10 @@ final class CommercialApprovalController extends Controller
         $organization = $request->attributes->get('organization');
         $approval = CommercialRevisionApproval::query()->where('organization_id', $organization->id)->with('revision.document')->findOrFail($approval->id);
         Gate::authorize('approve', $approval->revision->document);
+        if ($approval->revision->document->document_type === 'change_order'
+            && collect($approval->trigger_snapshot)->contains(fn (array $trigger): bool => ($trigger['kind'] ?? null) === 'negative_change_order')) {
+            abort_unless($request->attributes->get('membership')->hasCapability('change_orders.approve_negative'), 403);
+        }
         $data = $request->validate(['decision' => ['required', Rule::in(['approved', 'rejected'])], 'reason' => ['required', 'string', 'max:2000']]);
         $workflow->decide($approval, $request->user(), $data['decision'], $data['reason']);
 
@@ -47,7 +51,7 @@ final class CommercialApprovalController extends Controller
     private function scoped(Request $request, CommercialDocument $quote, CommercialRevision $revision): array
     {
         $organization = $request->attributes->get('organization');
-        $quote = CommercialDocument::query()->forOrganization($organization->id)->where('document_type', 'quote')->findOrFail($quote->id);
+        $quote = CommercialDocument::query()->forOrganization($organization->id)->whereIn('document_type', ['quote', 'change_order'])->findOrFail($quote->id);
 
         return [$quote, $quote->revisions()->findOrFail($revision->id)];
     }

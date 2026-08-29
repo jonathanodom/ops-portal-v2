@@ -22,6 +22,7 @@ use App\Http\Controllers\Office\CatalogProductPurchaseUnitController;
 use App\Http\Controllers\Office\CatalogServiceAddonController;
 use App\Http\Controllers\Office\CatalogServiceController;
 use App\Http\Controllers\Office\CatalogServiceVariantController;
+use App\Http\Controllers\Office\ChangeOrderController;
 use App\Http\Controllers\Office\CloseoutReviewController;
 use App\Http\Controllers\Office\CommercialApprovalController;
 use App\Http\Controllers\Office\CommercialLibraryController;
@@ -160,6 +161,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/{quote}/revisions/{revision}/lines/{line}/copy', [QuoteController::class, 'copyLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.copy');
                 Route::put('/{quote}/revisions/{revision}/lines/{line}/components/{component}', [QuoteController::class, 'updateComponent'])->whereNumber(['quote', 'revision', 'line', 'component'])->middleware('capability:quotes.manage')->name('components.update');
                 Route::post('/{quote}/revisions/{revision}/bulk-dimensions', [QuoteController::class, 'bulkAssign'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.bulk');
+                Route::put('/{quote}/revisions/{revision}/change-effects', [QuoteController::class, 'updateChangeEffects'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('change-effects.update');
                 Route::post('/{quote}/revisions/{revision}/dimensions/{type}', [QuoteController::class, 'addDimension'])->whereNumber(['quote', 'revision'])->whereIn('type', ['locations', 'systems', 'phases'])->middleware('capability:quotes.manage')->name('dimensions.store');
                 Route::post('/{quote}/revisions/{revision}/sections', [QuoteController::class, 'addSection'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('sections.store');
                 Route::post('/{quote}/revisions/{revision}/milestones', [QuoteController::class, 'addMilestone'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('milestones.store');
@@ -174,6 +176,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/{quote}/revisions/{revision}/approval', [CommercialApprovalController::class, 'submit'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('approval.submit');
                 Route::post('/{quote}/revisions/{revision}/publications', [ProposalPublicationController::class, 'store'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.publish')->name('publications.store');
             });
+            Route::post('/projects/{project}/change-orders', [ChangeOrderController::class, 'store'])->whereNumber('project')->name('projects.change-orders.store');
+            Route::post('/projects/{project}/commercial-scopes/{scope}/allowances/resolve', [ChangeOrderController::class, 'resolveAllowance'])->whereNumber(['project', 'scope'])->name('projects.allowances.resolve');
             Route::post('/quote-approvals/{approval}/decision', [CommercialApprovalController::class, 'decide'])->whereNumber('approval')->middleware('capability:quotes.approve')->name('quote-approvals.decide');
             Route::prefix('proposal-publications/{publication}')->whereNumber('publication')->name('proposal-publications.')->group(function (): void {
                 Route::get('/', [ProposalPublicationController::class, 'show'])->name('show');
@@ -190,6 +194,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/acceptances/{acceptance}/signature', [ProposalPublicationController::class, 'signature'])->whereNumber('acceptance')->middleware('capability:proposal.engagement.view')->name('acceptances.signature');
                 Route::get('/convert', [ProjectConversionController::class, 'create'])->middleware(['capability:commercial.convert', 'capability:projects.manage'])->name('convert.create');
                 Route::post('/convert', [ProjectConversionController::class, 'store'])->middleware(['capability:commercial.convert', 'capability:projects.manage'])->name('convert.store');
+                Route::post('/apply-change-order', [ChangeOrderController::class, 'apply'])->middleware(['capability:change_orders.manage', 'capability:projects.admin'])->name('change-orders.apply');
             });
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');

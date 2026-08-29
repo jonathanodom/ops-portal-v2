@@ -66,6 +66,8 @@ class AccessControlSeeder extends Seeder
         'proposal.engagement.view' => 'View Proposal recipients and delivery activity',
         'proposal.templates.manage' => 'Manage Proposal templates, content, terms, and defaults',
         'commercial.convert' => 'Convert accepted commercial scope into Projects',
+        'change_orders.manage' => 'Create, publish, and apply Project Change Orders',
+        'change_orders.approve_negative' => 'Approve negative Change Orders and credits',
     ];
 
     private const ROLES = [
@@ -84,7 +86,7 @@ class AccessControlSeeder extends Seeder
                 'subscriptions.view', 'subscriptions.manage',
                 'projects.view', 'projects.manage', 'projects.tasks.manage', 'projects.admin',
                 'opportunities.view', 'opportunities.manage',
-                'quotes.view', 'quotes.manage',
+                'quotes.view', 'quotes.manage', 'change_orders.manage',
             ],
         ],
         'technician' => [

@@ -13,6 +13,12 @@ final class ApprovalPolicyEvaluator
         $revision->loadMissing('lines');
         $settings = OrganizationCommercialSetting::query()->where('organization_id', $revision->organization_id)->firstOrFail();
         $triggers = [];
+        if ($revision->document->document_type === 'change_order') {
+            $triggers[] = ['kind' => 'change_order_manager_review', 'delta_cents' => (int) $revision->change_order_delta_cents];
+            if ((int) $revision->change_order_delta_cents < 0) {
+                $triggers[] = ['kind' => 'negative_change_order', 'delta_cents' => (int) $revision->change_order_delta_cents];
+            }
+        }
         if ($revision->gross_margin_basis_points !== null && $revision->gross_margin_basis_points < $settings->gross_margin_floor_bps) {
             $triggers[] = ['kind' => 'gross_margin_below_floor', 'actual_basis_points' => $revision->gross_margin_basis_points, 'threshold_basis_points' => $settings->gross_margin_floor_bps];
         }

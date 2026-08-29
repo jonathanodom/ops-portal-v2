@@ -44,7 +44,7 @@ final class ProposalResponseWorkflow
             $draft = $this->quotes->cloneDraft($publication->revision, null);
             $publication->update(['status' => 'changes_requested', 'changes_requested_at' => now()]);
             $acceptedExists = ProposalPublication::query()->whereHas('revision.document', fn ($query) => $query->where('opportunity_id', $publication->revision->document->opportunity_id))->where('status', 'accepted')->exists();
-            if (! $acceptedExists) {
+            if ($publication->revision->document->document_type === 'quote' && ! $acceptedExists) {
                 $opportunity = Opportunity::query()->whereKey($publication->revision->document->opportunity_id)->lockForUpdate()->firstOrFail();
                 $this->opportunities->quoting($opportunity, $publication->id);
             }

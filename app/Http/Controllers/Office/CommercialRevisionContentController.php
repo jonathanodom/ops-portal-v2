@@ -83,7 +83,7 @@ final class CommercialRevisionContentController extends Controller
 
     private function scoped(Request $request, CommercialDocument $quote, CommercialRevision $revision): array
     {
-        $quote = CommercialDocument::query()->forOrganization($request->attributes->get('organization')->id)->where('document_type', 'quote')->findOrFail($quote->id);
+        $quote = CommercialDocument::query()->forOrganization($request->attributes->get('organization')->id)->whereIn('document_type', ['quote', 'change_order'])->findOrFail($quote->id);
 
         return [$quote, $quote->revisions()->findOrFail($revision->id)];
     }

@@ -13,7 +13,8 @@ final class CommercialDocumentPolicy
 
     public function view(User $user, CommercialDocument $document): bool
     {
-        return $this->hasCapability($user, $document->organization_id, 'quotes.view');
+        return $this->hasCapability($user, $document->organization_id, 'quotes.view')
+            && ($document->document_type !== 'change_order' || $this->hasCapability($user, $document->organization_id, 'projects.view'));
     }
 
     public function create(User $user, Opportunity $opportunity): bool
@@ -23,7 +24,8 @@ final class CommercialDocumentPolicy
 
     public function update(User $user, CommercialDocument $document): bool
     {
-        return $this->hasCapability($user, $document->organization_id, 'quotes.manage');
+        return $this->hasCapability($user, $document->organization_id, 'quotes.manage')
+            && ($document->document_type !== 'change_order' || $this->hasCapability($user, $document->organization_id, 'change_orders.manage'));
     }
 
     public function viewCostMargin(User $user, CommercialDocument $document): bool
@@ -38,7 +40,8 @@ final class CommercialDocumentPolicy
 
     public function publish(User $user, CommercialDocument $document): bool
     {
-        return $this->hasCapability($user, $document->organization_id, 'quotes.publish');
+        return $this->hasCapability($user, $document->organization_id, 'quotes.publish')
+            && ($document->document_type !== 'change_order' || $this->hasCapability($user, $document->organization_id, 'change_orders.manage'));
     }
 
     public function viewEngagement(User $user, CommercialDocument $document): bool

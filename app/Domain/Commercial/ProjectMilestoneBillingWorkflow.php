@@ -16,9 +16,13 @@ final class ProjectMilestoneBillingWorkflow
         $mapping = ProjectBillingMilestone::query()
             ->where('organization_id', $milestone->organization_id)
             ->where('project_milestone_id', $milestone->id)
-            ->with('acceptedMilestone')
+            ->with(['acceptedMilestone', 'commercialScope'])
             ->first();
 
-        return $mapping ? $this->invoices->createForMilestone($mapping->acceptedMilestone, $actor) : null;
+        if (! $mapping || ($mapping->commercialScope->scope_type === 'change_order' && $mapping->contract_delta_cents <= 0)) {
+            return null;
+        }
+
+        return $this->invoices->createForMilestone($mapping->acceptedMilestone, $actor);
     }
 }
