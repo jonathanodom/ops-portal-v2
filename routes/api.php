@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\TicketController;
 use Illuminate\Support\Facades\Route;
 
@@ -46,4 +47,13 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active.organization'])->group(
     Route::post('/tickets', [TicketController::class, 'store'])
         ->middleware(['abilities:tickets.create', 'capability:api.tickets.create'])
         ->name('api.v1.tickets.store');
+
+    Route::patch('/tickets/{ticket}', [TicketController::class, 'update'])
+        ->middleware(['abilities:tickets.update', 'capability:api.tickets.update'])
+        ->name('api.v1.tickets.update');
+
+    Route::middleware(['abilities:projects.read', 'capability:api.projects.read'])->group(function (): void {
+        Route::get('/customers/{customer}/projects', [ProjectController::class, 'forCustomer'])->name('api.v1.customers.projects');
+        Route::get('/projects/{project}', [ProjectController::class, 'show'])->name('api.v1.projects.show');
+    });
 });

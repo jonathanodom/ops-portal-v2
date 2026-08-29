@@ -187,6 +187,104 @@ class TicketEndpointsTest extends TestCase
         $response->assertStatus(403)->assertJsonPath('error.code', 'forbidden');
     }
 
+    public function test_update_sets_priority_and_appends_description_and_records_audit(): void
+    {
+        [$user, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $ticket = $this->createTicket($organization, $customer, $location, ['description' => 'Original report.']);
+
+        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'update-key-1')->patchJson("/api/v1/tickets/{$ticket->id}", [
+            'priority' => 'high',
+            'description_append' => 'Caller called back with more detail.',
+        ]);
+
+        $response->assertStatus(200)
+            ->assertJsonPath('data.priority', 'high')
+            ->assertJsonPath('data.description', "Original report.\n\nCaller called back with more detail.");
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'service_ticket.updated',
+            'subject_id' => $ticket->id,
+            'actor_id' => $user->id,
+        ]);
+    }
+
+    public function test_update_requires_an_idempotency_key_header(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $ticket = $this->createTicket($organization, $customer, $location);
+
+        $response = $this->bearer($token)->patchJson("/api/v1/tickets/{$ticket->id}", ['priority' => 'high']);
+
+        $response->assertStatus(400)->assertJsonPath('error.code', 'idempotency_key_required');
+        $this->assertSame('normal', $ticket->fresh()->priority);
+    }
+
+    public function test_update_requires_at_least_one_field(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $ticket = $this->createTicket($organization, $customer, $location);
+
+        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'k2')->patchJson("/api/v1/tickets/{$ticket->id}", []);
+
+        $response->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+    }
+
+    public function test_replaying_the_same_update_idempotency_key_does_not_double_append(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $ticket = $this->createTicket($organization, $customer, $location, ['description' => 'Base.']);
+        $body = ['description_append' => 'Appended once.'];
+
+        $first = $this->bearer($token)->withHeader('Idempotency-Key', 'update-replay')->patchJson("/api/v1/tickets/{$ticket->id}", $body);
+        $second = $this->bearer($token)->withHeader('Idempotency-Key', 'update-replay')->patchJson("/api/v1/tickets/{$ticket->id}", $body);
+
+        $first->assertOk();
+        $second->assertOk();
+        $this->assertSame("Base.\n\nAppended once.", $ticket->fresh()->description);
+    }
+
+    public function test_the_same_idempotency_key_cannot_be_replayed_against_a_different_ticket(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $ticketA = $this->createTicket($organization, $customer, $location);
+        $ticketB = $this->createTicket($organization, $customer, $location);
+
+        $this->bearer($token)->withHeader('Idempotency-Key', 'shared-key')->patchJson("/api/v1/tickets/{$ticketA->id}", ['priority' => 'high'])->assertOk();
+        $second = $this->bearer($token)->withHeader('Idempotency-Key', 'shared-key')->patchJson("/api/v1/tickets/{$ticketB->id}", ['priority' => 'urgent']);
+
+        $second->assertOk()->assertJsonPath('data.id', (string) $ticketB->id)->assertJsonPath('data.priority', 'urgent');
+        $this->assertSame('high', $ticketA->fresh()->priority);
+        $this->assertSame('urgent', $ticketB->fresh()->priority);
+    }
+
+    public function test_update_returns_not_found_for_a_ticket_in_another_organization(): void
+    {
+        [, , $token] = $this->jarvisIdentity();
+        $other = Organization::factory()->create(['active' => true]);
+        $customer = Customer::factory()->for($other)->create();
+        $location = ServiceLocation::factory()->for($customer)->create(['organization_id' => $other->id]);
+        $ticket = $this->createTicket($other, $customer, $location);
+
+        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'k3')->patchJson("/api/v1/tickets/{$ticket->id}", ['priority' => 'high']);
+
+        $response->assertStatus(404)->assertJsonPath('error.code', 'not_found');
+    }
+
+    public function test_update_missing_token_ability_is_rejected_with_403(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity(['tickets.read', 'tickets.create']);
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $ticket = $this->createTicket($organization, $customer, $location);
+
+        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'k4')->patchJson("/api/v1/tickets/{$ticket->id}", ['priority' => 'high']);
+
+        $response->assertStatus(403)->assertJsonPath('error.code', 'forbidden');
+    }
+
     public function test_revoked_membership_capability_is_rejected_with_403(): void
     {
         [, , $token, $membership] = $this->jarvisIdentity();
