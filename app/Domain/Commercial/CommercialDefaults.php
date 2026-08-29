@@ -46,11 +46,15 @@ final class CommercialDefaults
                     ['name' => $name, 'default_probability_bps' => $probability, 'color' => $color, 'sort_order' => $order * 10, 'active' => true],
                 );
             }
-            foreach (self::SYSTEMS as $order => $name) {
-                CommercialSystem::query()->firstOrCreate(['organization_id' => $organization->id, 'name' => $name], ['sort_order' => ($order + 1) * 10, 'active' => true]);
+            if (Schema::hasTable('commercial_systems')) {
+                foreach (self::SYSTEMS as $order => $name) {
+                    CommercialSystem::query()->firstOrCreate(['organization_id' => $organization->id, 'name' => $name], ['sort_order' => ($order + 1) * 10, 'active' => true]);
+                }
             }
-            foreach (self::PHASES as $order => $name) {
-                CommercialPhase::query()->firstOrCreate(['organization_id' => $organization->id, 'name' => $name], ['sort_order' => ($order + 1) * 10, 'active' => true]);
+            if (Schema::hasTable('commercial_phases')) {
+                foreach (self::PHASES as $order => $name) {
+                    CommercialPhase::query()->firstOrCreate(['organization_id' => $organization->id, 'name' => $name], ['sort_order' => ($order + 1) * 10, 'active' => true]);
+                }
             }
             if (Schema::hasTable('proposal_templates')) {
                 foreach (self::TEMPLATES as [$type, $name, $acceptanceEnabled]) {
