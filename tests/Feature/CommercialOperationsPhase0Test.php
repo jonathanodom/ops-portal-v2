@@ -3,8 +3,11 @@
 namespace Tests\Feature;
 
 use App\Models\Capability;
+use App\Models\Organization;
 use Database\Seeders\AccessControlSeeder;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Route;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Facades\Storage;
@@ -49,5 +52,76 @@ class CommercialOperationsPhase0Test extends TestCase
 
         $this->assertStringNotContainsString($retainedPath, $testPath);
         $this->assertStringContainsString('/storage/framework/testing/disks/local/', $testPath);
+    }
+
+    public function test_opportunity_foundation_migration_can_resume_after_mysql_committed_its_tables(): void
+    {
+        Organization::factory()->create();
+
+        $migration = require database_path('migrations/2026_08_27_010000_create_commercial_opportunity_foundation.php');
+        $migration->up();
+
+        foreach (['organization_commercial_settings', 'opportunity_stages', 'opportunities', 'opportunity_tasks', 'opportunity_activities', 'opportunity_attachments', 'commercial_user_preferences'] as $table) {
+            $this->assertTrue(Schema::hasTable($table));
+        }
+
+        $this->assertDatabaseCount('organization_commercial_settings', 1);
+        $this->assertDatabaseCount('opportunity_stages', 6);
+    }
+
+    public function test_opportunity_foundation_migration_resumes_from_only_the_first_committed_table_with_an_existing_organization(): void
+    {
+        $originalConnection = DB::getDefaultConnection();
+        config(['database.connections.commercial_recovery' => [
+            'driver' => 'sqlite',
+            'database' => ':memory:',
+            'prefix' => '',
+            'foreign_key_constraints' => true,
+        ]]);
+        DB::purge('commercial_recovery');
+        DB::setDefaultConnection('commercial_recovery');
+
+        try {
+            Schema::create('organizations', function (Blueprint $table): void {
+                $table->id();
+                $table->string('name');
+                $table->string('slug')->unique();
+                $table->string('timezone')->default('America/Chicago');
+                $table->boolean('active')->default(true);
+                $table->timestamps();
+            });
+            Schema::create('organization_commercial_settings', function (Blueprint $table): void {
+                $table->id();
+                $table->foreignId('organization_id')->unique();
+                $table->timestamps();
+            });
+            DB::table('organizations')->insert([
+                'id' => 1,
+                'name' => 'Retained production organization',
+                'slug' => 'retained-production-organization',
+                'timezone' => 'America/Chicago',
+                'active' => true,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+            DB::table('organization_commercial_settings')->insert([
+                'organization_id' => 1,
+                'created_at' => now(),
+                'updated_at' => now(),
+            ]);
+
+            $migration = require database_path('migrations/2026_08_27_010000_create_commercial_opportunity_foundation.php');
+            $migration->up();
+
+            foreach (['organization_commercial_settings', 'opportunity_stages', 'opportunities', 'opportunity_tasks', 'opportunity_activities', 'opportunity_attachments', 'commercial_user_preferences'] as $table) {
+                $this->assertTrue(Schema::hasTable($table));
+            }
+            $this->assertSame(1, DB::table('organization_commercial_settings')->count());
+            $this->assertSame(6, DB::table('opportunity_stages')->count());
+        } finally {
+            DB::disconnect('commercial_recovery');
+            DB::setDefaultConnection($originalConnection);
+            DB::purge('commercial_recovery');
+        }
     }
 }
