@@ -68,6 +68,18 @@ class AccessControlSeeder extends Seeder
         'commercial.convert' => 'Convert accepted commercial scope into Projects',
         'change_orders.manage' => 'Create, publish, and apply Project Change Orders',
         'change_orders.approve_negative' => 'Approve negative Change Orders and credits',
+
+        // JARVIS /api/v1 service-identity scopes. See docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md §7.
+        // Distinct from the office UI capabilities above so API scope grants can change independently
+        // of human-role permissions (two-layer authorization; see .cursor/rules/ops-portal-api-development.mdc §10).
+        'api.customers.read' => 'JARVIS API: search and view customers',
+        'api.contacts.read' => 'JARVIS API: search and view contacts',
+        'api.locations.read' => 'JARVIS API: view customer service locations',
+        'api.projects.read' => 'JARVIS API: view customer/project context',
+        'api.tickets.read' => 'JARVIS API: list and view service tickets',
+        'api.tickets.create' => 'JARVIS API: create service tickets',
+        'api.tickets.update' => 'JARVIS API: update permitted service ticket fields',
+        'api.communications.create' => 'JARVIS API: append normalized communication records',
     ];
 
     private const ROLES = [
@@ -100,6 +112,13 @@ class AccessControlSeeder extends Seeder
         'billing' => [
             'name' => 'Billing',
             'capabilities' => ['experience.office.access', 'billing_handoffs.view', 'billing_handoffs.manage', 'invoices.view', 'invoices.manage', 'invoices.issue', 'invoices.present', 'payments.view', 'payments.collect', 'payments.record_manual', 'payments.manage_links', 'customers.view', 'service_tickets.view', 'catalog.view', 'catalog.use', 'subscriptions.view', 'projects.view'],
+        ],
+        'jarvis_service' => [
+            'name' => 'JARVIS Service Identity',
+            'capabilities' => [
+                'api.customers.read', 'api.contacts.read', 'api.locations.read', 'api.projects.read',
+                'api.tickets.read', 'api.tickets.create', 'api.tickets.update', 'api.communications.create',
+            ],
         ],
     ];
 
