@@ -1,7 +1,8 @@
 # Postman collection — `/api/v1`
 
-Covers OP-API-1 (auth/scopes) and OP-API-2 (customers, contacts, locations)
-from `docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md`.
+Covers OP-API-1 (auth/scopes), OP-API-2 (customers, contacts, locations),
+and OP-API-3 (ticket list/detail/create with idempotency) from
+`docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md`.
 
 ## Setup (local dev, `http://ops-portal-v2.test/`)
 
@@ -40,13 +41,21 @@ from `docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md`.
    - Confirm `base_url` is `http://ops-portal-v2.test/api/v1` (already the
      environment default).
 
-5. Run **Happy path** top to bottom. The `customers/search` request stores
-   the first matching customer's `id` into the `customer_id` collection
-   variable automatically, so the following two requests use a real record.
-   If your local database has no customers yet, create one first (e.g.
-   through the office UI, or `php artisan tinker`), then re-run.
+5. Run **Happy path** top to bottom. It captures `customer_id`, `location_id`,
+   and `contact_id` collection variables from the search/locations/contacts
+   responses, so the following folders use real records. If your local
+   database has no customers yet, create one first (e.g. through the office
+   UI, or `php artisan tinker`), then re-run.
 
-6. Run **Negative cases**. These don't require any local data — they
+6. Run **Tickets (C-006/C-007)** top to bottom. It creates one real ticket
+   using a fresh `Idempotency-Key` (generated once and reused), confirms it's
+   retrievable, **replays the exact same create request with the same key**
+   and asserts it returns the *same* ticket with no duplicate, then confirms
+   the ticket list shows exactly one open ticket. Re-running this folder
+   generates a new `Idempotency-Key`, so it's safe to run repeatedly — each
+   run creates one new ticket, not one per request.
+
+7. Run **Negative cases**. These don't require any local data — they
    exercise missing/invalid tokens, a missing required `q` parameter, and a
    guaranteed-nonexistent customer ID (confirming no internal class names or
    stack traces leak into 404 responses).

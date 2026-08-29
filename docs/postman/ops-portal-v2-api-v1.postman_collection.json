@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Ops Portal v2 — /api/v1 (JARVIS boundary)",
-    "description": "Covers OP-API-1 (auth/scopes) and OP-API-2 (customers, contacts, locations) from docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md.\n\nSetup:\n1. Pull feat/op-api-1-foundation-and-service-identity locally.\n2. composer phase:update (or migrate) so the new tables/capabilities/role exist.\n3. php artisan jarvis:create-service-account (prints a one-time bearer token).\n4. Import the companion environment file, set `token` to that value, and select it.\n5. Run 'Happy path' top to bottom, then 'Negative cases'.",
+    "description": "Covers OP-API-1 (auth/scopes), OP-API-2 (customers, contacts, locations), and OP-API-3 (tickets + idempotency) from docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md.\n\nSetup:\n1. Pull feat/op-api-1-foundation-and-service-identity locally and `composer install` (adds laravel/sanctum — required or the whole app 500s).\n2. composer phase:update (or migrate) so the new tables/capabilities/role exist.\n3. php artisan jarvis:create-service-account (prints a one-time bearer token).\n4. Import the companion environment file, set `token` to that value, and select it.\n5. Run 'Happy path' top to bottom, then 'Tickets (C-006/C-007)' top to bottom (it depends on customer_id/location_id/contact_id captured by Happy path), then 'Negative cases'.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -11,7 +11,11 @@
   "variable": [
     { "key": "base_url", "value": "http://ops-portal-v2.test/api/v1" },
     { "key": "token", "value": "" },
-    { "key": "customer_id", "value": "1" }
+    { "key": "customer_id", "value": "1" },
+    { "key": "location_id", "value": "1" },
+    { "key": "contact_id", "value": "1" },
+    { "key": "idempotency_key", "value": "" },
+    { "key": "ticket_id", "value": "" }
   ],
   "item": [
     {
@@ -118,6 +122,7 @@
                   "  if (body.data.length) {",
                   "    pm.expect(body.data[0]).to.have.all.keys('id', 'customer_id', 'name', 'address', 'timezone');",
                   "    pm.expect(body.data[0].address).to.have.all.keys('line1', 'line2', 'city', 'state', 'postal_code');",
+                  "    pm.collectionVariables.set('location_id', body.data[0].id);",
                   "  }",
                   "});"
                 ],
@@ -149,6 +154,7 @@
                   "  if (body.data.length) {",
                   "    pm.expect(body.data[0]).to.have.all.keys('id', 'customer_id', 'name', 'phones', 'emails');",
                   "    pm.expect(body.data[0].phones).to.be.an('array');",
+                  "    pm.collectionVariables.set('contact_id', body.data[0].id);",
                   "  }",
                   "});"
                 ],
@@ -168,6 +174,226 @@
                 { "key": "limit", "value": "20" }
               ]
             }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Tickets (C-006/C-007)",
+      "item": [
+        {
+          "name": "GET /tickets?customer_id=... — before create (expect none open)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array', () => pm.expect(pm.response.json().data).to.be.an('array'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/tickets?customer_id={{customer_id}}&status=open",
+              "host": ["{{base_url}}"],
+              "path": ["tickets"],
+              "query": [
+                { "key": "customer_id", "value": "{{customer_id}}" },
+                { "key": "status", "value": "open" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "POST /tickets — create (with Idempotency-Key)",
+          "event": [
+            {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "if (!pm.collectionVariables.get('idempotency_key')) {",
+                  "  pm.collectionVariables.set('idempotency_key', pm.variables.replaceIn('{{$guid}}'));",
+                  "}"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created', () => pm.response.to.have.status(201));",
+                  "pm.test('shape matches Ticket DTO', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.have.all.keys('id', 'ticket_number', 'customer_id', 'location_id', 'contact_id', 'title', 'description', 'customer_visible_summary', 'priority', 'source', 'purpose', 'billing_disposition', 'status', 'created_at', 'updated_at');",
+                  "  pm.expect(body.data.status).to.eql('open');",
+                  "  pm.collectionVariables.set('ticket_id', body.data.id);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"location_id\": {{location_id}},\n  \"contact_id\": {{contact_id}},\n  \"title\": \"Front office phones rebooting\",\n  \"description\": \"Customer reports intermittent phone reboots.\",\n  \"priority\": \"normal\",\n  \"source\": \"jarvis\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets", "host": ["{{base_url}}"], "path": ["tickets"] }
+          }
+        },
+        {
+          "name": "GET /tickets/{{ticket_id}} — confirm it's retrievable",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('matches the created ticket', () => pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get('ticket_id')));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/tickets/{{ticket_id}}", "host": ["{{base_url}}"], "path": ["tickets", "{{ticket_id}}"] }
+          }
+        },
+        {
+          "name": "POST /tickets — replay same Idempotency-Key → same ticket, no duplicate",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('201 Created (replayed result)', () => pm.response.to.have.status(201));",
+                  "pm.test('same ticket id as the first create', () => {",
+                  "  pm.expect(pm.response.json().data.id).to.eql(pm.collectionVariables.get('ticket_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"location_id\": {{location_id}},\n  \"contact_id\": {{contact_id}},\n  \"title\": \"Front office phones rebooting\",\n  \"description\": \"Customer reports intermittent phone reboots.\",\n  \"priority\": \"normal\",\n  \"source\": \"jarvis\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets", "host": ["{{base_url}}"], "path": ["tickets"] },
+            "description": "Uses the SAME idempotency_key collection variable as the previous request on purpose — this is the replay test. Re-running this request alone (without re-running 'create' first) is exactly the scenario it proves."
+          }
+        },
+        {
+          "name": "GET /tickets?customer_id=... — after create (expect 1 open)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('exactly one open ticket, matching the created one', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.length).to.eql(1);",
+                  "  pm.expect(data[0].id).to.eql(pm.collectionVariables.get('ticket_id'));",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/tickets?customer_id={{customer_id}}&status=open",
+              "host": ["{{base_url}}"],
+              "path": ["tickets"],
+              "query": [
+                { "key": "customer_id", "value": "{{customer_id}}" },
+                { "key": "status", "value": "open" }
+              ]
+            },
+            "description": "Confirms exactly ONE open ticket exists even though the create request above ran twice with the same Idempotency-Key."
+          }
+        },
+        {
+          "name": "POST /tickets without Idempotency-Key → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('idempotency_key_required envelope', () => pm.expect(pm.response.json().error.code).to.eql('idempotency_key_required'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"location_id\": {{location_id}},\n  \"title\": \"Should not be created\",\n  \"priority\": \"normal\",\n  \"source\": \"jarvis\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets", "host": ["{{base_url}}"], "path": ["tickets"] }
+          }
+        },
+        {
+          "name": "POST /tickets with missing title → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable', () => pm.response.to.have.status(422));",
+                  "pm.test('validation error mentions title', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.error.code).to.eql('validation_failed');",
+                  "  pm.expect(body.error.details).to.have.property('title');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"location_id\": {{location_id}},\n  \"priority\": \"normal\",\n  \"source\": \"jarvis\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets", "host": ["{{base_url}}"], "path": ["tickets"] }
           }
         }
       ]
