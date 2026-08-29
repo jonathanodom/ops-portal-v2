@@ -43,6 +43,7 @@ use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
 use App\Http\Controllers\Office\ProjectAttachmentController;
 use App\Http\Controllers\Office\ProjectController;
+use App\Http\Controllers\Office\ProjectConversionController;
 use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ProjectWorkbookPrintController;
 use App\Http\Controllers\Office\ProposalPublicationController;
@@ -187,6 +188,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/extend', [ProposalPublicationController::class, 'extend'])->middleware(['capability:quotes.publish', 'capability:opportunities.admin'])->name('extend');
                 Route::post('/comments', [ProposalPublicationController::class, 'comment'])->middleware('capability:proposal.engagement.view')->name('comments.store');
                 Route::get('/acceptances/{acceptance}/signature', [ProposalPublicationController::class, 'signature'])->whereNumber('acceptance')->middleware('capability:proposal.engagement.view')->name('acceptances.signature');
+                Route::get('/convert', [ProjectConversionController::class, 'create'])->middleware(['capability:commercial.convert', 'capability:projects.manage'])->name('convert.create');
+                Route::post('/convert', [ProjectConversionController::class, 'store'])->middleware(['capability:commercial.convert', 'capability:projects.manage'])->name('convert.store');
             });
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');

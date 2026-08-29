@@ -5,8 +5,10 @@ namespace Tests\Feature;
 use App\Domain\Commercial\CommercialApprovalWorkflow;
 use App\Domain\Commercial\CommercialDefaults;
 use App\Domain\Commercial\CommercialRevisionMediaWorkflow;
+use App\Domain\Commercial\ProjectConversionWorkflow;
 use App\Domain\Commercial\ProposalPublicationWorkflow;
 use App\Domain\Commercial\QuoteWorkflow;
+use App\Domain\Projects\Actions\ProjectWorkflow;
 use App\Jobs\DeleteRemovedCommercialRevisionMedia;
 use App\Jobs\DeliverProposalPublication;
 use App\Jobs\QueueProposalPublicationReminders;
@@ -24,6 +26,7 @@ use App\Models\OpportunityStage;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
 use App\Models\OrganizationMembership;
+use App\Models\ProjectConversionTemplate;
 use App\Models\ProposalAcceptance;
 use App\Models\ProposalDeliveryAttempt;
 use App\Models\ProposalEngagementEvent;
@@ -220,6 +223,47 @@ class CommercialOperationsPhase4Test extends TestCase
         $this->assertSame(0, $deposit->invoice->tax_total_cents);
         $this->assertSame(1, Invoice::query()->count());
         $this->assertNull($acceptance->milestones->last()->invoice_id);
+    }
+
+    public function test_accepted_scope_converts_once_into_project_planning_tickets_and_later_milestone_billing(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        [$organization, $admin, $opportunity, $revision, $terms] = $this->context(8000, 10000);
+        $location = ServiceLocation::factory()->create(['organization_id' => $organization->id, 'customer_id' => $opportunity->customer_id, 'active' => true]);
+        $opportunity->update(['service_location_id' => $location->id]);
+        app(QuoteWorkflow::class)->addMilestone($revision, $admin, ['content_version' => $revision->content_version, 'name' => 'Deposit', 'amount_type' => 'percent', 'amount_value' => 5000, 'is_balancing' => false]);
+        $revision = $revision->fresh();
+        app(QuoteWorkflow::class)->addMilestone($revision, $admin, ['content_version' => $revision->content_version, 'name' => 'Completion', 'amount_type' => 'percent', 'amount_value' => 5000, 'is_balancing' => true]);
+        $revision = $revision->fresh();
+        app(QuoteWorkflow::class)->updateTerms($revision, $terms, $admin, $revision->content_version, null);
+        app(CommercialApprovalWorkflow::class)->submit($revision->fresh(), $admin);
+        $template = ProposalTemplate::query()->forOrganization($organization->id)->where('template_type', 'budgetary_estimate')->sole();
+        $publication = app(ProposalPublicationWorkflow::class)->publish($revision->fresh(), $template, $admin, ['expires_at' => now()->addDays(30), 'acceptance_enabled' => true, 'labor_grouping' => 'location']);
+        [, $token] = app(ProposalPublicationWorkflow::class)->addRecipient($publication, $admin, 'customer@example.test', 'Customer');
+        $this->post(route('proposals.accept', $token), ['signer_name' => 'Customer Person', 'signer_email' => 'customer@example.test', 'signer_title' => 'Owner', 'consent' => '1', 'signature_data' => $this->signaturePng(), 'idempotency_token' => (string) Str::uuid()])->assertOk();
+        $acceptance = ProposalAcceptance::query()->with(['selections', 'milestones'])->sole();
+        $conversionTemplate = ProjectConversionTemplate::query()->where('organization_id', $organization->id)->sole();
+        $lineId = $acceptance->selections->sole()->publication_line_id;
+        $data = ['project_mode' => 'new', 'project_name' => 'Accepted Installation', 'project_type' => 'installation_project', 'project_conversion_template_id' => $conversionTemplate->id, 'confirm_location_mismatch' => false, 'ticket_line_ids' => [$lineId]];
+        [$reviewer] = $this->member($organization, 'reviewer');
+        $this->actingAs($reviewer)->get(route('office.proposal-publications.convert.create', $publication))->assertForbidden();
+        $this->actingAs($admin)->get(route('office.proposal-publications.convert.create', $publication))->assertOk()->assertSee('Convert accepted scope');
+
+        $scope = app(ProjectConversionWorkflow::class)->convert($acceptance, $admin, $data);
+        $retry = app(ProjectConversionWorkflow::class)->convert($acceptance, $admin, $data);
+
+        $this->assertSame($scope->id, $retry->id);
+        $this->assertCount(1, $scope->materialItems);
+        $this->assertCount(0, $scope->laborItems);
+        $this->assertDatabaseCount('project_commercial_scopes', 1);
+        $this->assertDatabaseCount('service_tickets', 1);
+        $this->assertDatabaseCount('project_service_ticket', 1);
+        $this->assertDatabaseCount('project_billing_milestones', 2);
+        $completion = $scope->project->milestones()->whereHas('billingMilestone.acceptedMilestone', fn ($query) => $query->where('name', 'Completion'))->sole();
+        app(ProjectWorkflow::class)->updateMilestone($scope->project, $completion, $admin, ['name' => $completion->name, 'description' => $completion->description, 'status' => 'completed', 'target_on' => null, 'sort_order' => $completion->sort_order]);
+        $this->assertDatabaseCount('invoices', 2);
+        $this->assertSame('draft', $acceptance->milestones()->where('name', 'Completion')->sole()->invoice->status);
     }
 
     public function test_options_comments_and_change_request_are_scoped_and_clone_the_complete_revision(): void

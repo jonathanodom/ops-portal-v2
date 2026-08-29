@@ -87,7 +87,7 @@ class ServiceTicket extends Model
 
     public function projects(): BelongsToMany
     {
-        return $this->belongsToMany(Project::class, 'project_service_ticket')->withPivot(['organization_id', 'linked_by_id', 'linked_at'])->withTimestamps();
+        return $this->belongsToMany(Project::class, 'project_service_ticket')->withPivot(['organization_id', 'project_commercial_scope_id', 'linked_by_id', 'linked_at'])->withTimestamps();
     }
 
     public function scopeForOrganization(Builder $query, int $organizationId): Builder

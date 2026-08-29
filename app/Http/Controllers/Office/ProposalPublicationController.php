@@ -58,8 +58,9 @@ final class ProposalPublicationController extends Controller
         $canPublish = Gate::allows('publish', $publication->revision->document);
         $canEngagement = Gate::allows('viewEngagement', $publication->revision->document);
         $canExtend = $canPublish && $request->attributes->get('membership')->hasCapability('opportunities.admin');
+        $canConvert = $request->attributes->get('membership')->hasCapability('commercial.convert') && $request->attributes->get('membership')->hasCapability('projects.manage');
         if ($canEngagement) {
-            $publication->load(['engagementEvents.recipient', 'engagementEvents.shareLink', 'comments.staffUser', 'acceptance.milestones.invoice']);
+            $publication->load(['engagementEvents.recipient', 'engagementEvents.shareLink', 'comments.staffUser', 'acceptance.milestones.invoice', 'acceptance.projectScope.project']);
         }
         $opportunity = $publication->revision->document->opportunity;
         $audits = AuditEvent::query()
@@ -74,7 +75,7 @@ final class ProposalPublicationController extends Controller
             ->limit(50)
             ->get();
 
-        return view('office.proposal-publications.show', compact('publication', 'canPublish', 'canEngagement', 'canExtend', 'audits'));
+        return view('office.proposal-publications.show', compact('publication', 'canPublish', 'canEngagement', 'canExtend', 'canConvert', 'audits'));
     }
 
     public function pdf(Request $request, ProposalPublication $publication): StreamedResponse

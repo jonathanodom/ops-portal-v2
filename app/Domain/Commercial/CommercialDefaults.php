@@ -7,6 +7,7 @@ use App\Models\CommercialSystem;
 use App\Models\OpportunityStage;
 use App\Models\Organization;
 use App\Models\OrganizationCommercialSetting;
+use App\Models\ProjectConversionTemplate;
 use App\Models\ProposalTemplate;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
@@ -62,6 +63,24 @@ final class CommercialDefaults
                             $template->sections()->create(['section_type' => $sectionType, 'heading' => $heading, 'customer_visible' => true, 'sort_order' => ($index + 1) * 10]);
                         }
                     }
+                }
+            }
+            if (Schema::hasTable('project_conversion_templates')) {
+                $conversion = ProjectConversionTemplate::query()->firstOrCreate(
+                    ['organization_id' => $organization->id, 'name' => 'Standard Project Delivery'],
+                    ['active' => true],
+                );
+                if ($conversion->workstreams()->doesntExist()) {
+                    $conversion->workstreams()->createMany([
+                        ['name' => 'Planning & Coordination', 'sort_order' => 10],
+                        ['name' => 'Delivery & Commissioning', 'sort_order' => 20],
+                    ]);
+                }
+                if ($conversion->milestones()->doesntExist()) {
+                    $conversion->milestones()->createMany([
+                        ['name' => 'Project Start', 'billing_milestone_sort_order' => 10, 'sort_order' => 10],
+                        ['name' => 'Substantial Completion', 'billing_milestone_sort_order' => 20, 'sort_order' => 20],
+                    ]);
                 }
             }
         });

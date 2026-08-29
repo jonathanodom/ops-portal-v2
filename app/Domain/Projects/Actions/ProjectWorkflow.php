@@ -2,6 +2,7 @@
 
 namespace App\Domain\Projects\Actions;
 
+use App\Domain\Commercial\ProjectMilestoneBillingWorkflow;
 use App\Domain\Projects\Contracts\CustomerDirectory;
 use App\Domain\Projects\Data\TicketSummary;
 use App\Domain\Projects\Support\ProjectNumber;
@@ -37,6 +38,7 @@ final class ProjectWorkflow
         private readonly CustomerDirectory $customers,
         private readonly ProjectNumber $numbers,
         private readonly AuditRecorder $audit,
+        private readonly ProjectMilestoneBillingWorkflow $milestoneBilling,
     ) {}
 
     public function create(Organization $organization, User $actor, array $attributes): Project
@@ -173,6 +175,9 @@ final class ProjectWorkflow
                 $milestone->completed_on = null;
             }
             $milestone->save();
+            if ($milestone->status === 'completed') {
+                $this->milestoneBilling->createDraftForCompletedMilestone($milestone, $actor);
+            }
             $this->record($project, $actor, 'milestone.updated', ['milestone_id' => $milestone->id, 'changed_fields' => array_keys($attributes), 'from_status' => $from, 'to_status' => $milestone->status]);
 
             return $milestone;
