@@ -2,7 +2,7 @@
 
 ## Scope
 
-Checkpoint 1 establishes shared Office presentation primitives and proves them on Customers, Opportunities, and Billing / Invoices. It does not change controllers, routes, authorization, queries, persistence, or workflow behavior.
+Checkpoint 1 establishes shared Office presentation primitives and proves them on Customers, Locations, Opportunities, and Billing / Invoices. It does not change controllers, routes, authorization, queries, persistence, or workflow behavior.
 
 ## Implemented foundation
 
@@ -18,6 +18,7 @@ Checkpoint 1 establishes shared Office presentation primitives and proves them o
 | Workspace | Preserved behavior | Foundation proof |
 | --- | --- | --- |
 | Customers | Existing search, status/type filtering, Customer/Location navigation, pagination, and permissions | Toolbar, filter disclosure, chips, actions, responsive results, empty state |
+| Locations | Existing search, status filtering, Customer/Location navigation, pagination, and permissions | Matching Customer workspace toolbar, filters, chips, actions, responsive results, empty state |
 | Opportunities | Existing Kanban/List preference, search, filters, sorting, and capability-gated creation | Toolbar, view switcher, filter disclosure, chips, alerts, empty state |
 | Billing / Invoices | Existing ready-handoff and invoice workspaces, search/filter/sort state, invoice creation, and settings access | Toolbar, responsive view menu/tabs, filter disclosure, chips, empty state |
 
@@ -28,7 +29,7 @@ Checkpoint 1 establishes shared Office presentation primitives and proves them o
 - 1280px and 1440px: one-row compact toolbar and dense desktop tables; invoice status uses the compact View menu.
 - 1920px: full-width workspace tables and the complete invoice status tab row.
 
-Screenshots are stored in `docs/ui-review/office-modernization/checkpoint-1/after` for all three proof workspaces at 390, 768, 1280, 1440, and 1920 pixels. Two additional Customer filter-state screenshots show the open filter panel and active chips.
+Screenshots are stored in `docs/ui-review/office-modernization/checkpoint-1/after` for all four proof indexes at 390, 768, 1280, 1440, and 1920 pixels. Two additional Customer filter-state screenshots show the open filter panel and active chips.
 
 ## Validation
 
@@ -47,7 +48,7 @@ Screenshots are stored in `docs/ui-review/office-modernization/checkpoint-1/afte
 
 ## Known limitations
 
-- The shared primitives are intentionally proven on only three representative workspaces. Applying them across the remaining Office routes belongs to Checkpoint 2.
+- The shared primitives are intentionally proven on three representative workspace groups. Applying them across the remaining Office routes belongs to Checkpoint 2.
 - No loading state is forced onto synchronous server-rendered pages; the shared component is available for workflows that have a real loading boundary.
 - The screenshot fixture has few Opportunities, so its empty-state proof is intentional.
 

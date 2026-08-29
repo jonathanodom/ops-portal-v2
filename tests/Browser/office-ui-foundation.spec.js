@@ -35,6 +35,7 @@ test('shared primary toolbar is responsive and accessible on the proof workspace
 
     for (const [id, name, path] of [
         ['C01', 'customers', '/office/customers'],
+        ['L01', 'locations', '/office/locations'],
         ['O01', 'opportunities', '/office/opportunities'],
         ['I01', 'invoices', '/office/invoices'],
     ]) {

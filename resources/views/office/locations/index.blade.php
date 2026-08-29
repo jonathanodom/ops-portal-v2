@@ -1,15 +1,30 @@
 <x-layouts.office title="Service locations" width="workspace">
-    <x-office.page-header title="Customers" description="Manage customer accounts, contacts, and service locations.">
-        @if ($activeMembership->hasCapability('customers.manage'))
-            <x-slot:actions><a href="{{ route('office.customers.create') }}" class="button-primary">Add customer</a></x-slot:actions>
-        @endif
-    </x-office.page-header>
-    <x-office.customer-workspace-tabs />
-
-    <form method="GET" class="office-filter-toolbar lg:grid-cols-[minmax(320px,1fr)_180px_auto]" aria-label="Location filters">
-        <div><label for="search" class="form-label">Search</label><input id="search" name="search" class="form-input" value="{{ request('search') }}" placeholder="Customer, location, city, or ZIP"></div>
-        <div><label for="status" class="form-label">Status</label><select id="status" name="status" class="form-input"><option value="">All locations</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
-        <div class="flex flex-wrap gap-2"><button class="button-secondary">Filter</button>@if(request()->hasAny(['search', 'status']))<a href="{{ route('office.locations.index') }}" class="inline-flex min-h-11 items-center px-2 text-sm font-bold text-brand-blue underline">Clear</a>@endif</div>
+    @php($activeFilterCount = collect(['search', 'status'])->filter(fn ($key) => filled(request($key)))->count())
+    <form method="GET" aria-label="Location filters">
+        <x-office.primary-toolbar title="Customers" description="Customer accounts, contacts, and service locations.">
+            <x-slot:search>
+                <label for="search" class="sr-only">Search service locations</label>
+                <input id="search" name="search" class="form-input" value="{{ request('search') }}" placeholder="Search customer, location, city, or ZIP">
+            </x-slot:search>
+            <x-slot:viewSwitcher><x-office.customer-workspace-tabs /></x-slot:viewSwitcher>
+            <x-slot:filters>
+                <x-office.filter-panel :active-count="$activeFilterCount">
+                    <div><label for="status" class="form-label">Status</label><select id="status" name="status" class="form-input"><option value="">All locations</option><option value="active" @selected(request('status') === 'active')>Active</option><option value="inactive" @selected(request('status') === 'inactive')>Inactive</option></select></div>
+                    <div class="mt-4 flex flex-wrap justify-end gap-2"><a href="{{ route('office.locations.index') }}" class="button-secondary">Clear all</a><button class="button-primary">Apply filters</button></div>
+                </x-office.filter-panel>
+            </x-slot:filters>
+            @if ($activeMembership->hasCapability('customers.manage'))
+                <x-slot:primaryAction><a href="{{ route('office.customers.create') }}" class="button-primary">Add customer</a></x-slot:primaryAction>
+            @endif
+            @if($activeFilterCount)
+                <x-slot:chips>
+                    <span class="text-xs font-bold uppercase tracking-wide text-slate-500">Active filters</span>
+                    @if(filled(request('search')))<x-office.filter-chip label="Search: {{ request('search') }}" :remove-url="route('office.locations.index', request()->except(['search', 'page']))" />@endif
+                    @if(filled(request('status')))<x-office.filter-chip label="Status: {{ Str::headline(request('status')) }}" :remove-url="route('office.locations.index', request()->except(['status', 'page']))" />@endif
+                    <a href="{{ route('office.locations.index') }}" class="inline-flex min-h-9 items-center px-2 text-xs font-bold text-brand-blue underline">Clear all</a>
+                </x-slot:chips>
+            @endif
+        </x-office.primary-toolbar>
     </form>
 
     <div class="office-table-wrap" data-office-table>
@@ -27,7 +42,7 @@
                         <td class="text-right"><a href="{{ route('office.locations.show', $location) }}" class="inline-flex min-h-11 items-center font-bold text-brand-blue">Open<span class="sr-only"> {{ $location->name }}</span></a></td>
                     </tr>
                 @empty
-                    <tr><td colspan="6" class="py-10 text-center"><p class="font-bold text-slate-900">No service locations found</p><p class="mt-1 text-sm text-slate-500">Clear filters to broaden the location list.</p></td></tr>
+                    <tr><td colspan="6" class="p-3"><x-office.state-panel title="No service locations found" message="Clear filters to broaden the location list." /></td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -41,7 +56,7 @@
                 <p class="mt-2 text-sm text-slate-500"><strong class="text-slate-700">Primary contact:</strong> {{ $location->primaryContact?->name ?: 'Not assigned' }}</p>
             </a>
         @empty
-            <div class="surface p-8 text-center"><p class="font-bold text-slate-900">No service locations found</p><p class="mt-1 text-sm text-slate-500">Clear filters to broaden the location list.</p></div>
+            <x-office.state-panel title="No service locations found" message="Clear filters to broaden the location list." />
         @endforelse
     </div>
     <div class="mt-5">{{ $locations->links() }}</div>
