@@ -125,8 +125,12 @@ class CustomerController extends Controller
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email:rfc', 'max:255'],
             'status' => ['required', Rule::in(array_keys(config('customers.statuses')))],
+            'tax_exempt' => ['nullable', 'boolean'],
+            'tax_exemption_reference' => ['nullable', 'required_if:tax_exempt,1', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:5000'],
         ]);
+        $data['tax_exempt'] = $request->boolean('tax_exempt');
+        $data['tax_exemption_reference'] = $data['tax_exempt'] ? ($data['tax_exemption_reference'] ?? null) : null;
         $data['phone_normalized'] = Phone::normalize($data['phone'] ?? null);
         $data['updated_by_id'] = $request->user()->id;
         if ($data['status'] === 'inactive' && $customer->serviceTickets()->whereNotIn('status', ['completed', 'canceled'])->exists()) {
@@ -152,13 +156,15 @@ class CustomerController extends Controller
 
     private function validateCreate(Request $request): array
     {
-        return $request->validate([
+        $data = $request->validate([
             'type' => ['required', Rule::in(array_keys(config('customers.types')))],
             'display_name' => ['required', 'string', 'max:255'],
             'legal_name' => ['nullable', 'string', 'max:255'],
             'phone' => ['nullable', 'string', 'max:40'],
             'email' => ['nullable', 'email:rfc', 'max:255'],
             'status' => ['required', Rule::in(array_keys(config('customers.statuses')))],
+            'tax_exempt' => ['nullable', 'boolean'],
+            'tax_exemption_reference' => ['nullable', 'required_if:tax_exempt,1', 'string', 'max:120'],
             'notes' => ['nullable', 'string', 'max:5000'],
             'contact.name' => ['nullable', 'required_with:contact.role,contact.phone,contact.email', 'string', 'max:255'],
             'contact.role' => ['nullable', 'string', 'max:255'],
@@ -174,6 +180,10 @@ class CustomerController extends Controller
             'location.access_instructions' => ['nullable', 'string', 'max:5000'],
             'location.site_notes' => ['nullable', 'string', 'max:5000'],
         ]);
+        $data['tax_exempt'] = $request->boolean('tax_exempt');
+        $data['tax_exemption_reference'] = $data['tax_exempt'] ? ($data['tax_exemption_reference'] ?? null) : null;
+
+        return $data;
     }
 
     private function organization(Request $request): Organization

@@ -40,13 +40,15 @@ class ProjectServiceTicketCreationTest extends TestCase
         $organization = Organization::factory()->create(['timezone' => 'America/Chicago']);
         [$user] = $this->userWithRole($organization, 'dispatcher');
         [$customer, $location] = $this->customerLocation($organization);
-        $project = Project::factory()->create([
-            'organization_id' => $organization->id,
+        $this->actingAs($user)->post(route('office.projects.store'), [
             'customer_id' => $customer->id,
             'service_location_id' => $location->id,
             'name' => 'Network Refresh',
-            'project_number' => 'NDT-PRJ-2026-0001',
-        ]);
+            'type' => 'installation_project',
+            'status' => 'planning',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $project = Project::query()->sole();
+        $this->assertSame('NDT-PRJ-2026-0001', $project->project_number);
 
         $this->actingAs($user)->get(route('office.projects.show', $project))
             ->assertOk()->assertSee('Create Service Ticket');
@@ -72,6 +74,18 @@ class ProjectServiceTicketCreationTest extends TestCase
         ]);
         $this->assertTrue(AuditEvent::query()->where('subject_type', $project->getMorphClass())
             ->where('subject_id', $project->id)->where('event_type', 'service_ticket.linked')->exists());
+        $this->assertTrue(AuditEvent::query()->where('subject_type', $project->getMorphClass())
+            ->where('subject_id', $project->id)->where('event_type', 'project.created')->exists());
+        $this->assertDatabaseHas('document_sequences', [
+            'organization_id' => $organization->id,
+            'document_type' => 'project',
+            'current_value' => 1,
+        ]);
+        $this->assertDatabaseHas('document_sequences', [
+            'organization_id' => $organization->id,
+            'document_type' => 'service_ticket',
+            'current_value' => 1,
+        ]);
         $this->actingAs($user)->get(route('office.projects.show', $project))
             ->assertOk()->assertSee($ticket->ticket_number)->assertSee($ticket->title);
     }

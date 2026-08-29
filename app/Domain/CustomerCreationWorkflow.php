@@ -28,6 +28,8 @@ class CustomerCreationWorkflow
                 'phone_normalized' => Phone::normalize($data['phone'] ?? null),
                 'email' => $data['email'] ?? null,
                 'status' => $data['status'] ?? 'active',
+                'tax_exempt' => (bool) ($data['tax_exempt'] ?? false),
+                'tax_exemption_reference' => $data['tax_exemption_reference'] ?? null,
                 'notes' => $data['notes'] ?? null,
                 'created_by_id' => $actor->id,
                 'updated_by_id' => $actor->id,

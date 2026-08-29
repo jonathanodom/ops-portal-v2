@@ -16,9 +16,9 @@ final class CloseoutAcknowledgmentSignatureCapture
     public function __construct(private readonly AuditRecorder $audit) {}
 
     /** @return array{bytes:string,width:int,height:int,sha256:string} */
-    public function decode(string $payload): array
+    public function decode(string $payload, ?int $maximumBytes = null, string $blankMessage = 'Draw a signature before submitting the closeout.'): array
     {
-        $max = (int) config('field_execution.ack_signature_max_bytes', 1048576);
+        $max = $maximumBytes ?? (int) config('field_execution.ack_signature_max_bytes', 1048576);
         if (strlen($payload) > (int) ceil($max * 4 / 3) + 128 || ! str_starts_with($payload, 'data:image/png;base64,')) {
             $this->invalid('Signature must be a bounded PNG captured by the signature pad.');
         }
@@ -31,7 +31,7 @@ final class CloseoutAcknowledgmentSignatureCapture
             $this->invalid('The signature must be a valid PNG with supported dimensions.');
         }
         if (! $this->hasInk($bytes)) {
-            $this->invalid('Draw a signature before submitting the closeout.');
+            $this->invalid($blankMessage);
         }
 
         return ['bytes' => $bytes, 'width' => $image[0], 'height' => $image[1], 'sha256' => hash('sha256', $bytes)];

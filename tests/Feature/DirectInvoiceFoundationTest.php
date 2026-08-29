@@ -77,6 +77,9 @@ class DirectInvoiceFoundationTest extends TestCase
         $this->assertSame($location->address_line_1, $invoice->billing_address_line_1);
         $this->assertSame($organization->name, $invoice->seller_name);
         $this->assertSame(1, Invoice::query()->count());
+        $this->assertDatabaseCount('billing_handoffs', 0);
+        $this->assertDatabaseHas('customers', ['id' => $customer->id, 'display_name' => $customer->display_name]);
+        $this->assertDatabaseHas('service_locations', ['id' => $location->id, 'customer_id' => $customer->id]);
         $this->assertSame(1, DocumentSequence::query()->where('document_type', 'invoice')->value('current_value'));
         $event = AuditEvent::query()->where('event_type', 'invoice.direct_created')->firstOrFail();
         $this->assertSame($admin->id, $event->actor_id);

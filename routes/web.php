@@ -14,6 +14,7 @@ use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
 use App\Http\Controllers\Office\BillingSettingsController;
 use App\Http\Controllers\Office\CatalogCategoryController;
+use App\Http\Controllers\Office\CatalogLaborRoleController;
 use App\Http\Controllers\Office\CatalogPackageComponentController;
 use App\Http\Controllers\Office\CatalogPackageController;
 use App\Http\Controllers\Office\CatalogProductController;
@@ -22,6 +23,10 @@ use App\Http\Controllers\Office\CatalogServiceAddonController;
 use App\Http\Controllers\Office\CatalogServiceController;
 use App\Http\Controllers\Office\CatalogServiceVariantController;
 use App\Http\Controllers\Office\CloseoutReviewController;
+use App\Http\Controllers\Office\CommercialApprovalController;
+use App\Http\Controllers\Office\CommercialLibraryController;
+use App\Http\Controllers\Office\CommercialRevisionContentController;
+use App\Http\Controllers\Office\CommercialSettingsController;
 use App\Http\Controllers\Office\ContactController;
 use App\Http\Controllers\Office\CustomerController;
 use App\Http\Controllers\Office\CustomerServiceEnrollmentController;
@@ -31,6 +36,8 @@ use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\OfficeSearchController;
 use App\Http\Controllers\Office\OperationalHealthController;
+use App\Http\Controllers\Office\OpportunityAttachmentController;
+use App\Http\Controllers\Office\OpportunityController;
 use App\Http\Controllers\Office\OrganizationSettingsController;
 use App\Http\Controllers\Office\PaymentController;
 use App\Http\Controllers\Office\PaymentSettingsController;
@@ -38,6 +45,9 @@ use App\Http\Controllers\Office\ProjectAttachmentController;
 use App\Http\Controllers\Office\ProjectController;
 use App\Http\Controllers\Office\ProjectServiceTicketController;
 use App\Http\Controllers\Office\ProjectWorkbookPrintController;
+use App\Http\Controllers\Office\ProposalPublicationController;
+use App\Http\Controllers\Office\QuoteCatalogItemController;
+use App\Http\Controllers\Office\QuoteController;
 use App\Http\Controllers\Office\ServiceLocationController;
 use App\Http\Controllers\Office\ServiceTicketController;
 use App\Http\Controllers\Office\ServiceTicketDocumentController;
@@ -57,6 +67,7 @@ use App\Http\Controllers\Office\VisitTimeAllocationController;
 use App\Http\Controllers\PaymentReceiptController;
 use App\Http\Controllers\PaymentReturnController;
 use App\Http\Controllers\PaymentWebhookController;
+use App\Http\Controllers\ProposalController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -75,6 +86,18 @@ Route::get('/payments/return/{attempt}', PaymentReturnController::class)->whereN
 Route::get('/receipts/{receipt}/{token}', [PaymentReceiptController::class, 'show'])->whereNumber('receipt')->name('payments.receipts.show');
 Route::get('/receipts/{receipt}/{token}/pdf', [PaymentReceiptController::class, 'pdf'])->whereNumber('receipt')->name('payments.receipts.pdf');
 Route::get('/receipts/{receipt}/{token}/brand', [PaymentReceiptController::class, 'brand'])->whereNumber('receipt')->name('payments.receipts.brand');
+
+Route::prefix('proposals/{token}')->where(['token' => '[A-Za-z0-9]{64,120}'])->name('proposals.')->group(function (): void {
+    Route::get('/', [ProposalController::class, 'show'])->name('show');
+    Route::post('/options', [ProposalController::class, 'options'])->name('options');
+    Route::post('/comments', [ProposalController::class, 'comment'])->name('comments.store');
+    Route::post('/request-changes', [ProposalController::class, 'requestChanges'])->name('request-changes');
+    Route::post('/email-verifications', [ProposalController::class, 'requestVerification'])->name('verifications.store');
+    Route::post('/email-verifications/{verification}', [ProposalController::class, 'verify'])->whereNumber('verification')->name('verifications.verify');
+    Route::post('/accept', [ProposalController::class, 'accept'])->name('accept');
+    Route::get('/pdf', [ProposalController::class, 'pdf'])->name('pdf');
+    Route::get('/media/{media}', [ProposalController::class, 'media'])->whereNumber('media')->name('media');
+});
 
 Route::middleware(['auth', 'active.organization', 'record.operational.failures'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
@@ -102,6 +125,69 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->group(function (): void {
             Route::get('/', [OfficeDashboardController::class, 'index'])->name('home');
             Route::get('/search', OfficeSearchController::class)->middleware('capability:customers.view')->name('search');
+            Route::prefix('opportunities')->name('opportunities.')->middleware('capability:opportunities.view')->group(function (): void {
+                Route::get('/', [OpportunityController::class, 'index'])->name('index');
+                Route::get('/create', [OpportunityController::class, 'create'])->middleware('capability:opportunities.manage')->name('create');
+                Route::post('/', [OpportunityController::class, 'store'])->middleware('capability:opportunities.manage')->name('store');
+                Route::get('/{opportunity}', [OpportunityController::class, 'show'])->whereNumber('opportunity')->name('show');
+                Route::put('/{opportunity}', [OpportunityController::class, 'update'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('update');
+                Route::post('/{opportunity}/tasks', [OpportunityController::class, 'storeTask'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('tasks.store');
+                Route::put('/{opportunity}/tasks/{task}', [OpportunityController::class, 'updateTask'])->whereNumber(['opportunity', 'task'])->middleware('capability:opportunities.manage')->name('tasks.update');
+                Route::post('/{opportunity}/activities', [OpportunityController::class, 'storeActivity'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('activities.store');
+                Route::post('/{opportunity}/attachments', [OpportunityAttachmentController::class, 'store'])->whereNumber('opportunity')->middleware('capability:opportunities.manage')->name('attachments.store');
+                Route::get('/{opportunity}/attachments/{attachment}', [OpportunityAttachmentController::class, 'show'])->whereNumber(['opportunity', 'attachment'])->name('attachments.show');
+                Route::delete('/{opportunity}/attachments/{attachment}', [OpportunityAttachmentController::class, 'destroy'])->whereNumber(['opportunity', 'attachment'])->middleware('capability:opportunities.manage')->name('attachments.destroy');
+            });
+            Route::post('/opportunities/{opportunity}/quotes', [QuoteController::class, 'store'])->whereNumber('opportunity')->middleware('capability:quotes.manage')->name('opportunities.quotes.store');
+            Route::get('/quote-approvals', [CommercialApprovalController::class, 'index'])->middleware('capability:quotes.approve')->name('quote-approvals.index');
+            Route::prefix('commercial-library')->name('commercial-library.')->middleware('capability:proposal.templates.manage')->group(function (): void {
+                Route::get('/', [CommercialLibraryController::class, 'index'])->name('index');
+                Route::post('/content-blocks', [CommercialLibraryController::class, 'block'])->name('blocks.store');
+                Route::post('/terms', [CommercialLibraryController::class, 'terms'])->name('terms.store');
+                Route::put('/templates/{template}', [CommercialLibraryController::class, 'template'])->whereNumber('template')->name('templates.update');
+                Route::post('/templates/{template}/sections', [CommercialLibraryController::class, 'section'])->whereNumber('template')->name('templates.sections.store');
+                Route::put('/templates/{template}/sections/{section}', [CommercialLibraryController::class, 'updateSection'])->whereNumber(['template', 'section'])->name('templates.sections.update');
+            });
+            Route::prefix('quotes')->name('quotes.')->middleware('capability:quotes.view')->group(function (): void {
+                Route::get('/{quote}/revisions/{revision}', [QuoteController::class, 'show'])->whereNumber(['quote', 'revision'])->name('show');
+                Route::put('/{quote}/revisions/{revision}', [QuoteController::class, 'update'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('update');
+                Route::post('/{quote}/revisions/{revision}/catalog-lines', [QuoteController::class, 'addCatalogLine'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.catalog');
+                Route::post('/{quote}/revisions/{revision}/catalog-items', [QuoteCatalogItemController::class, 'store'])->whereNumber(['quote', 'revision'])->middleware(['capability:quotes.manage', 'capability:catalog.manage', 'capability:catalog.pricing.manage'])->name('catalog-items.store');
+                Route::post('/{quote}/revisions/{revision}/allowances', [QuoteController::class, 'addAllowance'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.allowance');
+                Route::put('/{quote}/revisions/{revision}/lines/{line}', [QuoteController::class, 'updateLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.update');
+                Route::delete('/{quote}/revisions/{revision}/lines/{line}', [QuoteController::class, 'removeLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.destroy');
+                Route::post('/{quote}/revisions/{revision}/lines/{line}/copy', [QuoteController::class, 'copyLine'])->whereNumber(['quote', 'revision', 'line'])->middleware('capability:quotes.manage')->name('lines.copy');
+                Route::put('/{quote}/revisions/{revision}/lines/{line}/components/{component}', [QuoteController::class, 'updateComponent'])->whereNumber(['quote', 'revision', 'line', 'component'])->middleware('capability:quotes.manage')->name('components.update');
+                Route::post('/{quote}/revisions/{revision}/bulk-dimensions', [QuoteController::class, 'bulkAssign'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lines.bulk');
+                Route::post('/{quote}/revisions/{revision}/dimensions/{type}', [QuoteController::class, 'addDimension'])->whereNumber(['quote', 'revision'])->whereIn('type', ['locations', 'systems', 'phases'])->middleware('capability:quotes.manage')->name('dimensions.store');
+                Route::post('/{quote}/revisions/{revision}/sections', [QuoteController::class, 'addSection'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('sections.store');
+                Route::post('/{quote}/revisions/{revision}/milestones', [QuoteController::class, 'addMilestone'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('milestones.store');
+                Route::post('/{quote}/revisions/{revision}/lock', [QuoteController::class, 'lock'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('lock');
+                Route::post('/{quote}/revisions/{revision}/clone', [QuoteController::class, 'clone'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('clone');
+                Route::put('/{quote}/revisions/{revision}/terms', [CommercialRevisionContentController::class, 'terms'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('terms.update');
+                Route::post('/{quote}/revisions/{revision}/content-blocks', [CommercialRevisionContentController::class, 'block'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('content-blocks.store');
+                Route::post('/{quote}/revisions/{revision}/media', [CommercialRevisionContentController::class, 'upload'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('media.upload');
+                Route::post('/{quote}/revisions/{revision}/media/embed', [CommercialRevisionContentController::class, 'embed'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('media.embed');
+                Route::get('/{quote}/revisions/{revision}/media/{media}', [CommercialRevisionContentController::class, 'show'])->whereNumber(['quote', 'revision', 'media'])->name('media.show');
+                Route::delete('/{quote}/revisions/{revision}/media/{media}', [CommercialRevisionContentController::class, 'destroy'])->whereNumber(['quote', 'revision', 'media'])->middleware('capability:quotes.manage')->name('media.destroy');
+                Route::post('/{quote}/revisions/{revision}/approval', [CommercialApprovalController::class, 'submit'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.manage')->name('approval.submit');
+                Route::post('/{quote}/revisions/{revision}/publications', [ProposalPublicationController::class, 'store'])->whereNumber(['quote', 'revision'])->middleware('capability:quotes.publish')->name('publications.store');
+            });
+            Route::post('/quote-approvals/{approval}/decision', [CommercialApprovalController::class, 'decide'])->whereNumber('approval')->middleware('capability:quotes.approve')->name('quote-approvals.decide');
+            Route::prefix('proposal-publications/{publication}')->whereNumber('publication')->name('proposal-publications.')->group(function (): void {
+                Route::get('/', [ProposalPublicationController::class, 'show'])->name('show');
+                Route::get('/pdf', [ProposalPublicationController::class, 'pdf'])->name('pdf');
+                Route::post('/pdf/retry', [ProposalPublicationController::class, 'retryPdf'])->middleware('capability:quotes.publish')->name('pdf.retry');
+                Route::post('/recipients', [ProposalPublicationController::class, 'recipient'])->middleware('capability:quotes.publish')->name('recipients.store');
+                Route::post('/share-links', [ProposalPublicationController::class, 'shareLink'])->middleware('capability:quotes.publish')->name('share-links.store');
+                Route::post('/recipients/{recipient}/revoke', [ProposalPublicationController::class, 'revokeRecipient'])->whereNumber('recipient')->middleware('capability:quotes.publish')->name('recipients.revoke');
+                Route::post('/share-links/{shareLink}/revoke', [ProposalPublicationController::class, 'revokeShareLink'])->whereNumber('shareLink')->middleware('capability:quotes.publish')->name('share-links.revoke');
+                Route::post('/recipients/{recipient}/deliver', [ProposalPublicationController::class, 'deliver'])->whereNumber('recipient')->middleware('capability:quotes.publish')->name('deliver');
+                Route::post('/withdraw', [ProposalPublicationController::class, 'withdraw'])->middleware('capability:quotes.publish')->name('withdraw');
+                Route::post('/extend', [ProposalPublicationController::class, 'extend'])->middleware(['capability:quotes.publish', 'capability:opportunities.admin'])->name('extend');
+                Route::post('/comments', [ProposalPublicationController::class, 'comment'])->middleware('capability:proposal.engagement.view')->name('comments.store');
+                Route::get('/acceptances/{acceptance}/signature', [ProposalPublicationController::class, 'signature'])->whereNumber('acceptance')->middleware('capability:proposal.engagement.view')->name('acceptances.signature');
+            });
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');
                 Route::get('/create', [ProjectController::class, 'create'])->middleware('capability:projects.manage')->name('create');
@@ -219,6 +305,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::post('/invoices/{invoice}/receipts/{receipt}/link', [PaymentController::class, 'receiptLink'])->whereNumber(['invoice', 'receipt'])->name('invoices.receipts.link');
             Route::post('/invoices/{invoice}/receipts/{receipt}/retry', [PaymentController::class, 'retryReceipt'])->whereNumber(['invoice', 'receipt'])->name('invoices.receipts.retry');
             Route::get('/settings', [OrganizationSettingsController::class, 'index'])->name('settings.index');
+            Route::get('/settings/commercial', [CommercialSettingsController::class, 'edit'])->middleware('capability:opportunities.admin')->name('settings.commercial.edit');
+            Route::put('/settings/commercial', [CommercialSettingsController::class, 'update'])->middleware('capability:opportunities.admin')->name('settings.commercial.update');
             Route::get('/settings/billing', [BillingSettingsController::class, 'edit'])->name('settings.billing.edit');
             Route::post('/settings/billing/payments/square/connect', [SquareConnectionController::class, 'start'])->name('settings.billing.square.connect');
             Route::get('/settings/billing/payments/square/callback', [SquareConnectionController::class, 'callback'])->name('settings.billing.square.callback');
@@ -286,6 +374,11 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::get('/packages/{package}', [CatalogPackageController::class, 'show'])->whereNumber('package')->name('packages.show');
                 Route::get('/categories', [CatalogCategoryController::class, 'index'])->name('categories.index');
                 Route::get('/units', [UnitOfMeasureController::class, 'index'])->name('units.index');
+                Route::middleware('capability:catalog.pricing.manage')->group(function (): void {
+                    Route::get('/labor-roles', [CatalogLaborRoleController::class, 'index'])->name('labor-roles.index');
+                    Route::post('/labor-roles', [CatalogLaborRoleController::class, 'store'])->name('labor-roles.store');
+                    Route::put('/labor-roles/{laborRole}', [CatalogLaborRoleController::class, 'update'])->whereNumber('laborRole')->name('labor-roles.update');
+                });
                 Route::middleware('capability:catalog.manage')->group(function (): void {
                     Route::get('/services/create', [CatalogServiceController::class, 'create'])->name('services.create');
                     Route::post('/services', [CatalogServiceController::class, 'store'])->name('services.store');

@@ -193,7 +193,9 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertSame('Taylor Customer', $signature->signer_name);
         $this->assertSame('Site manager', $signature->signer_role);
         $this->assertStringNotContainsString('Taylor', $signature->storage_key);
+        $this->assertMatchesRegularExpression('#^field-acknowledgments/\d{4}/\d{2}/[0-9a-f-]{36}\.png$#', $signature->storage_key);
         Storage::disk('local')->assertExists($signature->storage_key);
+        $this->assertSame(hash('sha256', Storage::disk('local')->get($signature->storage_key)), $signature->sha256);
         $this->actingAs($lead)->get(route('closeout-acknowledgment-signatures.show', $signature))
             ->assertOk()->assertHeader('Cache-Control', 'no-store, private');
         [$reviewer] = $this->userWithRole('reviewer', $organization);
@@ -203,7 +205,10 @@ class MobileFieldExecutionTest extends TestCase
         $this->actingAs($billing)->get(route('closeout-acknowledgment-signatures.show', $signature))->assertForbidden();
         [$outsider] = $this->userWithRole('super_admin');
         $this->actingAs($outsider)->get(route('closeout-acknowledgment-signatures.show', $signature))->assertNotFound();
-        $this->assertDatabaseHas('audit_events', ['event_type' => 'closeout.customer_acknowledgment_signed']);
+        $audit = AuditEvent::query()->where('event_type', 'closeout.customer_acknowledgment_signed')->firstOrFail();
+        $this->assertTrue($audit->metadata['signer_name_present']);
+        $this->assertArrayNotHasKey('storage_key', $audit->metadata);
+        $this->assertStringNotContainsString('Taylor Customer', json_encode($audit->metadata, JSON_THROW_ON_ERROR));
     }
 
     public function test_acknowledgment_fallback_needs_no_signature_and_signature_pad_rejects_blank_or_mixed_submission(): void
@@ -401,6 +406,8 @@ class MobileFieldExecutionTest extends TestCase
 
         $metadata = AuditEvent::query()->where('event_type', 'closeout.submitted')->firstOrFail()->metadata;
         $this->assertTrue($metadata['execute_any_override']);
+        $this->assertSame($dispatcher->id, AuditEvent::query()->where('event_type', 'closeout.submitted')->firstOrFail()->actor_id);
+        $this->assertArrayNotHasKey('capability_override', $metadata);
     }
 
     public function test_super_admin_can_execute_any_visit_without_an_assignment(): void

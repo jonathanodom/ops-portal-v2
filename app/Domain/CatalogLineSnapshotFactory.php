@@ -112,14 +112,32 @@ class CatalogLineSnapshotFactory
         })->values()->all();
         $demand = $this->packageDemand->calculate($package, $quantityMillis);
 
+        $price = $package->default_price_cents === null ? null : (int) $package->default_price_cents;
+        if ($package->pricing_model === 'component_sum') {
+            $price = 0;
+            foreach ($package->components->where('active', true) as $component) {
+                $item = $component->component_type === 'product' ? $component->product : $component->service;
+                $unitPrice = $component->component_type === 'product' ? $item?->default_sell_price_cents : $item?->default_price_cents;
+                if ($unitPrice === null) {
+                    $price = null;
+                    break;
+                }
+                $withWaste = $component->component_type === 'product'
+                    ? intdiv(((int) $component->quantity_millis * (10000 + (int) $component->waste_basis_points)) + 5000, 10000)
+                    : (int) $component->quantity_millis;
+                $price += intdiv(($withWaste * (int) $unitPrice) + 500, 1000);
+            }
+        }
+
         return $this->snapshot(
             'package', $quantityMillis, $package->package_code, $package->name,
             $package->customer_description ?: $package->name,
             $package->salesUom->code, $package->salesUom->name,
-            $package->default_price_cents === null ? null : (int) $package->default_price_cents,
+            $price,
             $package->taxable,
             [
                 'catalog_package_id' => $package->id,
+                'catalog_package_pricing_model' => $package->pricing_model,
                 'catalog_package_recipe_snapshot' => [
                     'package_sales_uom' => ['code' => $package->salesUom->code, 'name' => $package->salesUom->name],
                     'selected_quantity_millis' => $quantityMillis,

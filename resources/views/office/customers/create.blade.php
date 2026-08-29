@@ -16,6 +16,7 @@
                 <div><label for="legal_name" class="form-label">Legal name <span class="font-normal text-slate-500">(optional)</span></label><input id="legal_name" name="legal_name" class="form-input" value="{{ old('legal_name') }}"></div>
                 <div><label for="phone" class="form-label">Main phone</label><input id="phone" name="phone" type="tel" class="form-input" value="{{ old('phone') }}"></div>
                 <div><label for="email" class="form-label">Main email</label><input id="email" name="email" type="email" class="form-input" value="{{ old('email') }}"></div>
+                <div class="sm:col-span-2 rounded-lg border border-slate-200 bg-slate-50 p-4"><label class="flex min-h-11 items-center gap-3"><input type="checkbox" name="tax_exempt" value="1" @checked(old('tax_exempt'))><span class="font-bold">Customer is tax exempt</span></label><label for="tax_exemption_reference" class="form-label mt-2">Exemption reference</label><input id="tax_exemption_reference" name="tax_exemption_reference" class="form-input" value="{{ old('tax_exemption_reference') }}"><p class="mt-2 text-xs text-slate-500">New Quote revisions snapshot this status and reference.</p></div>
                 <div class="sm:col-span-2"><label for="notes" class="form-label">Office notes</label><textarea id="notes" name="notes" class="form-textarea">{{ old('notes') }}</textarea><p class="mt-2 text-xs text-slate-500">Never shown in the field directory.</p></div>
             </div>
         </section>

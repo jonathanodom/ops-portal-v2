@@ -158,6 +158,20 @@ Phase 8.7 makes Catalog authoritative for new labor and trip-charge pricing whil
 
 Release Candidate V1.0 validation, data-preservation evidence, lifecycle changes, mobile before/after review, rollback notes, and the manual production acceptance gate are documented in [Release Candidate V1.0](docs/RELEASE_CANDIDATE_V1_0.md).
 
+## Commercial Operations V1 architecture
+
+The next additive product track connects Customers and Catalog to Opportunities, revisioned Quotes, customer-facing Proposals, acceptance, Change Orders, Project conversion, material/labor planning, and milestone Billing. The approved product decisions, bounded-context rules, proposed schema, authorization model, calculation order, implementation checkpoints, and field-test isolation requirements are documented in [Commercial Operations V1 Architecture](docs/COMMERCIAL_OPERATIONS_V1_ARCHITECTURE.md). The document is an implementation contract only; it does not authorize deployment or change the current field lifecycle.
+
+Commercial Operations Phase 2 adds the internal revisioned Quote builder, immutable Catalog and Package recipe snapshots, deterministic estimating calculations, revision-owned dimensions, options, Allowances, and payment schedules. See [Commercial Operations Phase 2](docs/COMMERCIAL_OPERATIONS_PHASE_2.md) for its schema, calculation rules, authorization, preservation evidence, UI checklist, and exclusions.
+
+Commercial Operations Phase 3 adds approved Service/labor-role estimating costs, fixed and component-sum Package pricing, immutable cost provenance, and an authorized transactional Quote-to-Catalog item overlay. See [Commercial Operations Phase 3](docs/COMMERCIAL_OPERATIONS_PHASE_3.md) for the schema, resolution order, preservation evidence, UI checklist, and deferred Checkpoint 4 boundary.
+
+Commercial Operations Phase 4 adds content-hash-bound approvals, reusable Proposal content and templates, immutable internal publications, private Proposal media/PDF generation, and local/test-only delivery infrastructure. See [Commercial Operations Phase 4](docs/COMMERCIAL_OPERATIONS_PHASE_4.md) for the schema, approval matrix, preservation evidence, validation results, UI checklist, and explicit Phase 5 boundary.
+
+Commercial Operations Phase 5 activates secure hash-only Proposal access, customer options and comments, change requests, immutable signature acceptance, engagement history, expiration review, and bounded Opportunity automation. See [Commercial Operations Phase 5](docs/COMMERCIAL_OPERATIONS_PHASE_5.md) for its response rules, acceptance boundary, preservation evidence, and explicit Phase 6 exclusions.
+
+The implemented Opportunity foundation and its Phase 1 owner acceptance gate are documented in [Commercial Operations Phase 1](docs/COMMERCIAL_OPERATIONS_PHASE_1.md).
+
 ## Quality commands
 
 ```powershell
