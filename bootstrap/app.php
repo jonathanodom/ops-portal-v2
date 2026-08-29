@@ -13,6 +13,8 @@ use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
 use Illuminate\Http\Request;
 use Illuminate\Validation\ValidationException;
+use Laravel\Sanctum\Http\Middleware\CheckAbilities;
+use Laravel\Sanctum\Http\Middleware\CheckForAnyAbility;
 use Symfony\Component\HttpKernel\Exception\HttpExceptionInterface;
 
 return Application::configure(basePath: dirname(__DIR__))
@@ -29,6 +31,8 @@ return Application::configure(basePath: dirname(__DIR__))
             'active.organization' => ResolveActiveOrganization::class,
             'capability' => RequireCapability::class,
             'record.operational.failures' => RecordOperationalFailures::class,
+            'abilities' => CheckAbilities::class,
+            'ability' => CheckForAnyAbility::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -65,7 +69,17 @@ return Application::configure(basePath: dirname(__DIR__))
                     429 => 'rate_limited',
                     default => $status >= 500 ? 'server_error' : 'request_failed',
                 };
-                $message = $status >= 500 ? 'An unexpected error occurred.' : ($e->getMessage() ?: 'The request could not be completed.');
+                // Illuminate's exception handler converts ModelNotFoundException to
+                // NotFoundHttpException (with the original as ->getPrevious()) before
+                // any render() callback runs, so the instanceof check above never
+                // matches in practice. Guard here too so the framework's internal
+                // "No query results for model [...]" message can never leak.
+                $frameworkNotFound = $e->getPrevious() instanceof ModelNotFoundException;
+                $message = match (true) {
+                    $status >= 500 => 'An unexpected error occurred.',
+                    $frameworkNotFound => 'The requested resource was not found.',
+                    default => $e->getMessage() ?: 'The request could not be completed.',
+                };
 
                 return ApiResponse::error($request, $code, $message, $status);
             }
