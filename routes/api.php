@@ -3,6 +3,7 @@
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\MeController;
+use App\Http\Controllers\Api\V1\TicketController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -36,4 +37,13 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active.organization'])->group(
     Route::get('/contacts/search', [ContactController::class, 'search'])
         ->middleware(['abilities:contacts.read', 'capability:api.contacts.read'])
         ->name('api.v1.contacts.search');
+
+    Route::middleware(['abilities:tickets.read', 'capability:api.tickets.read'])->group(function (): void {
+        Route::get('/tickets', [TicketController::class, 'index'])->name('api.v1.tickets.index');
+        Route::get('/tickets/{ticket}', [TicketController::class, 'show'])->name('api.v1.tickets.show');
+    });
+
+    Route::post('/tickets', [TicketController::class, 'store'])
+        ->middleware(['abilities:tickets.create', 'capability:api.tickets.create'])
+        ->name('api.v1.tickets.store');
 });

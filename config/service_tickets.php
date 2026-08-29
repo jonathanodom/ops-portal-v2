@@ -12,6 +12,9 @@ return [
         'email' => 'Email',
         'web' => 'Web',
         'internal' => 'Internal',
+        // Additive: JARVIS-created tickets via /api/v1, per
+        // docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md §8.3 example payload.
+        'jarvis' => 'JARVIS (AI agent)',
         'other' => 'Other',
     ],
     'purposes' => [

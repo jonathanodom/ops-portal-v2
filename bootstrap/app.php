@@ -5,6 +5,7 @@ use App\Http\Middleware\RecordOperationalFailures;
 use App\Http\Middleware\RequireCapability;
 use App\Http\Middleware\ResolveActiveOrganization;
 use App\Support\Api\ApiResponse;
+use App\Support\Api\IdempotencyKeyInFlightException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -55,6 +56,10 @@ return Application::configure(basePath: dirname(__DIR__))
 
             if ($e instanceof ModelNotFoundException) {
                 return ApiResponse::error($request, 'not_found', 'The requested resource was not found.', 404);
+            }
+
+            if ($e instanceof IdempotencyKeyInFlightException) {
+                return ApiResponse::error($request, 'conflict', $e->getMessage(), 409);
             }
 
             if ($e instanceof HttpExceptionInterface) {
