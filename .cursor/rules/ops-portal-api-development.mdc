@@ -1,0 +1,568 @@
+---
+description: Ops Portal API development architecture, safety, and cost-control rules
+alwaysApply: true
+---
+
+# Ops Portal API Development Rule
+
+## 1. Primary Objective
+
+Develop the Ops Portal API incrementally and safely while preserving all existing production functionality.
+
+The authoritative implementation plan is:
+
+`OPS_PORTAL_API_IMPLEMENTATION_PLAN_v0.1.md`
+
+If the repository currently contains:
+
+`OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md`
+
+treat that document as the same authoritative implementation plan until it is renamed.
+
+Do not redesign the architecture, API contract, authentication model, RBAC model, DTO format, or service boundaries unless explicitly instructed by the user.
+
+---
+
+# 2. Model and Cost Policy
+
+This project is intended to be developed primarily with Claude Sonnet 5.
+
+Assume:
+
+- Sonnet 5 is the normal development model.
+- Opus 5 is an escalation model only.
+- Do not recommend Opus merely because a task is large.
+- Prefer decomposing large tasks into smaller Sonnet-sized work packages.
+- Avoid unnecessary long-context analysis.
+- Avoid repeatedly rereading large files when targeted searches are sufficient.
+- Do not regenerate working code merely to change style.
+- Do not perform speculative refactors outside the current work package.
+
+The objective is:
+
+> Use the least expensive model and smallest context necessary to complete the task correctly.
+
+---
+
+# 3. When Sonnet Should Continue
+
+Proceed normally with Sonnet for:
+
+- API endpoints
+- controllers
+- services
+- repositories
+- DTOs
+- request validation
+- response serialization
+- database migrations
+- RBAC scopes
+- service-account authentication implementation
+- OpenAPI definitions
+- tests
+- documentation
+- normal debugging
+- existing-code analysis
+- localized refactors
+- repetitive implementation
+- CRUD functionality
+- webhook implementation
+- audit logging
+- integration tests
+
+Do not request escalation merely because several files are involved.
+
+---
+
+# 4. When to Recommend Opus Escalation
+
+Do not automatically attempt increasingly broad rewrites when uncertain.
+
+Recommend switching the current task to Opus 5 only when one or more of the following is true:
+
+1. A high-risk architectural decision cannot be resolved from the implementation plan or existing code.
+
+2. Authentication or authorization changes may affect multiple existing production authentication flows and the correct behavior cannot be confidently established.
+
+3. A refactor spans multiple tightly coupled subsystems and preserving existing behavior requires substantial cross-system reasoning.
+
+4. A persistent integration or regression failure remains unexplained after reasonable targeted investigation.
+
+5. There are contradictory implementations or requirements and choosing incorrectly could cause data loss, privilege escalation, security exposure, or production outage.
+
+6. Sonnet has made two focused attempts at the same underlying problem without determining the root cause.
+
+7. A database migration or schema transformation has material risk of destructive data modification.
+
+When escalation is appropriate, STOP before making speculative high-risk changes and report:
+
+- the specific unresolved problem,
+- what has already been investigated,
+- relevant files/components,
+- current hypothesis,
+- risk of proceeding,
+- recommended Opus task prompt.
+
+Do not simply say "use Opus."
+
+Provide a concise handoff package so the higher-cost model can begin with minimal additional repository exploration.
+
+---
+
+# 5. Architecture Boundary
+
+The target architecture is:
+
+Ops Portal UI
+→ Ops application/services
+→ database
+
+and:
+
+JARVIS Core
+→ authenticated HTTPS API
+→ Ops application/services
+→ database
+
+JARVIS must never receive direct database access.
+
+Do not create API endpoints that directly expose arbitrary SQL execution, unrestricted database access, internal credentials, or administrative application internals.
+
+---
+
+# 6. API Versioning
+
+All new JARVIS-facing API endpoints belong under:
+
+`/api/v1`
+
+Do not introduce unversioned external endpoints.
+
+Preserve future API versioning capability.
+
+---
+
+# 7. Service Layer Rule
+
+Do not duplicate business logic solely for API use.
+
+Where practical:
+
+Existing UI
+and
+API controller
+
+should both call shared application/service logic.
+
+Preferred structure:
+
+Controller
+→ Service
+→ Repository/Data Layer
+→ Database
+
+Avoid:
+
+API Controller
+→ raw SQL
+
+when established application services can reasonably contain the business logic.
+
+Incremental extraction is preferred over a wholesale rewrite.
+
+---
+
+# 8. Existing Application Protection
+
+The current Ops Portal is a functioning single-company application.
+
+Do not convert it into multi-tenant SaaS during this build phase.
+
+Do not introduce:
+
+- tenant_id migrations
+- SaaS billing
+- organization isolation
+- white-label routing
+- tenant-specific domains
+- tenant-specific storage
+
+unless explicitly requested.
+
+Maintain architectural seams that would permit such a conversion later, but do not build those systems now.
+
+---
+
+# 9. JARVIS Service Identity
+
+JARVIS must authenticate through its own service identity.
+
+Do not reuse a human administrator account for machine access.
+
+Design authentication so JARVIS receives only explicitly granted scopes.
+
+Initial scope families include:
+
+- customers.read
+- contacts.read
+- locations.read
+- projects.read
+- tickets.read
+- tickets.create
+- tickets.update
+- communications.create
+
+Administrative capabilities must not be granted implicitly.
+
+Examples of capabilities that should remain unavailable unless explicitly added later:
+
+- users.manage
+- roles.manage
+- permissions.manage
+- database.admin
+- destructive administrative operations
+
+---
+
+# 10. Two-Layer Authorization Principle
+
+Ops Portal RBAC determines what JARVIS is technically permitted to do.
+
+JARVIS Core separately determines what the AI is autonomously permitted to do.
+
+Do not attempt to implement JARVIS autonomy policy inside the Ops Portal API.
+
+Example:
+
+Ops Portal may allow:
+
+`tickets.create`
+
+JARVIS may still require human approval according to its own policy.
+
+Keep these concerns separate.
+
+---
+
+# 11. Initial API Scope
+
+Prioritize the v0.1 integration surface.
+
+Core endpoints should cover:
+
+## Customers
+
+- customer search
+- customer detail
+
+## Contacts
+
+- contact search
+- customer contacts where needed
+
+## Locations
+
+- locations associated with a customer
+
+## Tickets
+
+- ticket search/list
+- ticket detail
+- create ticket
+- update ticket
+
+## Projects
+
+- project detail
+- projects associated with a customer
+
+Implement additional domains only according to the approved implementation plan or explicit user instruction.
+
+---
+
+# 12. API Contract Stability
+
+The Ops Portal API and JARVIS are being developed independently.
+
+Therefore:
+
+- avoid unnecessary contract changes,
+- maintain predictable JSON structures,
+- use consistent error responses,
+- preserve field names once accepted,
+- document breaking changes before implementing them,
+- update OpenAPI whenever the external contract changes.
+
+OpenAPI is the machine-readable source of truth for JARVIS integration.
+
+---
+
+# 13. OpenAPI Requirement
+
+Maintain an OpenAPI specification for `/api/v1`.
+
+Whenever an API contract changes:
+
+1. update implementation,
+2. update validation,
+3. update OpenAPI,
+4. update tests.
+
+Do not allow the documentation and implementation to intentionally diverge.
+
+---
+
+# 14. Idempotency
+
+Any endpoint that may be triggered by an AI agent, automation, retrying worker, webhook processor, or unreliable network operation should be evaluated for idempotency.
+
+Ticket creation and other potentially duplicate-producing operations should support an idempotency mechanism when specified by the implementation plan.
+
+Never assume an AI-originating request will only be submitted once.
+
+---
+
+# 15. Request Correlation
+
+Support request/correlation IDs through the API where defined.
+
+Preserve correlation metadata through:
+
+JARVIS request
+→ API request
+→ Ops action
+→ audit event
+
+This is required for future debugging and AI action tracing.
+
+---
+
+# 16. Audit Logging
+
+Meaningful API actions by service identities must be auditable.
+
+Audit data should identify, where applicable:
+
+- service identity
+- user identity if delegated
+- timestamp
+- request ID
+- action
+- target resource
+- result
+- source IP or relevant origin metadata
+- changed fields where appropriate
+
+Never log:
+
+- access tokens
+- refresh tokens
+- passwords
+- secret keys
+- raw sensitive credentials
+
+---
+
+# 17. Security Rule
+
+Treat all external API input as untrusted.
+
+Use:
+
+- authentication
+- authorization
+- validation
+- parameterized queries/repository methods
+- bounded pagination
+- secure error handling
+- rate limiting where appropriate
+- secret management
+- HTTPS in production
+
+Do not return database errors, stack traces, credentials, internal paths, or sensitive implementation details to API consumers.
+
+---
+
+# 18. Database Safety
+
+Before schema changes:
+
+1. inspect the current schema,
+2. understand existing application usage,
+3. determine migration impact,
+4. preserve existing records,
+5. create reversible migrations whenever practical,
+6. test migration behavior.
+
+Do not drop columns, rewrite large datasets, rename critical fields, or perform destructive migrations without explicit approval.
+
+---
+
+# 19. Testing Requirement
+
+Every completed API work package should include relevant tests.
+
+At minimum test:
+
+- authorized success
+- unauthorized request
+- insufficient scope
+- validation failure
+- missing resource
+- expected response structure
+- relevant database change
+- regression-sensitive existing behavior
+
+For write endpoints, test idempotency where applicable.
+
+A work package is not complete simply because the endpoint returns a successful response manually.
+
+---
+
+# 20. Regression Protection
+
+Existing Ops Portal behavior takes priority over architectural elegance.
+
+If a cleaner API architecture would require unnecessarily destabilizing working production functionality:
+
+- preserve the current behavior,
+- introduce a compatible seam,
+- document technical debt,
+- continue incrementally.
+
+Do not perform broad rewrites unless explicitly approved.
+
+---
+
+# 21. Repository Exploration Policy
+
+Before editing:
+
+- inspect the relevant routes,
+- locate existing service/business logic,
+- locate database interaction,
+- locate authentication/RBAC implementation,
+- locate existing tests.
+
+Do not read the entire repository without a reason.
+
+Prefer targeted search and dependency tracing.
+
+Reuse established project conventions unless they conflict with the authoritative architecture plan.
+
+---
+
+# 22. Work-Package Discipline
+
+Implement one coherent work package at a time.
+
+For each package:
+
+1. inspect relevant existing code,
+2. state the intended change internally,
+3. implement the smallest correct change,
+4. add/update tests,
+5. run relevant tests,
+6. fix regressions,
+7. update OpenAPI/docs if needed,
+8. summarize what changed.
+
+Avoid combining unrelated refactors into the same work package.
+
+---
+
+# 23. Do Not Invent Missing Business Rules
+
+When existing code clearly establishes a business rule, preserve it.
+
+When the implementation plan establishes a rule, follow it.
+
+When neither establishes an important behavior:
+
+- prefer existing application behavior,
+- avoid inventing new policy,
+- surface the ambiguity if it materially affects correctness or security.
+
+Do not use a refactor as an opportunity to silently change business behavior.
+
+---
+
+# 24. Git Discipline
+
+Work on an appropriate feature branch.
+
+Prefer focused commits representing coherent changes.
+
+Do not commit:
+
+- secrets
+- local environment files
+- tokens
+- credentials
+- generated temporary artifacts
+- debugging dumps
+
+Do not force-push or rewrite shared history unless explicitly instructed.
+
+---
+
+# 25. Completion Report
+
+At the end of each substantial work package, report:
+
+## Implemented
+What was added or changed.
+
+## Files
+Primary files modified.
+
+## Tests
+Tests added and commands executed.
+
+## API Contract
+Any OpenAPI/API changes.
+
+## Security
+Authentication, authorization, or permission implications.
+
+## Remaining
+Known follow-up items.
+
+## Escalation
+Whether any unresolved issue merits Opus review.
+
+Keep this concise and factual.
+
+---
+
+# 26. First Integration Objective
+
+The initial shared Ops Portal/JARVIS integration must support this sequence:
+
+1. JARVIS searches for a customer.
+2. Ops Portal returns the matching customer.
+3. JARVIS retrieves that customer's open tickets.
+4. JARVIS creates a service ticket.
+5. Ops Portal validates JARVIS's scope.
+6. Ops Portal records the action in its audit history.
+7. The created ticket is immediately retrievable through the API.
+
+This is the primary v0.1 API integration milestone.
+
+---
+
+# 27. Governing Principle
+
+Preserve production behavior.
+
+Build incrementally.
+
+Use established services.
+
+Keep JARVIS behind a controlled API boundary.
+
+Maintain a stable OpenAPI contract.
+
+Spend advanced-model resources only where advanced reasoning is genuinely necessary.
+
+When in doubt, prefer a smaller safe change over a large speculative rewrite.
