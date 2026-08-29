@@ -39,10 +39,12 @@ use App\Models\ServiceLocation;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Support\IncidentRecorder;
+use Closure;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
 use Illuminate\Support\Str;
@@ -85,6 +87,25 @@ class CommercialOperationsPhase4Test extends TestCase
         $this->assertSame($publication->id, $retry->id);
         $this->assertSame('Proposal item', $retry->snapshot['lines'][0]['description']);
         Queue::assertPushed(RenderProposalPublicationPdf::class, fn ($job) => $job->publicationId === $publication->id);
+    }
+
+    public function test_commercial_read_surfaces_stay_within_bounded_query_budgets(): void
+    {
+        Queue::fake();
+        [$organization, $admin, $opportunity, $revision, $terms] = $this->context(8000, 10000);
+
+        $this->assertQueryBudget(65, fn () => $this->actingAs($admin)->get(route('office.opportunities.index')));
+        $this->assertQueryBudget(80, fn () => $this->actingAs($admin)->get(route('office.opportunities.show', $opportunity)));
+        $this->assertQueryBudget(85, fn () => $this->actingAs($admin)->get(route('office.quotes.show', [$revision->document, $revision])));
+
+        app(QuoteWorkflow::class)->updateTerms($revision, $terms, $admin, $revision->content_version, null);
+        app(CommercialApprovalWorkflow::class)->submit($revision->fresh(), $admin);
+        $template = ProposalTemplate::query()->forOrganization($organization->id)->where('template_type', 'budgetary_estimate')->sole();
+        $publication = app(ProposalPublicationWorkflow::class)->publish($revision->fresh(), $template, $admin, ['expires_at' => now()->addDays(30), 'acceptance_enabled' => false, 'labor_grouping' => 'location']);
+        [, $token] = app(ProposalPublicationWorkflow::class)->addShareLink($publication, $admin, 'Phase 9 performance link');
+
+        $this->assertQueryBudget(75, fn () => $this->actingAs($admin)->get(route('office.proposal-publications.show', $publication)));
+        $this->assertQueryBudget(50, fn () => $this->get(route('proposals.show', $token)));
     }
 
     public function test_all_approval_triggers_are_captured_together_without_sensitive_content(): void
@@ -380,6 +401,8 @@ class CommercialOperationsPhase4Test extends TestCase
         $this->assertSame(-1000, $scope->materialItems()->sole()->delta_quantity_millis);
         $this->assertSame(15000, $baseline->project->currentContractTotalCents());
         $this->assertDatabaseCount('project_commercial_scopes', 2);
+        $this->assertQueryBudget(85, fn () => $this->actingAs($admin)->get(route('office.quotes.show', [$changeOrder, $changeRevision])));
+        $this->assertQueryBudget(95, fn () => $this->actingAs($admin)->get(route('office.projects.show', $baseline->project)));
     }
 
     public function test_reminder_job_is_organization_local_and_idempotent(): void
@@ -519,5 +542,17 @@ class CommercialOperationsPhase4Test extends TestCase
         $png = "\x89PNG\r\n\x1a\n".$chunk('IHDR', pack('NNCCCCC', $width, $height, 8, 6, 0, 0, 0)).$chunk('IDAT', gzcompress($raw, 9)).$chunk('IEND', '');
 
         return 'data:image/png;base64,'.base64_encode($png);
+    }
+
+    private function assertQueryBudget(int $maximum, Closure $request): void
+    {
+        DB::flushQueryLog();
+        DB::enableQueryLog();
+        $response = $request();
+        $count = count(DB::getQueryLog());
+        DB::disableQueryLog();
+
+        $response->assertOk();
+        $this->assertLessThanOrEqual($maximum, $count, "Commercial read query budget exceeded: {$count} queries (maximum {$maximum}).");
     }
 }
