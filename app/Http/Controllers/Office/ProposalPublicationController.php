@@ -59,7 +59,7 @@ final class ProposalPublicationController extends Controller
         $canEngagement = Gate::allows('viewEngagement', $publication->revision->document);
         $canExtend = $canPublish && $request->attributes->get('membership')->hasCapability('opportunities.admin');
         if ($canEngagement) {
-            $publication->load(['engagementEvents.recipient', 'engagementEvents.shareLink', 'comments.staffUser', 'acceptance.milestones']);
+            $publication->load(['engagementEvents.recipient', 'engagementEvents.shareLink', 'comments.staffUser', 'acceptance.milestones.invoice']);
         }
         $opportunity = $publication->revision->document->opportunity;
         $audits = AuditEvent::query()

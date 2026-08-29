@@ -23,6 +23,7 @@ final class ProposalAcceptanceWorkflow
         private readonly ProposalEmailVerificationWorkflow $verification,
         private readonly CloseoutAcknowledgmentSignatureCapture $signatureValidator,
         private readonly CommercialOpportunityAutomation $opportunities,
+        private readonly ProposalDepositInvoiceWorkflow $depositInvoices,
         private readonly AuditRecorder $audit,
     ) {}
 
@@ -98,6 +99,7 @@ final class ProposalAcceptanceWorkflow
                 $publication->update(['status' => 'accepted', 'accepted_at' => now()]);
                 $opportunity = Opportunity::query()->whereKey($publication->revision->document->opportunity_id)->lockForUpdate()->firstOrFail();
                 $this->opportunities->won($opportunity, $publication->id);
+                $this->depositInvoices->createForAcceptance($acceptance, $opportunity->owner);
                 $event = ProposalEngagementEvent::query()->create([
                     'organization_id' => $publication->organization_id, 'proposal_publication_id' => $publication->id,
                     'proposal_recipient_id' => $access->recipientId(), 'proposal_share_link_id' => $access->shareLinkId(),

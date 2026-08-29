@@ -18,6 +18,7 @@ use App\Models\CatalogProduct;
 use App\Models\CommercialContentBlock;
 use App\Models\CommercialTermsSet;
 use App\Models\Customer;
+use App\Models\Invoice;
 use App\Models\Opportunity;
 use App\Models\OpportunityStage;
 use App\Models\Organization;
@@ -28,6 +29,7 @@ use App\Models\ProposalDeliveryAttempt;
 use App\Models\ProposalEngagementEvent;
 use App\Models\ProposalTemplate;
 use App\Models\Role;
+use App\Models\ServiceLocation;
 use App\Models\UnitOfMeasure;
 use App\Models\User;
 use App\Support\IncidentRecorder;
@@ -186,6 +188,38 @@ class CommercialOperationsPhase4Test extends TestCase
         $this->assertDatabaseCount('invoices', 0);
         $this->assertDatabaseCount('payment_transactions', 0);
         Storage::disk('local')->assertExists($acceptance->signature_key);
+    }
+
+    public function test_acceptance_creates_one_tax_inclusive_draft_deposit_invoice_for_the_first_milestone(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        [$organization, $admin, $opportunity, $revision, $terms] = $this->context(8000, 10000);
+        $location = ServiceLocation::factory()->create(['organization_id' => $organization->id, 'customer_id' => $opportunity->customer_id, 'active' => true]);
+        $opportunity->update(['service_location_id' => $location->id]);
+        app(QuoteWorkflow::class)->addMilestone($revision, $admin, ['content_version' => $revision->content_version, 'name' => 'Deposit', 'amount_type' => 'percent', 'amount_value' => 3000, 'is_balancing' => false]);
+        $revision = $revision->fresh();
+        app(QuoteWorkflow::class)->addMilestone($revision, $admin, ['content_version' => $revision->content_version, 'name' => 'Balance', 'amount_type' => 'percent', 'amount_value' => 7000, 'is_balancing' => true]);
+        $revision = $revision->fresh();
+        app(QuoteWorkflow::class)->updateTerms($revision, $terms, $admin, $revision->content_version, null);
+        app(CommercialApprovalWorkflow::class)->submit($revision->fresh(), $admin);
+        $template = ProposalTemplate::query()->forOrganization($organization->id)->where('template_type', 'budgetary_estimate')->sole();
+        $publication = app(ProposalPublicationWorkflow::class)->publish($revision->fresh(), $template, $admin, ['expires_at' => now()->addDays(30), 'acceptance_enabled' => true, 'labor_grouping' => 'location']);
+        [, $token] = app(ProposalPublicationWorkflow::class)->addRecipient($publication, $admin, 'customer@example.test', 'Customer');
+        $payload = ['signer_name' => 'Customer Person', 'signer_email' => 'customer@example.test', 'signer_title' => 'Owner', 'consent' => '1', 'signature_data' => $this->signaturePng(), 'idempotency_token' => (string) Str::uuid()];
+
+        $this->post(route('proposals.accept', $token), $payload)->assertOk();
+        $this->post(route('proposals.accept', $token), $payload)->assertOk();
+
+        $acceptance = ProposalAcceptance::query()->with('milestones.invoice.lines')->sole();
+        $deposit = $acceptance->milestones->first();
+        $this->assertSame(3000, $deposit->allocated_cents);
+        $this->assertNotNull($deposit->invoice_id);
+        $this->assertSame(3000, $deposit->invoice->total_cents);
+        $this->assertSame('draft', $deposit->invoice->status);
+        $this->assertSame(0, $deposit->invoice->tax_total_cents);
+        $this->assertSame(1, Invoice::query()->count());
+        $this->assertNull($acceptance->milestones->last()->invoice_id);
     }
 
     public function test_options_comments_and_change_request_are_scoped_and_clone_the_complete_revision(): void

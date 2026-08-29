@@ -84,7 +84,7 @@
 
     @if($actionable && $publication->acceptance_enabled)
         <section class="surface p-5 sm:p-8" aria-labelledby="accept-heading">
-            <h2 id="accept-heading" class="text-2xl font-bold">Accept Proposal</h2><p class="mt-2 text-slate-600">One authorized signature accepts the selected scope and freezes the commercial record. Billing remains pending office review in Phase 6; no invoice or payment is created here.</p>
+            <h2 id="accept-heading" class="text-2xl font-bold">Accept Proposal</h2><p class="mt-2 text-slate-600">One authorized signature accepts the selected scope and freezes the commercial record. Any scheduled deposit is prepared as a draft for Office review; no payment is created here.</p>
             <div class="mt-6 grid gap-6 lg:grid-cols-2">
                 <div>
                     <form method="POST" action="{{ route('proposals.verifications.store', $token) }}" class="rounded-lg border border-slate-200 p-4">@csrf<label class="form-label" for="verify-email">Signer email verification</label><input class="form-input" id="verify-email" type="email" name="email" value="{{ old('signer_email', $recipientEmail) }}" required><button class="button-secondary mt-3 w-full">Send verification code</button><p class="mt-2 text-xs text-slate-500">Recipient links using their assigned email do not require a code. Generic links and changed emails do.</p></form>
