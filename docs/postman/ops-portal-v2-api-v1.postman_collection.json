@@ -1,0 +1,307 @@
+{
+  "info": {
+    "name": "Ops Portal v2 — /api/v1 (JARVIS boundary)",
+    "description": "Covers OP-API-1 (auth/scopes) and OP-API-2 (customers, contacts, locations) from docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md.\n\nSetup:\n1. Pull feat/op-api-1-foundation-and-service-identity locally.\n2. composer phase:update (or migrate) so the new tables/capabilities/role exist.\n3. php artisan jarvis:create-service-account (prints a one-time bearer token).\n4. Import the companion environment file, set `token` to that value, and select it.\n5. Run 'Happy path' top to bottom, then 'Negative cases'.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "auth": {
+    "type": "bearer",
+    "bearer": [{ "key": "token", "value": "{{token}}", "type": "string" }]
+  },
+  "variable": [
+    { "key": "base_url", "value": "http://ops-portal-v2.test/api/v1" },
+    { "key": "token", "value": "" },
+    { "key": "customer_id", "value": "1" }
+  ],
+  "item": [
+    {
+      "name": "Happy path",
+      "item": [
+        {
+          "name": "GET /me — confirm identity and scopes",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('has actor + scopes', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data.actor).to.have.property('id');",
+                  "  pm.expect(body.data.scopes).to.be.an('array');",
+                  "  pm.expect(body.meta.request_id).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] }
+          }
+        },
+        {
+          "name": "GET /customers/search?q=... — find a customer",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array of CustomerSummary', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "  if (body.data.length) {",
+                  "    pm.expect(body.data[0]).to.have.all.keys('id', 'name', 'status', 'primary_phone', 'primary_email');",
+                  "    pm.collectionVariables.set('customer_id', body.data[0].id);",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/customers/search?q=T%26S&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "search"],
+              "query": [
+                { "key": "q", "value": "T%26S" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        },
+        {
+          "name": "GET /customers/{{customer_id}} — customer detail",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('shape matches CustomerSummary', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.have.all.keys('id', 'name', 'status', 'primary_phone', 'primary_email');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "{{customer_id}}"]
+            }
+          }
+        },
+        {
+          "name": "GET /customers/{{customer_id}}/locations",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array of LocationSummary', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "  if (body.data.length) {",
+                  "    pm.expect(body.data[0]).to.have.all.keys('id', 'customer_id', 'name', 'address', 'timezone');",
+                  "    pm.expect(body.data[0].address).to.have.all.keys('line1', 'line2', 'city', 'state', 'postal_code');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}/locations",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "{{customer_id}}", "locations"]
+            }
+          }
+        },
+        {
+          "name": "GET /contacts/search?q=...",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array of ContactSummary', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "  if (body.data.length) {",
+                  "    pm.expect(body.data[0]).to.have.all.keys('id', 'customer_id', 'name', 'phones', 'emails');",
+                  "    pm.expect(body.data[0].phones).to.be.an('array');",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/contacts/search?q=Ken&limit=20",
+              "host": ["{{base_url}}"],
+              "path": ["contacts", "search"],
+              "query": [
+                { "key": "q", "value": "Ken" },
+                { "key": "limit", "value": "20" }
+              ]
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Negative cases",
+      "item": [
+        {
+          "name": "GET /me with no token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('error envelope', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.error.code).to.eql('unauthenticated');",
+                  "  pm.expect(body.meta.request_id).to.be.a('string');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "noauth" },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] }
+          }
+        },
+        {
+          "name": "GET /me with garbage token → 401",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('401 Unauthorized', () => pm.response.to.have.status(401));",
+                  "pm.test('error envelope', () => pm.expect(pm.response.json().error.code).to.eql('unauthenticated'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "not-a-real-token", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/me", "host": ["{{base_url}}"], "path": ["me"] }
+          }
+        },
+        {
+          "name": "GET /customers/search with no q → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable', () => pm.response.to.have.status(422));",
+                  "pm.test('validation error envelope', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.error.code).to.eql('validation_failed');",
+                  "  pm.expect(body.error.details).to.have.property('q');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": { "raw": "{{base_url}}/customers/search", "host": ["{{base_url}}"], "path": ["customers", "search"] }
+          }
+        },
+        {
+          "name": "GET /customers/999999999 → 404 (no internal detail leaked)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('404 Not Found', () => pm.response.to.have.status(404));",
+                  "pm.test('generic message, no class names', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.error.code).to.eql('not_found');",
+                  "  pm.expect(body.error.message).to.eql('The requested resource was not found.');",
+                  "  pm.expect(pm.response.text()).to.not.include('App\\\\Models');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/customers/999999999",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "999999999"]
+            }
+          }
+        },
+        {
+          "name": "GET /customers/search with a tickets-only token → 403",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('403 Forbidden', () => pm.response.to.have.status(403));",
+                  "pm.test('forbidden envelope', () => pm.expect(pm.response.json().error.code).to.eql('forbidden'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "auth": { "type": "bearer", "bearer": [{ "key": "token", "value": "{{narrow_token}}", "type": "string" }] },
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/customers/search?q=anything",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "search"],
+              "query": [{ "key": "q", "value": "anything" }]
+            },
+            "description": "Optional: set the `narrow_token` collection variable to a token created with only ['tickets.read'] abilities (e.g. `php artisan tinker` → `User::find(1)->createToken('narrow', ['tickets.read'])->plainTextToken`) to exercise the insufficient-scope path. Skip this request if you haven't created one."
+          }
+        }
+      ]
+    }
+  ]
+}
