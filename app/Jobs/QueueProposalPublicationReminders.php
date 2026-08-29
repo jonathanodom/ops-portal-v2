@@ -4,6 +4,7 @@ namespace App\Jobs;
 
 use App\Models\OrganizationCommercialSetting;
 use App\Models\ProposalDeliveryAttempt;
+use App\Models\ProposalEngagementEvent;
 use App\Models\ProposalPublication;
 use Carbon\CarbonImmutable;
 use Illuminate\Contracts\Queue\ShouldQueue;
@@ -54,6 +55,15 @@ class QueueProposalPublicationReminders implements ShouldQueue
                         );
 
                         if ($attempt->wasRecentlyCreated) {
+                            $event = ProposalEngagementEvent::query()->create([
+                                'organization_id' => $publication->organization_id,
+                                'proposal_publication_id' => $publication->id,
+                                'proposal_recipient_id' => $recipient->id,
+                                'event_type' => 'near_expiration',
+                                'safe_metadata' => ['days_until_expiry' => $daysUntilExpiry, 'delivery_attempt_id' => $attempt->id],
+                                'occurred_at' => now(),
+                            ]);
+                            NotifyProposalOwner::dispatch($event->id);
                             DeliverProposalPublication::dispatch($attempt->id);
                         }
                     }

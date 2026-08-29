@@ -14,18 +14,13 @@ class CommercialOperationsPhase0Test extends TestCase
 {
     use RefreshDatabase;
 
-    public function test_phase_four_exposes_internal_publication_foundation_but_no_public_customer_surface(): void
+    public function test_phase_five_exposes_the_public_customer_surface_and_additive_acceptance_schema(): void
     {
         $this->seed(AccessControlSeeder::class);
 
         $routeUris = collect(Route::getRoutes())->map(fn ($route): string => $route->uri());
         $this->assertTrue($routeUris->contains(fn (string $uri): bool => $uri === 'office/opportunities'));
-        foreach (['proposals'] as $prefix) {
-            $this->assertFalse(
-                $routeUris->contains(fn (string $uri): bool => $uri === $prefix || str_starts_with($uri, $prefix.'/')),
-                "Public customer route [{$prefix}] must not exist during Phase 4.",
-            );
-        }
+        $this->assertTrue($routeUris->contains(fn (string $uri): bool => $uri === 'proposals/{token}'));
 
         foreach (['organization_commercial_settings', 'opportunity_stages', 'opportunities', 'opportunity_tasks', 'opportunity_activities', 'opportunity_attachments', 'commercial_user_preferences'] as $table) {
             $this->assertTrue(Schema::hasTable($table), "Opportunity foundation table [{$table}] must exist during Phase 1.");
@@ -35,6 +30,9 @@ class CommercialOperationsPhase0Test extends TestCase
         }
         foreach (['commercial_content_blocks', 'commercial_terms_sets', 'proposal_templates', 'proposal_template_sections', 'commercial_revision_media', 'commercial_revision_approvals', 'proposal_publications', 'proposal_recipients', 'proposal_share_links', 'proposal_delivery_attempts'] as $table) {
             $this->assertTrue(Schema::hasTable($table), "Phase 4 publication table [{$table}] must exist.");
+        }
+        foreach (['proposal_engagement_events', 'proposal_comments', 'proposal_option_selections', 'proposal_email_verifications', 'proposal_acceptances', 'proposal_acceptance_line_selections', 'accepted_payment_milestones'] as $table) {
+            $this->assertTrue(Schema::hasTable($table), "Phase 5 response table [{$table}] must exist.");
         }
 
         $this->assertSame(3, Capability::query()->where('key', 'like', 'opportunities.%')->count());

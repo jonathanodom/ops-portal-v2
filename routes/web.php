@@ -67,6 +67,7 @@ use App\Http\Controllers\Office\VisitTimeAllocationController;
 use App\Http\Controllers\PaymentReceiptController;
 use App\Http\Controllers\PaymentReturnController;
 use App\Http\Controllers\PaymentWebhookController;
+use App\Http\Controllers\ProposalController;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Route;
 
@@ -85,6 +86,18 @@ Route::get('/payments/return/{attempt}', PaymentReturnController::class)->whereN
 Route::get('/receipts/{receipt}/{token}', [PaymentReceiptController::class, 'show'])->whereNumber('receipt')->name('payments.receipts.show');
 Route::get('/receipts/{receipt}/{token}/pdf', [PaymentReceiptController::class, 'pdf'])->whereNumber('receipt')->name('payments.receipts.pdf');
 Route::get('/receipts/{receipt}/{token}/brand', [PaymentReceiptController::class, 'brand'])->whereNumber('receipt')->name('payments.receipts.brand');
+
+Route::prefix('proposals/{token}')->where(['token' => '[A-Za-z0-9]{64,120}'])->name('proposals.')->group(function (): void {
+    Route::get('/', [ProposalController::class, 'show'])->name('show');
+    Route::post('/options', [ProposalController::class, 'options'])->name('options');
+    Route::post('/comments', [ProposalController::class, 'comment'])->name('comments.store');
+    Route::post('/request-changes', [ProposalController::class, 'requestChanges'])->name('request-changes');
+    Route::post('/email-verifications', [ProposalController::class, 'requestVerification'])->name('verifications.store');
+    Route::post('/email-verifications/{verification}', [ProposalController::class, 'verify'])->whereNumber('verification')->name('verifications.verify');
+    Route::post('/accept', [ProposalController::class, 'accept'])->name('accept');
+    Route::get('/pdf', [ProposalController::class, 'pdf'])->name('pdf');
+    Route::get('/media/{media}', [ProposalController::class, 'media'])->whereNumber('media')->name('media');
+});
 
 Route::middleware(['auth', 'active.organization', 'record.operational.failures'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
@@ -171,6 +184,9 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/share-links/{shareLink}/revoke', [ProposalPublicationController::class, 'revokeShareLink'])->whereNumber('shareLink')->middleware('capability:quotes.publish')->name('share-links.revoke');
                 Route::post('/recipients/{recipient}/deliver', [ProposalPublicationController::class, 'deliver'])->whereNumber('recipient')->middleware('capability:quotes.publish')->name('deliver');
                 Route::post('/withdraw', [ProposalPublicationController::class, 'withdraw'])->middleware('capability:quotes.publish')->name('withdraw');
+                Route::post('/extend', [ProposalPublicationController::class, 'extend'])->middleware(['capability:quotes.publish', 'capability:opportunities.admin'])->name('extend');
+                Route::post('/comments', [ProposalPublicationController::class, 'comment'])->middleware('capability:proposal.engagement.view')->name('comments.store');
+                Route::get('/acceptances/{acceptance}/signature', [ProposalPublicationController::class, 'signature'])->whereNumber('acceptance')->middleware('capability:proposal.engagement.view')->name('acceptances.signature');
             });
             Route::prefix('projects')->name('projects.')->middleware('capability:projects.view')->group(function (): void {
                 Route::get('/', [ProjectController::class, 'index'])->name('index');

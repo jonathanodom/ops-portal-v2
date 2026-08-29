@@ -168,6 +168,8 @@ Commercial Operations Phase 3 adds approved Service/labor-role estimating costs,
 
 Commercial Operations Phase 4 adds content-hash-bound approvals, reusable Proposal content and templates, immutable internal publications, private Proposal media/PDF generation, and local/test-only delivery infrastructure. See [Commercial Operations Phase 4](docs/COMMERCIAL_OPERATIONS_PHASE_4.md) for the schema, approval matrix, preservation evidence, validation results, UI checklist, and explicit Phase 5 boundary.
 
+Commercial Operations Phase 5 activates secure hash-only Proposal access, customer options and comments, change requests, immutable signature acceptance, engagement history, expiration review, and bounded Opportunity automation. See [Commercial Operations Phase 5](docs/COMMERCIAL_OPERATIONS_PHASE_5.md) for its response rules, acceptance boundary, preservation evidence, and explicit Phase 6 exclusions.
+
 The implemented Opportunity foundation and its Phase 1 owner acceptance gate are documented in [Commercial Operations Phase 1](docs/COMMERCIAL_OPERATIONS_PHASE_1.md).
 
 ## Quality commands

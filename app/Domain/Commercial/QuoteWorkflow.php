@@ -19,7 +19,10 @@ use App\Models\OrganizationBillingSetting;
 use App\Models\User;
 use App\Support\AuditRecorder;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 final class QuoteWorkflow
 {
@@ -324,52 +327,74 @@ final class QuoteWorkflow
         return $this->mutate($revision, $actor, $contentVersion, fn (CommercialRevision $locked) => $locked->update(['status' => 'approved', 'locked_at' => now()]), 'quote.revision_locked');
     }
 
-    public function cloneDraft(CommercialRevision $revision, User $actor): CommercialRevision
+    public function cloneDraft(CommercialRevision $revision, ?User $actor): CommercialRevision
     {
-        return DB::transaction(function () use ($revision, $actor): CommercialRevision {
-            $source = CommercialRevision::query()->whereKey($revision->id)->lockForUpdate()->firstOrFail();
-            if ($source->status === 'draft') {
-                throw ValidationException::withMessages(['revision' => 'Lock the current Draft before cloning a new revision.']);
-            }
-            $document = CommercialDocument::query()->whereKey($source->commercial_document_id)->lockForUpdate()->firstOrFail();
-            $version = ((int) $document->revisions()->max('version')) + 1;
-            $target = CommercialRevision::query()->create(array_merge($source->only(['organization_id', 'commercial_document_id', 'currency', 'commercial_terms_set_id', 'terms_name_snapshot', 'terms_version_snapshot', 'terms_body_snapshot', 'terms_overridden', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'tax_rate_overridden', 'tax_override_reason', 'customer_tax_exempt', 'tax_exemption_reference']), ['version' => $version, 'source_revision_id' => $source->id, 'status' => 'draft', 'content_version' => 1, 'content_hash' => str_repeat('0', 64), 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]));
-            $maps = [];
-            foreach (['locations', 'systems', 'phases'] as $relation) {
-                $maps[$relation] = [];
-                foreach ($source->{$relation}()->orderBy('id')->get() as $record) {
-                    $data = $record->only(['organization_id', 'source_default_id', 'name', 'sort_order']);
-                    if ($relation === 'locations') {
-                        unset($data['source_default_id']);
-                        $data['parent_id'] = $record->parent_id ? ($maps[$relation][$record->parent_id] ?? null) : null;
+        $copiedObjects = [];
+        try {
+            return DB::transaction(function () use ($revision, $actor, &$copiedObjects): CommercialRevision {
+                $source = CommercialRevision::query()->whereKey($revision->id)->lockForUpdate()->firstOrFail();
+                if ($source->status === 'draft') {
+                    throw ValidationException::withMessages(['revision' => 'Lock the current Draft before cloning a new revision.']);
+                }
+                $document = CommercialDocument::query()->whereKey($source->commercial_document_id)->lockForUpdate()->firstOrFail();
+                $version = ((int) $document->revisions()->max('version')) + 1;
+                $target = CommercialRevision::query()->create(array_merge($source->only(['organization_id', 'commercial_document_id', 'currency', 'commercial_terms_set_id', 'terms_name_snapshot', 'terms_version_snapshot', 'terms_body_snapshot', 'terms_overridden', 'discount_type', 'discount_value', 'tax_rate_basis_points', 'tax_rate_overridden', 'tax_override_reason', 'customer_tax_exempt', 'tax_exemption_reference']), ['version' => $version, 'source_revision_id' => $source->id, 'status' => 'draft', 'content_version' => 1, 'content_hash' => str_repeat('0', 64), 'created_by_id' => $actor?->id, 'updated_by_id' => $actor?->id]));
+                $maps = [];
+                foreach (['locations', 'systems', 'phases'] as $relation) {
+                    $maps[$relation] = [];
+                    foreach ($source->{$relation}()->orderBy('id')->get() as $record) {
+                        $data = $record->only(['organization_id', 'source_default_id', 'name', 'sort_order']);
+                        if ($relation === 'locations') {
+                            unset($data['source_default_id']);
+                            $data['parent_id'] = $record->parent_id ? ($maps[$relation][$record->parent_id] ?? null) : null;
+                        }
+                        $copy = $target->{$relation}()->create($data);
+                        $maps[$relation][$record->id] = $copy->id;
                     }
-                    $copy = $target->{$relation}()->create($data);
-                    $maps[$relation][$record->id] = $copy->id;
                 }
-            }
-            foreach ($source->sections()->get() as $record) {
-                $target->sections()->create($record->only(['organization_id', 'source_content_block_id', 'heading', 'body', 'customer_visible', 'sort_order']));
-            }
-            foreach ($source->lines()->with('components')->get() as $line) {
-                $data = $line->only($line->getFillable());
-                unset($data['commercial_revision_id']);
-                $data['location_id'] = $line->location_id ? ($maps['locations'][$line->location_id] ?? null) : null;
-                $data['system_id'] = $line->system_id ? ($maps['systems'][$line->system_id] ?? null) : null;
-                $data['phase_id'] = $line->phase_id ? ($maps['phases'][$line->phase_id] ?? null) : null;
-                $copy = $target->lines()->create($data);
-                foreach ($line->components as $component) {
-                    $copy->components()->create($component->only($component->getFillable()));
+                foreach ($source->sections()->get() as $record) {
+                    $target->sections()->create($record->only(['organization_id', 'source_content_block_id', 'heading', 'body', 'customer_visible', 'sort_order']));
                 }
-            }
-            foreach ($source->paymentMilestones()->get() as $record) {
-                $target->paymentMilestones()->create($record->only(['organization_id', 'name', 'amount_type', 'amount_value', 'allocated_cents', 'is_balancing', 'sort_order']));
-            }
-            $this->refresh($target, $actor, false);
-            $document->update(['status' => 'draft', 'updated_by_id' => $actor->id]);
-            $this->audit->record($document->opportunity->organization, $actor, 'quote.revision_cloned', $document->opportunity, ['quote_id' => $document->id, 'source_revision_id' => $source->id, 'revision_id' => $target->id, 'version' => $version]);
+                foreach ($source->lines()->with('components')->get() as $line) {
+                    $data = $line->only($line->getFillable());
+                    unset($data['commercial_revision_id']);
+                    $data['location_id'] = $line->location_id ? ($maps['locations'][$line->location_id] ?? null) : null;
+                    $data['system_id'] = $line->system_id ? ($maps['systems'][$line->system_id] ?? null) : null;
+                    $data['phase_id'] = $line->phase_id ? ($maps['phases'][$line->phase_id] ?? null) : null;
+                    $copy = $target->lines()->create($data);
+                    foreach ($line->components as $component) {
+                        $copy->components()->create($component->only($component->getFillable()));
+                    }
+                }
+                foreach ($source->paymentMilestones()->get() as $record) {
+                    $target->paymentMilestones()->create($record->only(['organization_id', 'name', 'amount_type', 'amount_value', 'allocated_cents', 'is_balancing', 'sort_order']));
+                }
+                foreach ($source->media()->where('state', 'stored')->get() as $record) {
+                    $data = $record->only(['organization_id', 'media_type', 'storage_disk', 'storage_key', 'original_name', 'mime_type', 'byte_size', 'sha256', 'embed_url', 'caption', 'state']);
+                    if ($record->storage_key) {
+                        $extension = pathinfo($record->storage_key, PATHINFO_EXTENSION);
+                        $newKey = 'commercial/proposals/'.now()->format('Y/m').'/'.Str::uuid().($extension ? '.'.$extension : '');
+                        if (! Storage::disk($record->storage_disk)->copy($record->storage_key, $newKey)) {
+                            throw ValidationException::withMessages(['media' => 'Proposal media could not be copied into the new revision.']);
+                        }
+                        $data['storage_key'] = $newKey;
+                        $copiedObjects[] = [$record->storage_disk, $newKey];
+                    }
+                    $data['uploaded_by_id'] = $actor?->id;
+                    $target->media()->create($data);
+                }
+                $this->refresh($target, $actor, false);
+                $document->update(['status' => 'draft', 'updated_by_id' => $actor?->id]);
+                $this->audit->record($document->opportunity->organization, $actor, 'quote.revision_cloned', $document->opportunity, ['quote_id' => $document->id, 'source_revision_id' => $source->id, 'revision_id' => $target->id, 'version' => $version]);
 
-            return $target->fresh();
-        });
+                return $target->fresh();
+            });
+        } catch (Throwable $exception) {
+            foreach ($copiedObjects as [$disk, $key]) {
+                Storage::disk($disk)->delete($key);
+            }
+            throw $exception;
+        }
     }
 
     private function mutate(CommercialRevision $revision, User $actor, int $expectedVersion, callable $callback, string $event, array $metadata = []): CommercialRevision
@@ -390,7 +415,7 @@ final class QuoteWorkflow
         });
     }
 
-    private function refresh(CommercialRevision $revision, User $actor, bool $increment = true): void
+    private function refresh(CommercialRevision $revision, ?User $actor, bool $increment = true): void
     {
         $this->calculator->recalculate($revision);
         $version = $increment ? $revision->content_version + 1 : $revision->content_version;
@@ -401,7 +426,7 @@ final class QuoteWorkflow
             'lines' => $revision->lines()->with('components')->orderBy('id')->get()->toArray(), 'milestones' => $revision->paymentMilestones()->orderBy('id')->get()->toArray(),
             'media' => $revision->media()->where('state', 'stored')->orderBy('id')->get(['id', 'media_type', 'original_name', 'mime_type', 'byte_size', 'sha256', 'embed_url', 'caption'])->toArray(),
         ];
-        $revision->forceFill(['content_version' => $version, 'content_hash' => hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR)), 'updated_by_id' => $actor->id])->save();
+        $revision->forceFill(['content_version' => $version, 'content_hash' => hash('sha256', json_encode($payload, JSON_THROW_ON_ERROR)), 'updated_by_id' => $actor?->id])->save();
     }
 
     private function dimension(CommercialRevision $revision, string $relation, mixed $id): ?int

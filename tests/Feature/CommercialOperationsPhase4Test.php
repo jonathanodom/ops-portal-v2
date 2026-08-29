@@ -11,6 +11,7 @@ use App\Jobs\DeleteRemovedCommercialRevisionMedia;
 use App\Jobs\DeliverProposalPublication;
 use App\Jobs\QueueProposalPublicationReminders;
 use App\Jobs\RenderProposalPublicationPdf;
+use App\Models\AuditEvent;
 use App\Models\Capability;
 use App\Models\CatalogCategory;
 use App\Models\CatalogProduct;
@@ -22,7 +23,9 @@ use App\Models\OpportunityStage;
 use App\Models\Organization;
 use App\Models\OrganizationBillingSetting;
 use App\Models\OrganizationMembership;
+use App\Models\ProposalAcceptance;
 use App\Models\ProposalDeliveryAttempt;
+use App\Models\ProposalEngagementEvent;
 use App\Models\ProposalTemplate;
 use App\Models\Role;
 use App\Models\UnitOfMeasure;
@@ -34,6 +37,7 @@ use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\Queue;
 use Illuminate\Support\Facades\Storage;
+use Illuminate\Support\Str;
 use Illuminate\Validation\ValidationException;
 use Tests\TestCase;
 
@@ -129,7 +133,7 @@ class CommercialOperationsPhase4Test extends TestCase
         app(CommercialApprovalWorkflow::class)->decide($approval->fresh(), $admin, 'approved', 'Stale decision.');
     }
 
-    public function test_tokens_are_hash_only_and_no_public_customer_route_exists_in_phase_four(): void
+    public function test_tokens_are_hash_only_and_public_customer_route_is_secure_in_phase_five(): void
     {
         Queue::fake();
         [$organization, $admin, $opportunity, $revision, $terms] = $this->context(8000, 10000);
@@ -143,7 +147,75 @@ class CommercialOperationsPhase4Test extends TestCase
         $this->assertNotSame($token, $recipient->token_hash);
         $this->assertSame(hash('sha256', $token), $recipient->token_hash);
         $this->assertSame(hash('sha256', $shareToken), $link->token_hash);
-        $this->assertFalse(collect(app('router')->getRoutes())->contains(fn ($route) => str_starts_with($route->uri(), 'proposals/')));
+        $this->get(route('proposals.show', $token), ['User-Agent' => 'Phase 5 browser'])
+            ->assertOk()->assertHeader('X-Robots-Tag', 'noindex, nofollow, noarchive')
+            ->assertHeader('Referrer-Policy', 'no-referrer')->assertSee('Scope and pricing');
+        $event = ProposalEngagementEvent::query()->sole();
+        $this->assertSame('first_view', $event->event_type);
+        $this->assertSame(hash('sha256', '127.0.0.1'), $event->ip_hash);
+        $this->assertSame('127.0.0.1', $event->encrypted_ip);
+        $this->assertStringNotContainsString('127.0.0.1', $event->getRawOriginal('encrypted_ip'));
+        $recipient->update(['revoked_at' => now()]);
+        $this->get(route('proposals.show', $token))->assertNotFound();
+        $this->get(route('proposals.show', $shareToken))->assertOk();
+    }
+
+    public function test_recipient_acceptance_is_idempotent_freezes_totals_and_wins_opportunity_without_billing(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        [$organization, $admin, $opportunity, $revision, $terms] = $this->context(8000, 10000);
+        app(QuoteWorkflow::class)->updateTerms($revision, $terms, $admin, $revision->content_version, null);
+        $revision = $revision->fresh();
+        app(CommercialApprovalWorkflow::class)->submit($revision, $admin);
+        $template = ProposalTemplate::query()->forOrganization($organization->id)->where('template_type', 'budgetary_estimate')->sole();
+        $publication = app(ProposalPublicationWorkflow::class)->publish($revision->fresh(), $template, $admin, ['expires_at' => now()->addDays(30), 'acceptance_enabled' => true, 'labor_grouping' => 'location']);
+        [$recipient, $token] = app(ProposalPublicationWorkflow::class)->addRecipient($publication, $admin, 'customer@example.test', 'Customer');
+        $idempotency = (string) Str::uuid();
+        $payload = ['signer_name' => 'Customer Person', 'signer_email' => 'customer@example.test', 'signer_title' => 'Owner', 'consent' => '1', 'signature_data' => $this->signaturePng(), 'idempotency_token' => $idempotency];
+
+        $this->post(route('proposals.accept', $token), $payload)->assertOk()->assertSee('Acceptance recorded');
+        $this->post(route('proposals.accept', $token), $payload)->assertOk();
+
+        $acceptance = ProposalAcceptance::query()->sole();
+        $this->assertSame(10000, $acceptance->total_cents);
+        $this->assertSame($publication->publication_hash, $acceptance->publication_hash);
+        $this->assertSame('accepted', $publication->fresh()->status);
+        $this->assertSame('won', $opportunity->fresh()->stage->semantic_kind);
+        $this->assertDatabaseCount('proposal_acceptances', 1);
+        $this->assertDatabaseCount('invoices', 0);
+        $this->assertDatabaseCount('payment_transactions', 0);
+        Storage::disk('local')->assertExists($acceptance->signature_key);
+    }
+
+    public function test_options_comments_and_change_request_are_scoped_and_clone_the_complete_revision(): void
+    {
+        Queue::fake();
+        Storage::fake('local');
+        [$organization, $admin, $opportunity, $revision, $terms] = $this->context(8000, 10000);
+        $line = $revision->lines()->sole();
+        app(QuoteWorkflow::class)->updateLine($revision, $line, $admin, ['content_version' => $revision->content_version, 'description' => $line->description, 'quantity_millis' => 1000, 'pricing_mode' => 'catalog', 'effective_unit_sell_cents' => 10000, 'pricing_value_basis_points' => 0, 'discount_type' => null, 'discount_value' => null, 'optional' => true, 'included' => false, 'taxable' => false]);
+        $revision = $revision->fresh();
+        app(CommercialRevisionMediaWorkflow::class)->upload($revision, $admin, UploadedFile::fake()->image('scope.png'), 'Customer scope');
+        $revision = $revision->fresh();
+        app(QuoteWorkflow::class)->updateTerms($revision, $terms, $admin, $revision->content_version, null);
+        $revision = $revision->fresh();
+        app(CommercialApprovalWorkflow::class)->submit($revision, $admin);
+        $template = ProposalTemplate::query()->forOrganization($organization->id)->where('template_type', 'budgetary_estimate')->sole();
+        $publication = app(ProposalPublicationWorkflow::class)->publish($revision->fresh(), $template, $admin, ['expires_at' => now()->addDays(30), 'acceptance_enabled' => true, 'labor_grouping' => 'location']);
+        [$link, $token] = app(ProposalPublicationWorkflow::class)->addShareLink($publication, $admin, 'Customer review');
+
+        $this->postJson(route('proposals.options', $token), ['options' => [$line->id]])->assertOk()->assertJson(['total' => '$100.00']);
+        $this->post(route('proposals.comments.store', $token), ['name' => 'Customer', 'email' => 'customer@example.test', 'target_type' => 'line', 'target_reference' => (string) $line->id, 'body' => 'Please clarify this option.'])->assertRedirect();
+        $this->post(route('proposals.request-changes', $token), ['name' => 'Customer', 'email' => 'customer@example.test', 'body' => 'Please revise the scope.', 'confirm' => '1'])->assertRedirect();
+
+        $draft = $revision->document->revisions()->where('status', 'draft')->sole();
+        $this->assertSame('changes_requested', $publication->fresh()->status);
+        $this->assertSame('quoting', $opportunity->fresh()->stage->semantic_kind);
+        $this->assertCount(1, $draft->media);
+        Storage::disk('local')->assertExists($draft->media->sole()->storage_key);
+        $this->assertDatabaseHas('proposal_option_selections', ['proposal_share_link_id' => $link->id, 'publication_line_id' => $line->id, 'included' => true]);
+        $this->assertStringNotContainsString('Please revise', json_encode(AuditEvent::query()->where('subject_type', $opportunity->getMorphClass())->where('subject_id', $opportunity->id)->pluck('metadata')->all(), JSON_THROW_ON_ERROR));
     }
 
     public function test_reminder_job_is_organization_local_and_idempotent(): void
@@ -265,5 +337,23 @@ class CommercialOperationsPhase4Test extends TestCase
         $membership->roles()->attach(Role::query()->where('key', $role)->sole());
 
         return [$user, $membership];
+    }
+
+    private function signaturePng(): string
+    {
+        $width = 300;
+        $height = 120;
+        $raw = '';
+        for ($y = 0; $y < $height; $y++) {
+            $raw .= "\0";
+            for ($x = 0; $x < $width; $x++) {
+                $ink = $x >= 40 && $x <= 260 && abs($y - (35 + intdiv($x, 6) % 45)) < 3;
+                $raw .= $ink ? "\x0f\x17\x2a\xff" : "\xff\xff\xff\0";
+            }
+        }
+        $chunk = static fn (string $type, string $data): string => pack('N', strlen($data)).$type.$data.pack('H*', hash('crc32b', $type.$data));
+        $png = "\x89PNG\r\n\x1a\n".$chunk('IHDR', pack('NNCCCCC', $width, $height, 8, 6, 0, 0, 0)).$chunk('IDAT', gzcompress($raw, 9)).$chunk('IEND', '');
+
+        return 'data:image/png;base64,'.base64_encode($png);
     }
 }

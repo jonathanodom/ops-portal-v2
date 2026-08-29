@@ -3,12 +3,15 @@
 namespace App\Http\Controllers\Office;
 
 use App\Domain\Commercial\ProposalPublicationWorkflow;
+use App\Domain\Commercial\ProposalResponseWorkflow;
 use App\Http\Controllers\Controller;
 use App\Jobs\DeliverProposalPublication;
 use App\Jobs\RenderProposalPublicationPdf;
 use App\Models\AuditEvent;
 use App\Models\CommercialDocument;
 use App\Models\CommercialRevision;
+use App\Models\ProposalAcceptance;
+use App\Models\ProposalComment;
 use App\Models\ProposalDeliveryAttempt;
 use App\Models\ProposalPublication;
 use App\Models\ProposalRecipient;
@@ -54,6 +57,10 @@ final class ProposalPublicationController extends Controller
         Gate::authorize('view', $publication->revision->document);
         $canPublish = Gate::allows('publish', $publication->revision->document);
         $canEngagement = Gate::allows('viewEngagement', $publication->revision->document);
+        $canExtend = $canPublish && $request->attributes->get('membership')->hasCapability('opportunities.admin');
+        if ($canEngagement) {
+            $publication->load(['engagementEvents.recipient', 'engagementEvents.shareLink', 'comments.staffUser', 'acceptance.milestones']);
+        }
         $opportunity = $publication->revision->document->opportunity;
         $audits = AuditEvent::query()
             ->where('organization_id', $publication->organization_id)
@@ -67,7 +74,7 @@ final class ProposalPublicationController extends Controller
             ->limit(50)
             ->get();
 
-        return view('office.proposal-publications.show', compact('publication', 'canPublish', 'canEngagement', 'audits'));
+        return view('office.proposal-publications.show', compact('publication', 'canPublish', 'canEngagement', 'canExtend', 'audits'));
     }
 
     public function pdf(Request $request, ProposalPublication $publication): StreamedResponse
@@ -97,7 +104,7 @@ final class ProposalPublicationController extends Controller
         $data = $request->validate(['name' => ['nullable', 'string', 'max:255'], 'email' => ['required', 'email:rfc', 'max:255']]);
         [$recipient, $token] = $workflow->addRecipient($publication, $request->user(), $data['email'], $data['name'] ?? null);
 
-        return back()->with('status', 'Recipient created. The Phase 4 token is shown once for local infrastructure testing only.')->with('proposal_token_once', $token)->with('proposal_token_record', 'Recipient '.$recipient->id);
+        return back()->with('status', 'Recipient created. The secure customer link is shown once.')->with('proposal_token_once', route('proposals.show', $token))->with('proposal_token_record', 'Recipient '.$recipient->id);
     }
 
     public function shareLink(Request $request, ProposalPublication $publication, ProposalPublicationWorkflow $workflow): RedirectResponse
@@ -107,7 +114,7 @@ final class ProposalPublicationController extends Controller
         $data = $request->validate(['label' => ['nullable', 'string', 'max:255']]);
         [$link, $token] = $workflow->addShareLink($publication, $request->user(), $data['label'] ?? null);
 
-        return back()->with('status', 'Generic link record created. Customer routing remains disabled until Phase 5.')->with('proposal_token_once', $token)->with('proposal_token_record', 'Share link '.$link->id);
+        return back()->with('status', 'Generic secure link created and the Opportunity was presented when applicable.')->with('proposal_token_once', route('proposals.show', $token))->with('proposal_token_record', 'Share link '.$link->id);
     }
 
     public function revokeRecipient(Request $request, ProposalPublication $publication, ProposalRecipient $recipient, AuditRecorder $audit): RedirectResponse
@@ -153,6 +160,37 @@ final class ProposalPublicationController extends Controller
         $workflow->withdraw($publication, $request->user());
 
         return back()->with('status', 'Publication withdrawn. Immutable history was retained.');
+    }
+
+    public function extend(Request $request, ProposalPublication $publication, ProposalResponseWorkflow $workflow): RedirectResponse
+    {
+        $publication = $this->publication($request, $publication);
+        Gate::authorize('publish', $publication->revision->document);
+        abort_unless($request->attributes->get('membership')->hasCapability('opportunities.admin'), 403);
+        $data = $request->validate(['expires_on' => ['required', 'date_format:Y-m-d'], 'confirm_price_review' => ['accepted']]);
+        $workflow->extend($publication, $request->user(), $data['expires_on'], $request->attributes->get('organization')->timezone);
+
+        return back()->with('status', 'Expiration extended after Catalog price review. The immutable content snapshot was unchanged.');
+    }
+
+    public function comment(Request $request, ProposalPublication $publication, AuditRecorder $audit): RedirectResponse
+    {
+        $publication = $this->publication($request, $publication);
+        Gate::authorize('viewEngagement', $publication->revision->document);
+        $data = $request->validate(['body' => ['required', 'string', 'max:5000'], 'target_type' => ['required', Rule::in(['proposal', 'section', 'line'])], 'target_reference' => ['nullable', 'string', 'max:100']]);
+        $comment = ProposalComment::query()->create(['organization_id' => $publication->organization_id, 'proposal_publication_id' => $publication->id, 'staff_user_id' => $request->user()->id, 'author_type' => 'staff', 'target_type' => $data['target_type'], 'target_reference' => $data['target_reference'] ?? null, 'body' => $data['body']]);
+        $audit->record($request->attributes->get('organization'), $request->user(), 'proposal.staff_comment_added', $publication->revision->document->opportunity, ['publication_id' => $publication->id, 'comment_id' => $comment->id, 'target_type' => $comment->target_type, 'target_reference' => $comment->target_reference]);
+
+        return back()->with('status', 'Staff reply added to the Proposal thread.');
+    }
+
+    public function signature(Request $request, ProposalPublication $publication, ProposalAcceptance $acceptance): StreamedResponse
+    {
+        $publication = $this->publication($request, $publication);
+        Gate::authorize('viewEngagement', $publication->revision->document);
+        abort_unless($acceptance->proposal_publication_id === $publication->id && Storage::disk($acceptance->signature_disk)->exists($acceptance->signature_key), 404);
+
+        return Storage::disk($acceptance->signature_disk)->download($acceptance->signature_key, 'proposal-acceptance-signature.png', ['Content-Type' => 'image/png', 'Cache-Control' => 'private, no-store']);
     }
 
     private function publication(Request $request, ProposalPublication $publication): ProposalPublication
