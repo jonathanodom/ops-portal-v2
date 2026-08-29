@@ -55,6 +55,48 @@ class ContactSearchTest extends TestCase
         $response->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', (string) $contact->id);
     }
 
+    public function test_search_matches_by_email(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        $customer = Customer::factory()->for($organization)->create();
+        $contact = Contact::factory()->for($customer)->create(['organization_id' => $organization->id, 'email' => 'distinctive.contact@example.test']);
+
+        $response = $this->bearer($token)->getJson('/api/v1/contacts/search?q=distinctive.contact');
+
+        $response->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', (string) $contact->id);
+    }
+
+    public function test_search_returns_an_empty_array_when_nothing_matches(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        $customer = Customer::factory()->for($organization)->create();
+        Contact::factory()->for($customer)->create(['organization_id' => $organization->id, 'name' => 'Ken Alvarez']);
+
+        $response = $this->bearer($token)->getJson('/api/v1/contacts/search?q=NoSuchContactNameAtAll');
+
+        $response->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_search_respects_the_limit_parameter(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        $customer = Customer::factory()->for($organization)->create();
+        Contact::factory()->for($customer)->count(5)->create(['organization_id' => $organization->id, 'name' => 'Repeatable Contact Name']);
+
+        $response = $this->bearer($token)->getJson('/api/v1/contacts/search?q=Repeatable&limit=2');
+
+        $response->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    public function test_search_rejects_a_limit_above_twenty(): void
+    {
+        [, , $token] = $this->jarvisIdentity();
+
+        $response = $this->bearer($token)->getJson('/api/v1/contacts/search?q=anything&limit=21');
+
+        $response->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+    }
+
     public function test_inactive_contacts_are_excluded(): void
     {
         [, $organization, $token] = $this->jarvisIdentity();

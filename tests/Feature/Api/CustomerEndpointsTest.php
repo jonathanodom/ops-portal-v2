@@ -51,6 +51,58 @@ class CustomerEndpointsTest extends TestCase
         $response->assertOk()->assertJsonCount(0, 'data');
     }
 
+    public function test_search_matches_by_phone_digits(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        $customer = Customer::factory()->for($organization)->create([
+            'phone' => '(512) 555-0134',
+            'phone_normalized' => '5125550134',
+        ]);
+
+        $response = $this->bearer($token)->getJson('/api/v1/customers/search?q=555-0134');
+
+        $response->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', (string) $customer->id);
+    }
+
+    public function test_search_matches_by_email(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        $customer = Customer::factory()->for($organization)->create(['email' => 'ops@distinctivedomain.test']);
+
+        $response = $this->bearer($token)->getJson('/api/v1/customers/search?q=distinctivedomain');
+
+        $response->assertOk()->assertJsonCount(1, 'data')->assertJsonPath('data.0.id', (string) $customer->id);
+    }
+
+    public function test_search_returns_an_empty_array_when_nothing_matches(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        Customer::factory()->for($organization)->create(['display_name' => 'T&S Communications']);
+
+        $response = $this->bearer($token)->getJson('/api/v1/customers/search?q=NoSuchCustomerNameAtAll');
+
+        $response->assertOk()->assertJsonCount(0, 'data');
+    }
+
+    public function test_search_respects_the_limit_parameter(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        Customer::factory()->for($organization)->count(5)->create(['display_name' => 'Repeatable Customer Name']);
+
+        $response = $this->bearer($token)->getJson('/api/v1/customers/search?q=Repeatable&limit=2');
+
+        $response->assertOk()->assertJsonCount(2, 'data');
+    }
+
+    public function test_search_rejects_a_limit_above_twenty(): void
+    {
+        [, , $token] = $this->jarvisIdentity();
+
+        $response = $this->bearer($token)->getJson('/api/v1/customers/search?q=anything&limit=21');
+
+        $response->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
+    }
+
     public function test_search_requires_a_query_parameter(): void
     {
         [, , $token] = $this->jarvisIdentity();
