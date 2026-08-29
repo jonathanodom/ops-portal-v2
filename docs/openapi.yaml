@@ -1,0 +1,791 @@
+openapi: 3.0.3
+info:
+  title: NewDay Tech Ops Portal API
+  version: "1.0.0"
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
+  description: |
+    The JARVIS-facing REST boundary over the Ops Portal, per
+    `docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md`. This is the
+    machine-readable source of truth for the contract; the JARVIS client
+    should generate/type-check against this file rather than manually
+    duplicating DTOs (plan §13).
+
+    ## Authentication and scopes
+
+    Every endpoint requires `Authorization: Bearer <token>` (a Laravel
+    Sanctum personal access token, see `php artisan jarvis:create-service-account`).
+    Each operation below documents two independent, additive authorization
+    checks that both must pass:
+
+    - **Token ability** — a scope baked into the specific bearer token
+      (revocable/rotatable per-token without touching the service identity).
+    - **Membership capability** — an organization-level grant on the
+      service identity's `OrganizationMembership` (revocable without
+      rotating the token). Capability keys are prefixed `api.*` and are
+      intentionally separate from human-role UI capabilities.
+
+    A missing token ability or membership capability both produce the same
+    `403 forbidden` envelope; JARVIS cannot distinguish which layer denied
+    the request, by design.
+
+    ## Envelope
+
+    - Success: `{"data": ..., "meta": {"request_id": "..."}}`
+    - Error: `{"error": {"code": "...", "message": "...", "details": ...}, "meta": {"request_id": "..."}}`
+
+    `X-Request-ID` is accepted on any request and always echoed on the
+    response (generated when absent). Never depend on error `message` text
+    for programmatic logic — use `error.code`.
+
+    ## Idempotency
+
+    `POST /tickets` and `PATCH /tickets/{ticket_id}` require an
+    `Idempotency-Key` header. Replaying the exact same request with the
+    same key returns the original result without re-executing the write.
+    A validation failure does not consume the key — fix the payload and
+    retry with the same key. Keys are scoped per exact method+path, so the
+    same key can be reused across different endpoints/resources safely
+    (e.g. do not reuse a key from one ticket's PATCH for a different
+    ticket's PATCH; each resource path is a distinct scope automatically).
+servers:
+  - url: /api/v1
+    description: Relative to whatever host serves the Ops Portal (local, staging, or production).
+security:
+  - bearerAuth: []
+tags:
+  - name: Identity
+    description: Confirming the authenticated service identity and its granted scopes.
+  - name: Customers
+    description: Customer search and detail.
+  - name: Contacts
+    description: Organization-wide contact search.
+  - name: Locations
+    description: Service locations belonging to a customer.
+  - name: Tickets
+    description: Service ticket list, detail, creation, and permitted updates.
+  - name: Projects
+    description: Customer project list and detail.
+paths:
+  /me:
+    get:
+      operationId: getMe
+      tags: [Identity]
+      summary: Confirm the authenticated service identity and its granted scopes
+      description: |
+        No token ability or membership capability is required beyond a
+        valid, non-revoked token — any authenticated service identity may
+        check its own identity. Returns no business data.
+      responses:
+        '200':
+          description: The resolved service identity.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/MeResponse'
+              example:
+                data:
+                  actor: { id: 1, name: "JARVIS Core" }
+                  organization_id: 1
+                  scopes: [customers.read, contacts.read, locations.read, projects.read, tickets.read, tickets.create, tickets.update, communications.create]
+                meta: { request_id: "cf74b3e7-ac47-4cc9-b0cd-d3d502a492b9" }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+
+  /customers/search:
+    get:
+      operationId: searchCustomers
+      tags: [Customers]
+      summary: Search customers by name, email, or phone
+      description: |
+        Requires token ability `customers.read` and membership capability
+        `api.customers.read`. Reuses the same query the office
+        ticket-creation customer picker uses.
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchLimit'
+      responses:
+        '200':
+          description: Matching customers, most relevant first, capped at `limit`.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerListResponse'
+              example:
+                data:
+                  - id: "1"
+                    name: "T&S Communications"
+                    status: active
+                    primary_phone: "512-555-0100"
+                    primary_email: "ops@tscomm.test"
+                meta: { request_id: "00ed4929-e2d8-4e2b-b802-8e7830fc5419" }
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /customers/{customer_id}:
+    get:
+      operationId: getCustomer
+      tags: [Customers]
+      summary: Get a customer by id
+      description: Requires token ability `customers.read` and membership capability `api.customers.read`.
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+      responses:
+        '200':
+          description: The customer.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/CustomerResponse'
+              example:
+                data: { id: "1", name: "T&S Communications", status: active, primary_phone: "512-555-0100", primary_email: "ops@tscomm.test" }
+                meta: { request_id: "be65f9bb-dc6c-45e6-aec4-705bf3877a41" }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /customers/{customer_id}/locations:
+    get:
+      operationId: listCustomerLocations
+      tags: [Locations]
+      summary: List a customer's service locations
+      description: Requires token ability `locations.read` and membership capability `api.locations.read`.
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - name: active
+          in: query
+          required: false
+          description: Filter to active (`true`) or inactive (`false`) locations. Omit for all.
+          schema: { type: boolean }
+      responses:
+        '200':
+          description: The customer's service locations.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LocationListResponse'
+              example:
+                data:
+                  - id: "1"
+                    customer_id: "1"
+                    name: "Front office"
+                    address: { line1: "100 Main St", line2: null, city: "Austin", state: "TX", postal_code: "78701" }
+                    timezone: "America/Chicago"
+                meta: { request_id: "fdfc06d2-5333-4cb7-892e-61d9904f3fce" }
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /contacts/search:
+    get:
+      operationId: searchContacts
+      tags: [Contacts]
+      summary: Search contacts by name, email, or phone within the organization
+      description: Requires token ability `contacts.read` and membership capability `api.contacts.read`.
+      parameters:
+        - $ref: '#/components/parameters/SearchQuery'
+        - $ref: '#/components/parameters/SearchLimit'
+      responses:
+        '200':
+          description: Matching active contacts.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ContactListResponse'
+              example:
+                data:
+                  - id: "1"
+                    customer_id: "1"
+                    name: "Ken Alvarez"
+                    phones: ["512-555-0134"]
+                    emails: ["ken@tscomm.test"]
+                meta: { request_id: "f20f6062-453c-433e-9e18-2748dbdae86a" }
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /tickets:
+    get:
+      operationId: listTickets
+      tags: [Tickets]
+      summary: List service tickets
+      description: Requires token ability `tickets.read` and membership capability `api.tickets.read`.
+      parameters:
+        - name: customer_id
+          in: query
+          required: false
+          schema: { type: integer }
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/TicketStatus' }
+        - name: priority
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/TicketPriority' }
+        - name: source
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/TicketSource' }
+        - name: limit
+          in: query
+          required: false
+          description: Default 50, max 100.
+          schema: { type: integer, minimum: 1, maximum: 100, default: 50 }
+      responses:
+        '200':
+          description: Matching tickets, most recently created first.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketListResponse'
+              example:
+                data:
+                  - id: "1"
+                    ticket_number: "NDT-ST-2026-0001"
+                    customer_id: "1"
+                    location_id: "1"
+                    contact_id: "1"
+                    title: "Front office phones rebooting"
+                    description: "Customer reports intermittent phone reboots."
+                    customer_visible_summary: null
+                    priority: normal
+                    source: jarvis
+                    purpose: service_call
+                    billing_disposition: billable
+                    status: open
+                    created_at: "2026-08-29T20:19:59+00:00"
+                    updated_at: "2026-08-29T20:19:59+00:00"
+                meta: { request_id: "487ed99b-098f-47f5-9200-acd2eb9533c9" }
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+    post:
+      operationId: createTicket
+      tags: [Tickets]
+      summary: Create a service ticket
+      description: |
+        Requires token ability `tickets.create` and membership capability
+        `api.tickets.create`. Requires `Idempotency-Key` (see the top-level
+        Idempotency description). Delegates to the exact same
+        validator/creator services the office UI's ticket-creation
+        controller uses — canonical `priority`/`source`/`purpose`/
+        `billing_disposition` values are enforced identically in both
+        places and must not be invented client-side.
+      parameters:
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketCreateRequest'
+            example:
+              customer_id: 1
+              location_id: 1
+              contact_id: 1
+              title: "Front office phones rebooting"
+              description: "Customer reports intermittent phone reboots."
+              priority: normal
+              source: jarvis
+      responses:
+        '201':
+          description: The created ticket. Replaying the same Idempotency-Key returns this same body and status again.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+              example:
+                data:
+                  id: "1"
+                  ticket_number: "NDT-ST-2026-0001"
+                  customer_id: "1"
+                  location_id: "1"
+                  contact_id: "1"
+                  title: "Front office phones rebooting"
+                  description: "Customer reports intermittent phone reboots."
+                  customer_visible_summary: null
+                  priority: normal
+                  source: jarvis
+                  purpose: service_call
+                  billing_disposition: billable
+                  status: open
+                  created_at: "2026-08-29T20:19:59+00:00"
+                  updated_at: "2026-08-29T20:19:59+00:00"
+                meta: { request_id: "96b28a90-69db-42c0-b58e-58655c5eb409" }
+        '400':
+          $ref: '#/components/responses/IdempotencyKeyRequired'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /tickets/{ticket_id}:
+    get:
+      operationId: getTicket
+      tags: [Tickets]
+      summary: Get a service ticket by id
+      description: Requires token ability `tickets.read` and membership capability `api.tickets.read`.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+      responses:
+        '200':
+          description: The ticket.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      operationId: updateTicket
+      tags: [Tickets]
+      summary: Update permitted service ticket fields
+      description: |
+        Requires token ability `tickets.update` and membership capability
+        `api.tickets.update`. Requires `Idempotency-Key`.
+
+        Only two purpose-built fields are supported — at least one is
+        required:
+        - `priority`: sets the ticket priority directly.
+        - `description_append`: appends to the existing description; it
+          never overwrites it.
+
+        Status transitions are **not** available through this endpoint.
+        `App\Domain\ServiceTicketWorkflow` enforces workflow rules (allowed
+        from/to transitions, required reasons, active-timer confirmation,
+        visit cascade on cancellation) that a generic PATCH would bypass.
+        JARVIS does not have a status-transition scope in v0.1.
+      parameters:
+        - $ref: '#/components/parameters/TicketId'
+        - $ref: '#/components/parameters/IdempotencyKey'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TicketUpdateRequest'
+            example:
+              priority: high
+              description_append: "Caller confirmed reboots happen every 20 minutes."
+      responses:
+        '200':
+          description: The updated ticket. Replaying the same Idempotency-Key returns this same body again without appending twice.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TicketResponse'
+        '400':
+          $ref: '#/components/responses/IdempotencyKeyRequired'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          $ref: '#/components/responses/Conflict'
+        '422':
+          $ref: '#/components/responses/ValidationFailed'
+
+  /customers/{customer_id}/projects:
+    get:
+      operationId: listCustomerProjects
+      tags: [Projects]
+      summary: List a customer's projects
+      description: Requires token ability `projects.read` and membership capability `api.projects.read`.
+      parameters:
+        - $ref: '#/components/parameters/CustomerId'
+        - name: status
+          in: query
+          required: false
+          schema: { $ref: '#/components/schemas/ProjectStatus' }
+      responses:
+        '200':
+          description: The customer's projects.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectListResponse'
+        '400':
+          $ref: '#/components/responses/ValidationFailed'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /projects/{project_id}:
+    get:
+      operationId: getProject
+      tags: [Projects]
+      summary: Get a project by id
+      description: Requires token ability `projects.read` and membership capability `api.projects.read`.
+      parameters:
+        - name: project_id
+          in: path
+          required: true
+          schema: { type: string }
+      responses:
+        '200':
+          description: The project.
+          headers:
+            X-Request-ID: { $ref: '#/components/headers/X-Request-ID' }
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProjectResponse'
+        '401':
+          $ref: '#/components/responses/Unauthenticated'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+components:
+  securitySchemes:
+    bearerAuth:
+      type: http
+      scheme: bearer
+      description: Laravel Sanctum personal access token issued by `php artisan jarvis:create-service-account`.
+
+  parameters:
+    SearchQuery:
+      name: q
+      in: query
+      required: true
+      description: Required, 1–255 characters.
+      schema: { type: string, minLength: 1, maxLength: 255 }
+    SearchLimit:
+      name: limit
+      in: query
+      required: false
+      description: Default and maximum 20.
+      schema: { type: integer, minimum: 1, maximum: 20, default: 20 }
+    CustomerId:
+      name: customer_id
+      in: path
+      required: true
+      schema: { type: string }
+    TicketId:
+      name: ticket_id
+      in: path
+      required: true
+      schema: { type: string }
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: true
+      description: |
+        Any client-generated unique string (a UUID is recommended). Required
+        for this operation. Replaying the exact request with the same key
+        returns the original result rather than repeating the write.
+      schema: { type: string }
+
+  headers:
+    X-Request-ID:
+      description: Echoes the request's `X-Request-ID`, or a generated UUID when absent.
+      schema: { type: string, format: uuid }
+
+  responses:
+    Unauthenticated:
+      description: Missing, invalid, or revoked bearer token.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: unauthenticated, message: "Authentication is required.", details: null }, meta: { request_id: "..." } }
+    Forbidden:
+      description: Authenticated, but the token lacks the required ability or the membership lacks the required capability.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: forbidden, message: "Invalid ability provided.", details: null }, meta: { request_id: "..." } }
+    NotFound:
+      description: |
+        The resource does not exist, or exists in a different organization
+        (cross-organization access always 404s, never 403 — this avoids
+        confirming a record's existence in another tenant).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: not_found, message: "The requested resource was not found.", details: null }, meta: { request_id: "..." } }
+    ValidationFailed:
+      description: Request validation failed.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: validation_failed, message: "The given data was invalid.", details: { q: ["The q field is required."] } }, meta: { request_id: "..." } }
+    IdempotencyKeyRequired:
+      description: The required `Idempotency-Key` header was missing or empty.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: idempotency_key_required, message: "The Idempotency-Key header is required for this operation.", details: null }, meta: { request_id: "..." } }
+    Conflict:
+      description: A request with the same Idempotency-Key is still being processed by a concurrent request. Retry shortly.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: conflict, message: "A request with this Idempotency-Key is already being processed. Retry shortly.", details: null }, meta: { request_id: "..." } }
+
+  schemas:
+    Meta:
+      type: object
+      required: [request_id]
+      properties:
+        request_id: { type: string }
+
+    ErrorEnvelope:
+      type: object
+      required: [error, meta]
+      properties:
+        error:
+          type: object
+          required: [code, message]
+          properties:
+            code: { type: string, description: "Stable machine-readable code. Use this, not `message`, for programmatic handling." }
+            message: { type: string }
+            details:
+              nullable: true
+              description: Present for validation_failed (field -> array of messages); null otherwise.
+              type: object
+              additionalProperties: true
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    Actor:
+      type: object
+      properties:
+        id: { type: integer }
+        name: { type: string }
+
+    MeData:
+      type: object
+      properties:
+        actor: { $ref: '#/components/schemas/Actor' }
+        organization_id: { type: integer, nullable: true }
+        scopes: { type: array, items: { type: string } }
+    MeResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/MeData' }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    CustomerStatus:
+      type: string
+      description: See config/customers.php `statuses`.
+      example: active
+    CustomerSummary:
+      type: object
+      required: [id, name, status, primary_phone, primary_email]
+      properties:
+        id: { type: string, description: "Numeric primary key as a string, not an opaque prefixed id — see docs/OP_API_0_REPOSITORY_ASSESSMENT.md." }
+        name: { type: string }
+        status: { $ref: '#/components/schemas/CustomerStatus' }
+        primary_phone: { type: string, nullable: true }
+        primary_email: { type: string, nullable: true }
+    CustomerResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/CustomerSummary' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    CustomerListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/CustomerSummary' } }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    ContactSummary:
+      type: object
+      required: [id, customer_id, name, phones, emails]
+      properties:
+        id: { type: string }
+        customer_id: { type: string }
+        name: { type: string }
+        phones:
+          type: array
+          items: { type: string }
+          description: "The current schema stores one phone per contact; this is a single-element (or empty) array to match the documented contract shape."
+        emails:
+          type: array
+          items: { type: string }
+    ContactListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ContactSummary' } }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    Address:
+      type: object
+      properties:
+        line1: { type: string, nullable: true }
+        line2: { type: string, nullable: true }
+        city: { type: string, nullable: true }
+        state: { type: string, nullable: true }
+        postal_code: { type: string, nullable: true }
+    LocationSummary:
+      type: object
+      required: [id, customer_id, name, address, timezone]
+      properties:
+        id: { type: string }
+        customer_id: { type: string }
+        name: { type: string }
+        address: { $ref: '#/components/schemas/Address' }
+        timezone: { type: string, example: "America/Chicago" }
+    LocationListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/LocationSummary' } }
+        meta: { $ref: '#/components/schemas/Meta' }
+
+    TicketStatus:
+      type: string
+      enum: [open, on_hold, completed, canceled]
+      description: See config/service_tickets.php `statuses`. Status transitions are not settable via this API — see App\\Domain\\ServiceTicketWorkflow.
+    TicketPriority:
+      type: string
+      enum: [low, normal, high, urgent]
+      description: See config/service_tickets.php `priorities`.
+    TicketSource:
+      type: string
+      enum: [phone, email, web, internal, jarvis, other]
+      description: |
+        See config/service_tickets.php `sources`. `jarvis` was added
+        specifically for API-originated tickets (this plan's own example
+        payload uses it); it did not exist before this API was built.
+    TicketPurpose:
+      type: string
+      enum: [service_call, site_survey, installation_project, callback, warranty, internal_test]
+      description: See config/service_tickets.php `purposes`. Defaults to `service_call` when omitted on create.
+    TicketBillingDisposition:
+      type: string
+      enum: [billable, non_billable, warranty, included, no_charge]
+      description: See config/service_tickets.php `billing_dispositions`. Defaults to `billable` when omitted on create.
+    Ticket:
+      type: object
+      required: [id, ticket_number, customer_id, location_id, title, priority, source, purpose, billing_disposition, status]
+      properties:
+        id: { type: string }
+        ticket_number: { type: string, example: "NDT-ST-2026-0001" }
+        customer_id: { type: string }
+        location_id: { type: string, description: "Maps to the internal service_location_id column." }
+        contact_id: { type: string, nullable: true }
+        title: { type: string }
+        description: { type: string, nullable: true }
+        customer_visible_summary: { type: string, nullable: true }
+        priority: { $ref: '#/components/schemas/TicketPriority' }
+        source: { $ref: '#/components/schemas/TicketSource' }
+        purpose: { $ref: '#/components/schemas/TicketPurpose' }
+        billing_disposition: { $ref: '#/components/schemas/TicketBillingDisposition' }
+        status: { $ref: '#/components/schemas/TicketStatus' }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    TicketResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/Ticket' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TicketListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/Ticket' } }
+        meta: { $ref: '#/components/schemas/Meta' }
+    TicketCreateRequest:
+      type: object
+      required: [customer_id, location_id, title, priority, source]
+      properties:
+        customer_id: { type: integer }
+        location_id: { type: integer, description: "External field name; maps to the internal service_location_id column. Must belong to customer_id." }
+        contact_id: { type: integer, nullable: true, description: "Must belong to customer_id when provided." }
+        title: { type: string, maxLength: 255 }
+        description: { type: string, nullable: true, maxLength: 10000 }
+        customer_visible_summary: { type: string, nullable: true, maxLength: 5000 }
+        priority: { $ref: '#/components/schemas/TicketPriority' }
+        source: { $ref: '#/components/schemas/TicketSource' }
+        purpose: { $ref: '#/components/schemas/TicketPurpose' }
+        billing_disposition: { $ref: '#/components/schemas/TicketBillingDisposition' }
+    TicketUpdateRequest:
+      type: object
+      description: At least one of the two properties is required.
+      minProperties: 1
+      properties:
+        priority: { $ref: '#/components/schemas/TicketPriority' }
+        description_append: { type: string, minLength: 1, maxLength: 5000, description: "Appended to the existing description with a blank-line separator. Never overwrites it." }
+
+    ProjectStatus:
+      type: string
+      enum: [planning, active, on_hold, completed, canceled]
+      description: See App\\Domain\\Projects\\Actions\\ProjectWorkflow::STATUSES.
+    ProjectSummary:
+      type: object
+      required: [id, project_number, name, type, status]
+      properties:
+        id: { type: string }
+        project_number: { type: string, example: "NDT-PJ-2026-0001" }
+        customer_id: { type: string, nullable: true }
+        location_id: { type: string, nullable: true, description: "Maps to the internal service_location_id column." }
+        name: { type: string }
+        type: { type: string }
+        status: { $ref: '#/components/schemas/ProjectStatus' }
+        summary: { type: string, nullable: true }
+        objective: { type: string, nullable: true }
+        start_on: { type: string, format: date, nullable: true }
+        target_end_on: { type: string, format: date, nullable: true }
+        completed_at: { type: string, format: date-time, nullable: true }
+        created_at: { type: string, format: date-time }
+        updated_at: { type: string, format: date-time }
+    ProjectResponse:
+      type: object
+      properties:
+        data: { $ref: '#/components/schemas/ProjectSummary' }
+        meta: { $ref: '#/components/schemas/Meta' }
+    ProjectListResponse:
+      type: object
+      properties:
+        data: { type: array, items: { $ref: '#/components/schemas/ProjectSummary' } }
+        meta: { $ref: '#/components/schemas/Meta' }
