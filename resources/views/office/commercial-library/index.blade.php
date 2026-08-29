@@ -1,6 +1,6 @@
 <x-layouts.office title="Proposal library" width="workspace">
     <div class="space-y-6">
-        <header><p class="text-sm font-bold uppercase tracking-[.12em] text-brand-blue">Commercial settings</p><h1 class="mt-1 text-3xl font-bold">Proposal library</h1><p class="mt-2 text-slate-600">Reusable scope, immutable terms versions, and the four V1 presentation templates.</p></header>
+        <x-office.primary-toolbar title="Proposal library" description="Reusable scope, immutable terms versions, and presentation templates." eyebrow="Commercial settings" />
         <div class="grid gap-6 xl:grid-cols-3">
             <section class="surface overflow-hidden">
                 <header class="border-b border-slate-200 p-5"><h2 class="text-xl font-bold">Scope blocks</h2></header>

@@ -1,15 +1,20 @@
 <x-layouts.office title="Closeout review" width="workspace">
-    @if(session('status'))<div class="mb-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900" role="status">{{ session('status') }}</div>@endif
-    <x-office.page-header title="Closeout queue" description="Review submitted field work, corrections, and customer outcomes." eyebrow="Office review" />
-
-    <form method="GET" class="office-filter-toolbar md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 2xl:grid-cols-[minmax(220px,1.1fr)_repeat(5,minmax(140px,0.7fr))_auto]" aria-label="Closeout review filters">
-        <div><label class="form-label" for="customer">Customer</label><input class="form-input" id="customer" name="customer" value="{{ request('customer') }}" placeholder="Customer name"></div>
+    @if(session('status'))<x-office.alert type="success">{{ session('status') }}</x-office.alert>@endif
+    @php($reviewFilterLabels = collect(['customer','outcome','priority','technician','age','correction_state'])->filter(fn ($key) => filled(request($key)))->mapWithKeys(fn ($key) => [$key => Str::headline($key).': '.Str::headline(request($key))]))
+    <form method="GET" aria-label="Closeout review filters">
+    <x-office.primary-toolbar title="Closeout queue" description="Review submitted field work, corrections, and customer outcomes." eyebrow="Office review">
+        <x-slot:search><label class="sr-only" for="customer">Search customer</label><input class="form-input" id="customer" name="customer" value="{{ request('customer') }}" placeholder="Search customer name"></x-slot:search>
+        <x-slot:filters><x-office.filter-panel :active-count="$reviewFilterLabels->count()"><div class="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
         <div><label class="form-label" for="outcome">Outcome</label><select class="form-input" id="outcome" name="outcome"><option value="">All outcomes</option>@foreach(['resolved','needs_return_trip','on_hold','customer_unavailable'] as $outcome)<option value="{{ $outcome }}" @selected(request('outcome')===$outcome)>{{ ucfirst(str_replace('_',' ',$outcome)) }}</option>@endforeach</select></div>
         <div><label class="form-label" for="priority">Priority</label><select class="form-input" id="priority" name="priority"><option value="">All priorities</option>@foreach(config('service_tickets.priorities') as $key=>$label)<option value="{{ $key }}" @selected(request('priority')===$key)>{{ $label }}</option>@endforeach</select></div>
         <div><label class="form-label" for="technician">Submitted by</label><select class="form-input" id="technician" name="technician"><option value="">Anyone</option>@foreach($technicians as $technician)<option value="{{ $technician->id }}" @selected((string)request('technician')===(string)$technician->id)>{{ $technician->name }}</option>@endforeach</select></div>
         <div><label class="form-label" for="age">Age</label><select class="form-input" id="age" name="age"><option value="">Any age</option><option value="1" @selected(request('age')==='1')>At least 1 day</option><option value="3" @selected(request('age')==='3')>At least 3 days</option><option value="7" @selected(request('age')==='7')>At least 7 days</option></select></div>
         <div><label class="form-label" for="correction_state">Submission</label><select class="form-input" id="correction_state" name="correction_state"><option value="">All submissions</option><option value="first_submission" @selected(request('correction_state')==='first_submission')>First submission</option><option value="resubmitted" @selected(request('correction_state')==='resubmitted')>Resubmitted</option></select></div>
-        <div class="flex flex-wrap gap-2"><button class="button-secondary">Filter</button>@if(request()->hasAny(['customer','outcome','priority','technician','age','correction_state']))<a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-11 items-center px-2 text-sm font-bold text-brand-blue underline">Clear</a>@endif</div>
+        </div><div class="mt-4 flex flex-wrap justify-end gap-2"><a href="{{ route('office.closeout-reviews.index') }}" class="button-secondary">Clear all</a><button class="button-primary">Apply filters</button></div></x-office.filter-panel></x-slot:filters>
+        @if($reviewFilterLabels->isNotEmpty())
+            <x-slot:chips><span class="text-xs font-bold uppercase tracking-wide text-slate-500">Active filters</span>@foreach($reviewFilterLabels as $key => $label)<x-office.filter-chip :label="$label" :remove-url="route('office.closeout-reviews.index', request()->except([$key, 'page']))" />@endforeach<a href="{{ route('office.closeout-reviews.index') }}" class="inline-flex min-h-9 items-center px-2 text-xs font-bold text-brand-blue underline">Clear all</a></x-slot:chips>
+        @endif
+    </x-office.primary-toolbar>
     </form>
 
     <div class="office-table-wrap" data-office-table>
@@ -28,7 +33,7 @@
                         <td class="text-right"><a href="{{ route('office.closeout-reviews.show',$closeout) }}" class="inline-flex min-h-11 items-center font-bold text-brand-blue">Review<span class="sr-only"> {{ $closeout->visit->serviceTicket->ticket_number }}</span></a></td>
                     </tr>
                 @empty
-                    <tr><td colspan="7" class="py-10 text-center"><p class="font-bold text-slate-900">Review queue clear</p><p class="mt-1 text-sm text-slate-500">No submitted closeouts match these filters.</p></td></tr>
+                    <tr><td colspan="7" class="p-3"><x-office.state-panel title="Review queue clear" message="No submitted closeouts match these filters." /></td></tr>
                 @endforelse
             </tbody>
         </table>
@@ -42,7 +47,7 @@
                 <p class="mt-3 text-sm text-slate-500">{{ $closeout->submittedBy?->name ?? 'Former user' }} &middot; <x-local-time :value="$closeout->submitted_at" :timezone="$closeout->visit->timezone" /></p>
             </a>
         @empty
-            <div class="surface p-8 text-center"><p class="font-bold text-slate-900">Review queue clear</p><p class="mt-1 text-sm text-slate-500">No submitted closeouts match these filters.</p></div>
+            <x-office.state-panel title="Review queue clear" message="No submitted closeouts match these filters." />
         @endforelse
     </div>
     <div class="mt-5">{{ $closeouts->links() }}</div>

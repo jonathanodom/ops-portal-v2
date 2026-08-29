@@ -387,7 +387,7 @@ test.describe('desktop beta', () => {
         await captureFieldTest(page, 'office-ticket-directory-1440x900.png');
 
         await page.goto('/office/service-tickets?status=open');
-        await expect(page.getByLabel('Status')).toHaveValue('open');
+        await expect(page.getByLabel('Status', { exact: true })).toHaveValue('open');
         await expect(page.getByText('No service tickets found.')).toHaveCount(0);
         await expectAccessible(page);
         await captureFieldTest(page, 'office-open-tickets-1440x900.png');

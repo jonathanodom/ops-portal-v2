@@ -1,4 +1,4 @@
-<x-layouts.office title="Dispatch">
+<x-layouts.office title="Dispatch" width="workspace">
     @php
         $today = now($activeOrganization->timezone)->startOfDay();
         $baseQuery = array_merge($filterQuery, [
@@ -6,18 +6,24 @@
             'calendar_month' => $calendarMonth->format('Y-m'),
         ]);
         $dispatchQuery = fn (array $changes = []) => array_merge($baseQuery, $changes);
+        $dispatchFilterLabels = [];
+        if (filled(request('assignee'))) $dispatchFilterLabels['assignee'] = 'Assignee: '.($memberships->firstWhere('id', (int) request('assignee'))?->user?->name ?? request('assignee'));
+        foreach (['status' => 'Status', 'priority' => 'Priority'] as $key => $label) if (filled(request($key))) $dispatchFilterLabels[$key] = $label.': '.Str::headline(request($key));
     @endphp
 
-    <div class="flex flex-wrap items-end justify-between gap-4">
-        <div>
-            <p class="text-sm font-bold uppercase tracking-[.12em] text-brand-blue">Control plane</p>
-            <h1 class="mt-1 text-3xl font-bold">Dispatch</h1>
-            <p class="mt-2 text-slate-600">{{ $date->format('l, F j, Y') }} · {{ $activeOrganization->timezone }}</p>
-        </div>
+    <form method="GET" aria-label="Dispatch filters">
+        <input type="hidden" name="date" value="{{ $date->format('Y-m-d') }}">
+        <input type="hidden" name="calendar_month" value="{{ $calendarMonth->format('Y-m') }}">
+        <x-office.primary-toolbar title="Dispatch" :description="$date->format('l, F j, Y').' · '.$activeOrganization->timezone" eyebrow="Control plane">
+            <x-slot:filters><x-office.filter-panel :active-count="count($dispatchFilterLabels)"><div class="grid gap-3 sm:grid-cols-3"><div><label class="form-label" for="assignee">Assignee</label><select class="form-input" id="assignee" name="assignee"><option value="">All</option>@foreach($memberships as $membership)<option value="{{ $membership->id }}" @selected((string) request('assignee') === (string) $membership->id)>{{ $membership->user->name }}</option>@endforeach</select></div><div><label class="form-label" for="status">Status</label><select class="form-input" id="status" name="status"><option value="">All</option>@foreach($visitStatuses as $value => $label)<option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>@endforeach</select></div><div><label class="form-label" for="priority">Priority</label><select class="form-input" id="priority" name="priority"><option value="">All</option>@foreach($priorities as $value => $label)<option value="{{ $value }}" @selected(request('priority') === $value)>{{ $label }}</option>@endforeach</select></div></div><div class="mt-4 flex flex-wrap justify-end gap-2"><a class="button-secondary" href="{{ route('office.dispatch.index', ['date' => $date->format('Y-m-d'), 'calendar_month' => $calendarMonth->format('Y-m')]) }}">Clear all</a><button class="button-primary">Apply filters</button></div></x-office.filter-panel></x-slot:filters>
         @if($activeMembership->hasCapability('dispatch.manage'))
-            <a class="button-primary" href="{{ route('office.service-tickets.create') }}">New service ticket</a>
+            <x-slot:primaryAction><a class="button-primary" href="{{ route('office.service-tickets.create') }}">New service ticket</a></x-slot:primaryAction>
         @endif
-    </div>
+            @if($dispatchFilterLabels)
+                <x-slot:chips><span class="text-xs font-bold uppercase tracking-wide text-slate-500">Active filters</span>@foreach($dispatchFilterLabels as $key => $label)<x-office.filter-chip :label="$label" :remove-url="route('office.dispatch.index', array_merge($baseQuery, request()->except([$key])))" />@endforeach<a href="{{ route('office.dispatch.index', ['date' => $date->format('Y-m-d'), 'calendar_month' => $calendarMonth->format('Y-m')]) }}" class="inline-flex min-h-9 items-center px-2 text-xs font-bold text-brand-blue underline">Clear all</a></x-slot:chips>
+            @endif
+        </x-office.primary-toolbar>
+    </form>
 
     <section class="mt-6" aria-labelledby="dispatch-date-strip-heading">
         <div class="mb-3 flex flex-wrap items-center justify-between gap-3">
@@ -42,16 +48,6 @@
             @endforeach
         </div>
     </section>
-
-    <form method="GET" class="surface mt-5 grid gap-3 p-4 md:grid-cols-5" aria-label="Dispatch filters">
-        <input type="hidden" name="date" value="{{ $date->format('Y-m-d') }}">
-        <input type="hidden" name="calendar_month" value="{{ $calendarMonth->format('Y-m') }}">
-        <div><label class="form-label" for="assignee">Assignee</label><select class="form-input" id="assignee" name="assignee"><option value="">All</option>@foreach($memberships as $membership)<option value="{{ $membership->id }}" @selected((string) request('assignee') === (string) $membership->id)>{{ $membership->user->name }}</option>@endforeach</select></div>
-        <div><label class="form-label" for="status">Status</label><select class="form-input" id="status" name="status"><option value="">All</option>@foreach($visitStatuses as $value => $label)<option value="{{ $value }}" @selected(request('status') === $value)>{{ $label }}</option>@endforeach</select></div>
-        <div><label class="form-label" for="priority">Priority</label><select class="form-input" id="priority" name="priority"><option value="">All</option>@foreach($priorities as $value => $label)<option value="{{ $value }}" @selected(request('priority') === $value)>{{ $label }}</option>@endforeach</select></div>
-        <div class="flex items-end"><button class="button-secondary w-full">Apply filters</button></div>
-        <div class="flex items-end"><a class="button-secondary w-full" href="{{ route('office.dispatch.index', ['date' => $date->format('Y-m-d'), 'calendar_month' => $calendarMonth->format('Y-m')]) }}">Clear</a></div>
-    </form>
 
     <div class="mt-6 grid gap-6 xl:grid-cols-[minmax(0,2fr)_minmax(320px,1fr)]">
         <section>

@@ -72,3 +72,33 @@ test('filter disclosure and active chips preserve real GET state', async ({ page
     await expect(page.getByRole('link', { name: 'List', exact: true })).toHaveAttribute('aria-current', 'page');
     await expect(page.getByLabel('Remove filter: Priority: Urgent')).toBeVisible();
 });
+
+test('checkpoint two workspaces share responsive toolbar and filter behavior', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'One project controls the focused viewport matrix.');
+    test.setTimeout(180_000);
+    await login(page);
+
+    for (const [id, path, heading, hasFilters] of [
+        ['J01', '/office/projects', 'Projects / Engagements', true],
+        ['ST01', '/office/service-tickets', 'Service Tickets', true],
+        ['D01', '/office/dispatch', 'Dispatch', true],
+        ['R01', '/office/closeout-reviews', 'Closeout queue', true],
+        ['K01', '/office/catalog/services', 'Products & Services', true],
+        ['K02', '/office/catalog/products', 'Products & Services', true],
+        ['K03', '/office/catalog/packages', 'Products & Services', true],
+        ['K06', '/office/subscriptions', 'Customer Services', true],
+        ['A06', '/office/quote-approvals', 'Quote approvals', false],
+        ['A01', '/office/settings/organization', 'Settings', false],
+    ]) {
+        for (const [width, height] of [[390, 844], [1440, 900]]) {
+            await page.setViewportSize({ width, height });
+            await page.goto(path);
+            await expect(page.locator('.office-primary-toolbar')).toBeVisible();
+            await expect(page.getByRole('heading', { name: heading, exact: true, level: 1 })).toBeVisible();
+            if (hasFilters) await expect(page.locator('summary', { hasText: 'Filters' })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            if (outputDir) await page.screenshot({ path: `${outputDir}/${id}-${width}-final.png`, fullPage: true });
+        }
+    }
+});

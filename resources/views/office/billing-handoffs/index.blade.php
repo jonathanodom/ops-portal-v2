@@ -1,18 +1,19 @@
 <x-layouts.office title="Billing" width="workspace">
-    @if(session('status'))<div class="mb-5 rounded-lg border border-emerald-300 bg-emerald-50 p-4 font-semibold text-emerald-900" role="status">{{ session('status') }}</div>@endif
-    <x-office.page-header title="Billing" description="Move approved work into invoicing, then manage the resulting invoice ledger.">
+    @if(session('status'))<x-office.alert type="success">{{ session('status') }}</x-office.alert>@endif
+    <form method="GET" aria-label="Billing queue filters">
+    <x-office.primary-toolbar title="Billing" description="Move approved work into invoicing, then manage the resulting invoice ledger.">
+        <x-slot:filters><x-office.filter-panel :active-count="filled(request('status')) ? 1 : 0"><div><label class="form-label" for="status">Handoff status</label><select class="form-input" id="status" name="status"><option value="">All handoffs</option><option value="ready" @selected(request('status')==='ready')>Ready to invoice</option><option value="handed_off" @selected(request('status')==='handed_off')>Invoice started</option></select></div><div class="mt-4 flex justify-end gap-2"><a href="{{ route('office.billing-handoffs.index') }}" class="button-secondary">Clear all</a><button class="button-primary">Apply filter</button></div></x-office.filter-panel></x-slot:filters>
         @if($activeMembership->hasCapability('billing.settings.manage'))
-            <x-slot:actions><a class="button-secondary" href="{{ route('office.settings.billing.edit') }}">Billing settings</a></x-slot:actions>
+            <x-slot:secondaryActions><a class="button-secondary" href="{{ route('office.settings.billing.edit') }}">Billing settings</a></x-slot:secondaryActions>
         @endif
-    </x-office.page-header>
+        @if(filled(request('status')))
+            <x-slot:chips><x-office.filter-chip :label="'Status: '.Str::headline(request('status'))" :remove-url="route('office.billing-handoffs.index')" /></x-slot:chips>
+        @endif
+    </x-office.primary-toolbar>
+    </form>
     <x-office.billing-workspace-tabs />
 
     <div class="mt-5"><h2 class="text-xl font-bold text-slate-950">Queue</h2><p class="mt-1 text-sm text-slate-600">Create an invoice from a ready Billing Handoff or continue an invoice already in progress.</p></div>
-
-    <form method="GET" class="office-filter-toolbar sm:grid-cols-[minmax(220px,320px)_auto]" aria-label="Billing queue filters">
-        <div><label class="form-label" for="status">Handoff status</label><select class="form-input" id="status" name="status"><option value="">All handoffs</option><option value="ready" @selected(request('status')==='ready')>Ready to invoice</option><option value="handed_off" @selected(request('status')==='handed_off')>Invoice started</option></select></div>
-        <div class="flex flex-wrap gap-2"><button class="button-secondary">Filter</button>@if(request()->has('status'))<a href="{{ route('office.billing-handoffs.index') }}" class="inline-flex min-h-11 items-center px-2 text-sm font-bold text-brand-blue underline">Clear</a>@endif</div>
-    </form>
 
     <div class="office-table-wrap" data-office-table>
         <table class="office-data-table">
