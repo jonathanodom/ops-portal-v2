@@ -1,7 +1,8 @@
 # Postman collection — `/api/v1`
 
 Covers OP-API-1 (auth/scopes), OP-API-2 (customers, contacts, locations),
-and OP-API-3 (ticket list/detail/create with idempotency) from
+OP-API-3 (ticket list/detail/create with idempotency), and OP-API-4
+(ticket PATCH updates + customer/project reads) from
 `docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md`.
 
 ## Setup (local dev, `http://ops-portal-v2.test/`)
@@ -47,15 +48,23 @@ and OP-API-3 (ticket list/detail/create with idempotency) from
    database has no customers yet, create one first (e.g. through the office
    UI, or `php artisan tinker`), then re-run.
 
-6. Run **Tickets (C-006/C-007)** top to bottom. It creates one real ticket
-   using a fresh `Idempotency-Key` (generated once and reused), confirms it's
-   retrievable, **replays the exact same create request with the same key**
-   and asserts it returns the *same* ticket with no duplicate, then confirms
-   the ticket list shows exactly one open ticket. Re-running this folder
-   generates a new `Idempotency-Key`, so it's safe to run repeatedly — each
-   run creates one new ticket, not one per request.
+6. Run **Tickets (C-006/C-007/C-008)** top to bottom. It creates one real
+   ticket using a fresh `Idempotency-Key` (generated once and reused),
+   confirms it's retrievable, **replays the exact same create request with
+   the same key** and asserts it returns the *same* ticket with no
+   duplicate, confirms the ticket list shows exactly one open ticket, then
+   **PATCHes** that ticket's priority and appends to its description
+   (asserting the description was appended, not overwritten). Re-running
+   this folder generates a new `Idempotency-Key`, so it's safe to run
+   repeatedly — each run creates one new ticket, not one per request.
 
-7. Run **Negative cases**. These don't require any local data — they
+7. Run **Projects (C-009)**. Lists projects for the customer captured
+   earlier and fetches one project's detail. If your local database has no
+   projects yet, this returns an empty list / 404 — that's expected, not a
+   failure; create a project through the office UI first if you want to
+   exercise it fully.
+
+8. Run **Negative cases**. These don't require any local data — they
    exercise missing/invalid tokens, a missing required `q` parameter, and a
    guaranteed-nonexistent customer ID (confirming no internal class names or
    stack traces leak into 404 responses).

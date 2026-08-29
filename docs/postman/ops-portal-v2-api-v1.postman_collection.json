@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Ops Portal v2 — /api/v1 (JARVIS boundary)",
-    "description": "Covers OP-API-1 (auth/scopes), OP-API-2 (customers, contacts, locations), and OP-API-3 (tickets + idempotency) from docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md.\n\nSetup:\n1. Pull feat/op-api-1-foundation-and-service-identity locally and `composer install` (adds laravel/sanctum — required or the whole app 500s).\n2. composer phase:update (or migrate) so the new tables/capabilities/role exist.\n3. php artisan jarvis:create-service-account (prints a one-time bearer token).\n4. Import the companion environment file, set `token` to that value, and select it.\n5. Run 'Happy path' top to bottom, then 'Tickets (C-006/C-007)' top to bottom (it depends on customer_id/location_id/contact_id captured by Happy path), then 'Negative cases'.",
+    "description": "Covers OP-API-1 (auth/scopes), OP-API-2 (customers, contacts, locations), OP-API-3 (tickets + idempotency), and OP-API-4 (ticket PATCH + projects) from docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md.\n\nSetup:\n1. Pull feat/op-api-1-foundation-and-service-identity locally and `composer install` (adds laravel/sanctum — required or the whole app 500s).\n2. composer phase:update (or migrate) so the new tables/capabilities/role exist.\n3. php artisan jarvis:create-service-account (prints a one-time bearer token).\n4. Import the companion environment file, set `token` to that value, and select it.\n5. Run 'Happy path' top to bottom, then 'Tickets (C-006/C-007/C-008)' top to bottom (it depends on customer_id/location_id/contact_id captured by Happy path), then 'Projects (C-009)', then 'Negative cases'.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -15,7 +15,8 @@
     { "key": "location_id", "value": "1" },
     { "key": "contact_id", "value": "1" },
     { "key": "idempotency_key", "value": "" },
-    { "key": "ticket_id", "value": "" }
+    { "key": "ticket_id", "value": "" },
+    { "key": "project_id", "value": "1" }
   ],
   "item": [
     {
@@ -179,7 +180,7 @@
       ]
     },
     {
-      "name": "Tickets (C-006/C-007)",
+      "name": "Tickets (C-006/C-007/C-008)",
       "item": [
         {
           "name": "GET /tickets?customer_id=... — before create (expect none open)",
@@ -394,6 +395,151 @@
               "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"location_id\": {{location_id}},\n  \"priority\": \"normal\",\n  \"source\": \"jarvis\"\n}"
             },
             "url": { "raw": "{{base_url}}/tickets", "host": ["{{base_url}}"], "path": ["tickets"] }
+          }
+        },
+        {
+          "name": "PATCH /tickets/{{ticket_id}} — priority + description_append",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('priority set and description appended (not replaced)', () => {",
+                  "  const data = pm.response.json().data;",
+                  "  pm.expect(data.priority).to.eql('high');",
+                  "  pm.expect(data.description).to.include('Caller confirmed reboots happen every 20 minutes.');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"high\",\n  \"description_append\": \"Caller confirmed reboots happen every 20 minutes.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets/{{ticket_id}}", "host": ["{{base_url}}"], "path": ["tickets", "{{ticket_id}}"] }
+          }
+        },
+        {
+          "name": "PATCH /tickets/{{ticket_id}} without Idempotency-Key → 400",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('400 Bad Request', () => pm.response.to.have.status(400));",
+                  "pm.test('idempotency_key_required envelope', () => pm.expect(pm.response.json().error.code).to.eql('idempotency_key_required'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"priority\": \"low\"\n}" },
+            "url": { "raw": "{{base_url}}/tickets/{{ticket_id}}", "host": ["{{base_url}}"], "path": ["tickets", "{{ticket_id}}"] }
+          }
+        },
+        {
+          "name": "PATCH /tickets/{{ticket_id}} with no fields → 422",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('422 Unprocessable', () => pm.response.to.have.status(422));",
+                  "pm.test('validation_failed envelope', () => pm.expect(pm.response.json().error.code).to.eql('validation_failed'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{}" },
+            "url": { "raw": "{{base_url}}/tickets/{{ticket_id}}", "host": ["{{base_url}}"], "path": ["tickets", "{{ticket_id}}"] }
+          }
+        }
+      ]
+    },
+    {
+      "name": "Projects (C-009)",
+      "item": [
+        {
+          "name": "GET /customers/{{customer_id}}/projects",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('returns an array of ProjectSummary', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.be.an('array');",
+                  "  if (body.data.length) {",
+                  "    pm.expect(body.data[0]).to.have.all.keys('id', 'project_number', 'customer_id', 'location_id', 'name', 'type', 'status', 'summary', 'objective', 'start_on', 'target_end_on', 'completed_at', 'created_at', 'updated_at');",
+                  "    pm.collectionVariables.set('project_id', body.data[0].id);",
+                  "  }",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/customers/{{customer_id}}/projects",
+              "host": ["{{base_url}}"],
+              "path": ["customers", "{{customer_id}}", "projects"]
+            }
+          }
+        },
+        {
+          "name": "GET /projects/{{project_id}}",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK', () => pm.response.to.have.status(200));",
+                  "pm.test('shape matches ProjectSummary', () => {",
+                  "  const body = pm.response.json();",
+                  "  pm.expect(body.data).to.have.all.keys('id', 'project_number', 'customer_id', 'location_id', 'name', 'type', 'status', 'summary', 'objective', 'start_on', 'target_end_on', 'completed_at', 'created_at', 'updated_at');",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [{ "key": "Accept", "value": "application/json" }],
+            "url": {
+              "raw": "{{base_url}}/projects/{{project_id}}",
+              "host": ["{{base_url}}"],
+              "path": ["projects", "{{project_id}}"]
+            },
+            "description": "Skips gracefully with a 404 if your local database has no projects yet (project_id defaults to 1) — this endpoint is otherwise identical in shape to the customer-projects list."
           }
         }
       ]
