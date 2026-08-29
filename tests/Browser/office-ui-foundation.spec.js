@@ -3,6 +3,7 @@ import AxeBuilder from '@axe-core/playwright';
 
 const password = process.env.BETA_DEMO_PASSWORD;
 const outputDir = process.env.OFFICE_UI_FOUNDATION_DIR;
+const checkpointThreeDir = process.env.OFFICE_UI_CHECKPOINT3_DIR;
 
 const viewports = [
     ['P', 390, 844],
@@ -24,6 +25,12 @@ async function expectAccessible(page) {
     const results = await new AxeBuilder({ page }).analyze();
     const serious = results.violations.filter((violation) => ['serious', 'critical'].includes(violation.impact));
     expect(serious).toEqual([]);
+}
+
+async function firstRecordHref(page, indexPath, pattern) {
+    await page.goto(indexPath);
+    const hrefs = await page.locator('a[href]').evaluateAll((links) => links.map((link) => link.getAttribute('href')));
+    return hrefs.find((candidate) => candidate && pattern.test(new URL(candidate, 'http://127.0.0.1:8001').pathname));
 }
 
 test.skip(!password, 'BETA_DEMO_PASSWORD is required.');
@@ -99,6 +106,53 @@ test('checkpoint two workspaces share responsive toolbar and filter behavior', a
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             await expectAccessible(page);
             if (outputDir) await page.screenshot({ path: `${outputDir}/${id}-${width}-final.png`, fullPage: true });
+        }
+    }
+});
+
+test('checkpoint three forms and record details share compact action contracts', async ({ page }, testInfo) => {
+    test.skip(testInfo.project.name !== 'desktop', 'One project controls the focused viewport matrix.');
+    test.setTimeout(180_000);
+    await login(page);
+
+    for (const [id, path, heading] of [
+        ['C06', '/office/customers/create', 'Add customer'],
+        ['J11', '/office/projects/create', 'New Project / Engagement'],
+        ['O08', '/office/opportunities/create', 'New opportunity'],
+        ['ST05', '/office/service-tickets/create', 'New service ticket'],
+        ['I06', '/office/invoices/create', 'New invoice'],
+        ['K10', '/office/catalog/services/create', 'Add service'],
+        ['K11', '/office/catalog/products/create', 'Add product'],
+        ['K12', '/office/catalog/packages/create', 'Add package'],
+    ]) {
+        for (const [width, height] of [[390, 844], [1440, 900]]) {
+            await page.setViewportSize({ width, height });
+            await page.goto(path);
+            await expect(page.getByRole('heading', { name: heading, exact: true, level: 1 })).toBeVisible();
+            await expect(page.locator('.office-form-shell').first()).toBeVisible();
+            await expect(page.locator('.office-form-actions')).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            const actionHeights = await page.locator('.office-form-actions a, .office-form-actions button').evaluateAll((controls) => controls.map((control) => control.getBoundingClientRect().height));
+            expect(actionHeights.every((height) => height >= 44)).toBeTruthy();
+            await expectAccessible(page);
+            if (checkpointThreeDir) await page.screenshot({ path: `${checkpointThreeDir}/${id}-${width}-final.png`, fullPage: true });
+        }
+    }
+
+    const details = [
+        ['ST03', await firstRecordHref(page, '/office/service-tickets', /^\/office\/service-tickets\/\d+$/u)],
+        ['R02', await firstRecordHref(page, '/office/closeout-reviews', /^\/office\/closeout-reviews\/\d+$/u)],
+    ];
+
+    for (const [id, href] of details) {
+        expect(href, `${id} needs a reachable seeded record`).toBeTruthy();
+        for (const [width, height] of [[390, 844], [1440, 900]]) {
+            await page.setViewportSize({ width, height });
+            await page.goto(href);
+            await expect(page.locator('.office-record-header')).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+            if (checkpointThreeDir) await page.screenshot({ path: `${checkpointThreeDir}/${id}-${width}-final.png`, fullPage: true });
         }
     }
 });

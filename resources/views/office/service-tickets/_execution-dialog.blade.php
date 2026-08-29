@@ -4,7 +4,7 @@
     $timeOwners = $visit->assignments->pluck('membership.user')->push(auth()->user())->unique('id')->sortBy('name');
     $timeSeconds = $visit->timeEntries->sum(fn ($entry) => $entry->effectiveDurationSeconds());
 @endphp
-<dialog id="execution-visit-{{ $visit->id }}" data-execution-dialog data-visit-id="{{ $visit->id }}" aria-labelledby="execution-title-{{ $visit->id }}" class="m-0 h-dvh w-dvw max-h-none max-w-none bg-canvas p-0 text-ink sm:m-auto sm:h-[92dvh] sm:w-[96vw] sm:rounded-xl sm:border sm:border-slate-300">
+<dialog id="execution-visit-{{ $visit->id }}" data-execution-dialog data-visit-id="{{ $visit->id }}" aria-labelledby="execution-title-{{ $visit->id }}" class="office-standard-dialog sm:h-[92dvh] sm:w-[96vw]">
     <div class="flex h-full min-h-0 flex-col">
         <header class="sticky top-0 z-10 flex items-start justify-between gap-4 border-b border-slate-200 bg-white p-4 sm:p-5">
             <div><p class="text-sm font-bold text-brand-blue">{{ $ticket->ticket_number }} · {{ $visit->displayLabel() }}</p><h2 id="execution-title-{{ $visit->id }}" class="mt-1 text-xl font-bold text-slate-950">Execution workspace</h2><p class="mt-1 text-sm text-slate-600">{{ ucfirst(str_replace('_', ' ', $visit->status)) }} · {{ $visit->scheduledStartLocal()?->format('M j, Y g:i A T') ?? 'Unscheduled' }}</p></div>

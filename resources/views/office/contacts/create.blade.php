@@ -1,9 +1,8 @@
-<x-layouts.office title="Add contact">
-    <a href="{{ route('office.customers.show', $customer) }}" class="text-sm font-bold text-brand-blue">← {{ $customer->display_name }}</a>
-    <h1 class="mt-3 text-3xl font-bold tracking-tight text-slate-950">Add contact</h1>
+<x-layouts.office title="Add contact" width="form">
+    <x-office.record-header title="Add contact" :back-href="route('office.customers.show', $customer)" :back-label="$customer->display_name" description="Add an operational contact to this customer." />
     <x-form-errors />
-    <form method="POST" action="{{ route('office.customers.contacts.store', $customer) }}" class="surface mt-6 p-5 sm:p-6">
-        @csrf @include('office.contacts._fields', ['contact' => null])
-        <div class="mt-6 flex gap-3"><button class="button-primary">Add contact</button><a href="{{ route('office.customers.show', $customer) }}" class="button-secondary">Cancel</a></div>
+    <form method="POST" action="{{ route('office.customers.contacts.store', $customer) }}" class="office-form-shell">
+        @csrf <div class="p-4">@include('office.contacts._fields', ['contact' => null])</div>
+        <x-office.form-actions><a href="{{ route('office.customers.show', $customer) }}" class="button-secondary">Cancel</a><button class="button-primary">Add contact</button></x-office.form-actions>
     </form>
 </x-layouts.office>
