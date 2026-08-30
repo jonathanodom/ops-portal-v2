@@ -36,6 +36,11 @@ class Organization extends Model
         return $this->hasMany(ServiceLocation::class);
     }
 
+    public function commercialLeadIntakes(): HasMany
+    {
+        return $this->hasMany(CommercialLeadIntake::class);
+    }
+
     public function serviceTickets(): HasMany
     {
         return $this->hasMany(ServiceTicket::class);
