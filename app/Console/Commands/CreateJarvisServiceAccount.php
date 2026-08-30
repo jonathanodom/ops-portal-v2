@@ -12,6 +12,7 @@ use Illuminate\Console\Command;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 #[Signature('jarvis:create-service-account
     {--email=jarvis-core@service.newdaytech.net : Service account email}
@@ -42,39 +43,63 @@ class CreateJarvisServiceAccount extends Command
 
         $email = Str::lower((string) $this->option('email'));
         $name = (string) $this->option('name');
+        $ttlDays = (int) config('jarvis.service_token_ttl_days', 90);
+        if ($ttlDays < 1 || $ttlDays > 3650) {
+            $this->error('JARVIS_SERVICE_TOKEN_TTL_DAYS must be between 1 and 3650.');
 
-        [$user, $token] = DB::transaction(function () use ($organization, $email, $name): array {
-            $user = User::query()->updateOrCreate(
-                ['email' => $email],
-                [
-                    'name' => $name,
-                    // Random, never displayed, never usable for session login: status below
-                    // is intentionally not "active", so Auth::attempt (which requires
-                    // status = active) can never authenticate this account with a password.
-                    'password' => Hash::make(Str::random(64)),
-                    'status' => 'service_account',
-                ],
-            );
+            return self::FAILURE;
+        }
+        $expiresAt = now()->addDays($ttlDays);
 
-            $membership = OrganizationMembership::query()->updateOrCreate(
-                ['organization_id' => $organization->id, 'user_id' => $user->id],
-                ['status' => 'active'],
-            );
-            $membership->roles()->syncWithoutDetaching(Role::query()->where('key', 'jarvis_service')->pluck('id'));
+        try {
+            [$user, $token] = DB::transaction(function () use ($organization, $email, $name, $expiresAt): array {
+                $user = User::query()->where('email', $email)->lockForUpdate()->first();
+                if ($user && $user->status !== 'service_account') {
+                    throw new InvalidArgumentException('The requested email belongs to a human account and cannot be converted to a service identity.');
+                }
+                if ($user && $user->memberships()->where('organization_id', '!=', $organization->id)->exists()) {
+                    throw new InvalidArgumentException('The requested service identity already belongs to another organization. Use an organization-specific email.');
+                }
 
-            if ($this->option('rotate')) {
-                $user->tokens()->delete();
-            }
+                if ($user) {
+                    $user->update(['name' => $name]);
+                } else {
+                    $user = User::query()->create([
+                        'email' => $email,
+                        'name' => $name,
+                        // Random, never displayed, never usable for session login: status below
+                        // is intentionally not "active", so Auth::attempt (which requires
+                        // status = active) can never authenticate this account with a password.
+                        'password' => Hash::make(Str::random(64)),
+                        'status' => 'service_account',
+                    ]);
+                }
 
-            $result = $user->createToken($name, self::ABILITIES);
+                $membership = OrganizationMembership::query()->updateOrCreate(
+                    ['organization_id' => $organization->id, 'user_id' => $user->id],
+                    ['status' => 'active'],
+                );
+                $membership->roles()->sync(Role::query()->where('key', 'jarvis_service')->pluck('id'));
 
-            return [$user, $result->plainTextToken];
-        });
+                if ($this->option('rotate')) {
+                    $user->tokens()->delete();
+                }
+
+                $result = $user->createToken($name, self::ABILITIES, $expiresAt);
+
+                return [$user, $result->plainTextToken];
+            });
+        } catch (InvalidArgumentException $exception) {
+            $this->error($exception->getMessage());
+
+            return self::FAILURE;
+        }
 
         $this->info('JARVIS service identity is ready.');
         $this->line('  User ID: '.$user->id);
         $this->line('  Organization: '.$organization->name." (id {$organization->id})");
         $this->line('  Scopes: '.implode(', ', self::ABILITIES));
+        $this->line('  Expires: '.$expiresAt->toIso8601String());
         $this->newLine();
         $this->warn('Bearer token (shown once, not recoverable — store as OPS_API_TOKEN in the JARVIS environment):');
         $this->line($token);
@@ -87,8 +112,8 @@ class CreateJarvisServiceAccount extends Command
         $option = $this->option('organization');
         if ($option) {
             $organization = ctype_digit((string) $option)
-                ? Organization::query()->find((int) $option)
-                : Organization::query()->where('slug', $option)->first();
+                ? Organization::query()->where('active', true)->find((int) $option)
+                : Organization::query()->where('active', true)->where('slug', $option)->first();
             if (! $organization) {
                 $this->error("No organization matches \"{$option}\".");
 

@@ -6,7 +6,7 @@ use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['organization_id', 'actor_id', 'route', 'idempotency_key', 'response_status', 'response_data'])]
+#[Fillable(['organization_id', 'actor_id', 'route', 'idempotency_key', 'request_sha256', 'response_status', 'response_data'])]
 class IdempotencyKey extends Model
 {
     protected function casts(): array

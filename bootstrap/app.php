@@ -1,11 +1,13 @@
 <?php
 
 use App\Http\Middleware\CorrelateRequest;
+use App\Http\Middleware\LimitApiRequestSize;
 use App\Http\Middleware\RecordOperationalFailures;
 use App\Http\Middleware\RequireCapability;
 use App\Http\Middleware\ResolveActiveOrganization;
 use App\Support\Api\ApiResponse;
 use App\Support\Api\IdempotencyKeyInFlightException;
+use App\Support\Api\IdempotencyKeyReusedException;
 use Illuminate\Auth\Access\AuthorizationException;
 use Illuminate\Auth\AuthenticationException;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
@@ -34,6 +36,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'record.operational.failures' => RecordOperationalFailures::class,
             'abilities' => CheckAbilities::class,
             'ability' => CheckForAnyAbility::class,
+            'api.request.size' => LimitApiRequestSize::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions): void {
@@ -62,6 +65,10 @@ return Application::configure(basePath: dirname(__DIR__))
                 return ApiResponse::error($request, 'conflict', $e->getMessage(), 409);
             }
 
+            if ($e instanceof IdempotencyKeyReusedException) {
+                return ApiResponse::error($request, 'idempotency_key_reused', $e->getMessage(), 409);
+            }
+
             if ($e instanceof HttpExceptionInterface) {
                 $status = $e->getStatusCode();
                 $code = match ($status) {
@@ -70,6 +77,7 @@ return Application::configure(basePath: dirname(__DIR__))
                     404 => 'not_found',
                     405 => 'method_not_allowed',
                     409 => 'conflict',
+                    413 => 'payload_too_large',
                     422 => 'unprocessable',
                     429 => 'rate_limited',
                     default => $status >= 500 ? 'server_error' : 'request_failed',

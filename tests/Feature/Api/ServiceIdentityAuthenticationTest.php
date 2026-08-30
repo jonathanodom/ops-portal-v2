@@ -8,6 +8,7 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
 use Tests\TestCase;
 
@@ -43,6 +44,16 @@ class ServiceIdentityAuthenticationTest extends TestCase
         $user->tokens()->delete();
 
         $response = $this->withHeader('Authorization', 'Bearer '.$plainTextToken)->getJson('/api/v1/me');
+
+        $response->assertStatus(401)->assertJsonPath('error.code', 'unauthenticated');
+    }
+
+    public function test_expired_token_is_rejected(): void
+    {
+        [$user] = $this->jarvisServiceIdentity();
+        $expired = $user->createToken('expired', ['tickets.read'], now()->subMinute())->plainTextToken;
+
+        $response = $this->withHeader('Authorization', 'Bearer '.$expired)->getJson('/api/v1/me');
 
         $response->assertStatus(401)->assertJsonPath('error.code', 'unauthenticated');
     }
@@ -95,6 +106,71 @@ class ServiceIdentityAuthenticationTest extends TestCase
             ->withHeader('Authorization', 'Bearer '.$plainTextToken)
             ->getJson('/api/v1/me');
         $authenticated->assertJsonPath('meta.request_id', $requestId);
+    }
+
+    public function test_read_and_write_rate_limits_are_separate_and_use_the_api_envelope(): void
+    {
+        config()->set('jarvis.api_read_limit_per_minute', 1);
+        config()->set('jarvis.api_write_limit_per_minute', 1);
+        [, , $plainTextToken] = $this->jarvisServiceIdentity();
+        $headers = [
+            'Authorization' => 'Bearer '.$plainTextToken,
+            'X-Request-ID' => '22222222-2222-2222-2222-222222222222',
+            'Idempotency-Key' => 'rate-limit-write-1',
+        ];
+
+        $this->withHeaders($headers)->getJson('/api/v1/me')->assertOk();
+        $this->withHeaders($headers)->postJson('/api/v1/tickets', [])->assertStatus(422);
+
+        $readLimited = $this->withHeaders($headers)->getJson('/api/v1/me');
+        $readLimited->assertStatus(429)->assertJsonPath('error.code', 'rate_limited');
+        $this->assertSame($headers['X-Request-ID'], $readLimited->headers->get('X-Request-ID'));
+
+        $writeLimited = $this->withHeaders($headers)->postJson('/api/v1/tickets', []);
+        $writeLimited->assertStatus(429)->assertJsonPath('error.code', 'rate_limited');
+    }
+
+    public function test_rate_limits_are_isolated_by_service_identity(): void
+    {
+        config()->set('jarvis.api_read_limit_per_minute', 1);
+        [, $organization, $firstToken] = $this->jarvisServiceIdentity();
+        $secondUser = User::query()->create([
+            'name' => 'JARVIS Secondary',
+            'email' => 'jarvis-secondary@service.newdaytech.net',
+            'password' => Hash::make(str()->random(64)),
+            'status' => 'service_account',
+        ]);
+        $membership = OrganizationMembership::query()->create([
+            'organization_id' => $organization->id,
+            'user_id' => $secondUser->id,
+            'status' => 'active',
+        ]);
+        $membership->roles()->attach(Role::query()->where('key', 'jarvis_service')->firstOrFail());
+        $secondToken = $secondUser->createToken('secondary', ['tickets.read'])->plainTextToken;
+
+        $this->withHeader('Authorization', 'Bearer '.$firstToken)->getJson('/api/v1/me')->assertOk();
+        $this->withHeader('Authorization', 'Bearer '.$firstToken)->getJson('/api/v1/me')->assertStatus(429);
+        $this->flushHeaders();
+        Auth::forgetGuards();
+        $this->withHeader('Authorization', 'Bearer '.$secondToken)->getJson('/api/v1/me')->assertOk();
+    }
+
+    public function test_api_request_size_limit_returns_an_enveloped_413_without_affecting_browser_routes(): void
+    {
+        config()->set('jarvis.api_max_request_bytes', 128);
+        [, , $plainTextToken] = $this->jarvisServiceIdentity();
+
+        $response = $this->withHeaders([
+            'Authorization' => 'Bearer '.$plainTextToken,
+            'X-Request-ID' => '33333333-3333-3333-3333-333333333333',
+        ])
+            ->postJson('/api/v1/tickets', ['description' => str_repeat('x', 256)]);
+
+        $response->assertStatus(413)
+            ->assertJsonPath('error.code', 'payload_too_large')
+            ->assertJsonPath('meta.request_id', '33333333-3333-3333-3333-333333333333');
+        $this->flushHeaders();
+        $this->get('/up')->assertOk();
     }
 
     /**

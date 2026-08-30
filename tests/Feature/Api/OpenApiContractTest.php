@@ -53,6 +53,39 @@ class OpenApiContractTest extends TestCase
         }
     }
 
+    public function test_every_operation_documents_rate_limiting_and_write_hardening(): void
+    {
+        $spec = $this->spec();
+        foreach ($spec['paths'] as $path => $methods) {
+            foreach ($methods as $method => $operation) {
+                $this->assertArrayHasKey('429', $operation['responses'], strtoupper($method)." {$path} must document 429.");
+            }
+        }
+
+        foreach ([['/tickets', 'post'], ['/tickets/{ticket_id}', 'patch']] as [$path, $method]) {
+            foreach (['400', '409', '413', '422', '429'] as $status) {
+                $this->assertArrayHasKey($status, $spec['paths'][$path][$method]['responses'], strtoupper($method)." {$path} must document {$status}.");
+            }
+        }
+
+        $idempotencyKey = $spec['components']['parameters']['IdempotencyKey']['schema'];
+        $this->assertSame(8, $idempotencyKey['minLength']);
+        $this->assertSame(128, $idempotencyKey['maxLength']);
+    }
+
+    public function test_postman_collection_covers_payload_bound_replay(): void
+    {
+        $collection = json_decode(
+            (string) file_get_contents(base_path('docs/postman/ops-portal-v2-api-v1.postman_collection.json')),
+            true,
+            flags: JSON_THROW_ON_ERROR,
+        );
+        $encoded = json_encode($collection, JSON_THROW_ON_ERROR);
+
+        $this->assertStringContainsString('changed body with same Idempotency-Key', $encoded);
+        $this->assertStringContainsString('idempotency_key_reused', $encoded);
+    }
+
     /**
      * @return array<int, string> e.g. "GET /customers/{param}"
      *

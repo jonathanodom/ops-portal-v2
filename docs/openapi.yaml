@@ -30,6 +30,11 @@ info:
     `403 forbidden` envelope; JARVIS cannot distinguish which layer denied
     the request, by design.
 
+    Service tokens created by `jarvis:create-service-account` expire after
+    the configured lifetime (90 days by default). `--rotate` revokes the
+    identity's existing tokens before printing one replacement token. An
+    expired, revoked, missing, or invalid token returns `401 unauthenticated`.
+
     ## Envelope
 
     - Success: `{"data": ..., "meta": {"request_id": "..."}}`
@@ -43,12 +48,23 @@ info:
 
     `POST /tickets` and `PATCH /tickets/{ticket_id}` require an
     `Idempotency-Key` header. Replaying the exact same request with the
-    same key returns the original result without re-executing the write.
+    same key and same normalized validated payload returns the original result
+    without re-executing the write. Keys must contain 8–128 characters. Reusing
+    a key for a different validated payload in the same method/path scope
+    returns `409 idempotency_key_reused` and never executes another write.
     A validation failure does not consume the key — fix the payload and
     retry with the same key. Keys are scoped per exact method+path, so the
     same key can be reused across different endpoints/resources safely
     (e.g. do not reuse a key from one ticket's PATCH for a different
     ticket's PATCH; each resource path is a distinct scope automatically).
+
+    ## Limits
+
+    Authenticated service identities are limited independently by organization
+    and identity: 120 reads/minute and 30 writes/minute by default. A limit
+    breach returns `429 rate_limited` and preserves `X-Request-ID`. JSON API
+    request bodies are limited to 256 KiB by default; oversized API requests
+    return `413 payload_too_large`. Browser and upload routes are unaffected.
 servers:
   - url: /api/v1
     description: Relative to whatever host serves the Ops Portal (local, staging, or production).
@@ -94,6 +110,8 @@ paths:
                 meta: { request_id: "cf74b3e7-ac47-4cc9-b0cd-d3d502a492b9" }
         '401':
           $ref: '#/components/responses/Unauthenticated'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /customers/search:
     get:
@@ -130,6 +148,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /customers/{customer_id}:
     get:
@@ -157,6 +177,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /customers/{customer_id}/locations:
     get:
@@ -194,6 +216,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /contacts/search:
     get:
@@ -227,6 +251,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /tickets:
     get:
@@ -289,6 +315,8 @@ paths:
           $ref: '#/components/responses/Unauthenticated'
         '403':
           $ref: '#/components/responses/Forbidden'
+        '429':
+          $ref: '#/components/responses/RateLimited'
     post:
       operationId: createTicket
       tags: [Tickets]
@@ -352,8 +380,12 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /tickets/{ticket_id}:
     get:
@@ -378,6 +410,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
     patch:
       operationId: updateTicket
       tags: [Tickets]
@@ -428,8 +462,12 @@ paths:
           $ref: '#/components/responses/NotFound'
         '409':
           $ref: '#/components/responses/Conflict'
+        '413':
+          $ref: '#/components/responses/PayloadTooLarge'
         '422':
           $ref: '#/components/responses/ValidationFailed'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /customers/{customer_id}/projects:
     get:
@@ -460,6 +498,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
   /projects/{project_id}:
     get:
@@ -487,6 +527,8 @@ paths:
           $ref: '#/components/responses/Forbidden'
         '404':
           $ref: '#/components/responses/NotFound'
+        '429':
+          $ref: '#/components/responses/RateLimited'
 
 components:
   securitySchemes:
@@ -523,10 +565,12 @@ components:
       in: header
       required: true
       description: |
-        Any client-generated unique string (a UUID is recommended). Required
+        Any client-generated opaque string from 8 through 128 characters (a
+        UUID is recommended). Required
         for this operation. Replaying the exact request with the same key
-        returns the original result rather than repeating the write.
-      schema: { type: string }
+        returns the original result rather than repeating the write. Reusing
+        the key with a different validated payload returns 409.
+      schema: { type: string, minLength: 8, maxLength: 128 }
 
   headers:
     X-Request-ID:
@@ -535,7 +579,7 @@ components:
 
   responses:
     Unauthenticated:
-      description: Missing, invalid, or revoked bearer token.
+      description: Missing, invalid, expired, or revoked bearer token.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
@@ -562,17 +606,29 @@ components:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
           example: { error: { code: validation_failed, message: "The given data was invalid.", details: { q: ["The q field is required."] } }, meta: { request_id: "..." } }
     IdempotencyKeyRequired:
-      description: The required `Idempotency-Key` header was missing or empty.
+      description: The required `Idempotency-Key` header was missing, empty, outside 8–128 characters, or contained surrounding whitespace.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
           example: { error: { code: idempotency_key_required, message: "The Idempotency-Key header is required for this operation.", details: null }, meta: { request_id: "..." } }
     Conflict:
-      description: A request with the same Idempotency-Key is still being processed by a concurrent request. Retry shortly.
+      description: The same Idempotency-Key is in flight, or it was already used with a different validated payload. Retry an in-flight request; generate a new key for a different logical request.
       content:
         application/json:
           schema: { $ref: '#/components/schemas/ErrorEnvelope' }
           example: { error: { code: conflict, message: "A request with this Idempotency-Key is already being processed. Retry shortly.", details: null }, meta: { request_id: "..." } }
+    PayloadTooLarge:
+      description: The JSON API request body exceeds the configured limit (256 KiB by default).
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: payload_too_large, message: "The API request body exceeds the allowed size.", details: null }, meta: { request_id: "..." } }
+    RateLimited:
+      description: The authenticated service identity exceeded its read or write request rate.
+      content:
+        application/json:
+          schema: { $ref: '#/components/schemas/ErrorEnvelope' }
+          example: { error: { code: rate_limited, message: "Too Many Attempts.", details: null }, meta: { request_id: "..." } }
 
   schemas:
     Meta:

@@ -31,9 +31,12 @@ use App\Policies\ServiceLocationPolicy;
 use App\Policies\ServiceTicketPolicy;
 use App\Policies\VisitPolicy;
 use App\Support\IncidentRecorder;
+use Illuminate\Cache\RateLimiting\Limit;
+use Illuminate\Http\Request;
 use Illuminate\Queue\Events\JobFailed;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Queue;
+use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Validation\Rules\Password;
 
@@ -56,6 +59,16 @@ class AppServiceProvider extends ServiceProvider
     public function boot(): void
     {
         Password::defaults(fn () => Password::min(12)->mixedCase()->numbers());
+        RateLimiter::for('jarvis-api', function (Request $request): Limit {
+            $organizationId = $request->attributes->get('organization')?->id ?? 'none';
+            $identity = $request->user()?->getAuthIdentifier() ?? $request->ip();
+            $isRead = in_array($request->method(), ['GET', 'HEAD', 'OPTIONS'], true);
+            $limit = $isRead
+                ? max(1, (int) config('jarvis.api_read_limit_per_minute', 120))
+                : max(1, (int) config('jarvis.api_write_limit_per_minute', 30));
+
+            return Limit::perMinute($limit)->by("jarvis-api:{$organizationId}:{$identity}:".($isRead ? 'read' : 'write'));
+        });
         Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(CommercialDocument::class, CommercialDocumentPolicy::class);
         Gate::policy(CustomerServiceEnrollment::class, CustomerServiceEnrollmentPolicy::class);

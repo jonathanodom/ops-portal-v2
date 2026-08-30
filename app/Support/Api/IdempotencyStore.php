@@ -33,19 +33,30 @@ final class IdempotencyStore
             ->first();
     }
 
+    public function replay(Organization $organization, string $route, string $key, string $requestSha256): ?IdempotencyKey
+    {
+        $existing = $this->find($organization, $route, $key);
+        if ($existing && (! $existing->request_sha256 || ! hash_equals($existing->request_sha256, $requestSha256))) {
+            throw new IdempotencyKeyReusedException;
+        }
+
+        return $existing;
+    }
+
     /**
      * @param  callable(): array{0: int, 1: mixed}  $produce  Returns [status, responseData].
      * @return array{0: int, 1: mixed, 2: bool} [status, responseData, wasReplayed]
      */
-    public function once(Organization $organization, ?User $actor, string $route, string $key, callable $produce): array
+    public function once(Organization $organization, ?User $actor, string $route, string $key, string $requestSha256, callable $produce): array
     {
         try {
-            [$status, $data] = DB::transaction(function () use ($organization, $actor, $route, $key, $produce) {
+            [$status, $data] = DB::transaction(function () use ($organization, $actor, $route, $key, $requestSha256, $produce) {
                 IdempotencyKey::query()->create([
                     'organization_id' => $organization->id,
                     'actor_id' => $actor?->id,
                     'route' => $route,
                     'idempotency_key' => $key,
+                    'request_sha256' => $requestSha256,
                     'response_status' => 0,
                     'response_data' => null,
                 ]);
@@ -68,6 +79,9 @@ final class IdempotencyStore
             }
 
             $existing = $this->find($organization, $route, $key);
+            if ($existing && (! $existing->request_sha256 || ! hash_equals($existing->request_sha256, $requestSha256))) {
+                throw new IdempotencyKeyReusedException;
+            }
             if ($existing && $existing->response_status > 0) {
                 return [$existing->response_status, $existing->response_data, true];
             }

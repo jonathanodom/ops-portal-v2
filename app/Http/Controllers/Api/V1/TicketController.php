@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Organization;
 use App\Models\ServiceTicket;
 use App\Support\Api\ApiResponse;
+use App\Support\Api\IdempotencyFingerprint;
 use App\Support\Api\IdempotencyStore;
 use App\Support\Api\V1\TicketSummary;
 use App\Support\AuditRecorder;
@@ -70,18 +71,18 @@ class TicketController extends Controller
             return $key;
         }
 
-        $route = $this->idempotencyRoute($request);
-        $cached = $idempotency->find($organization, $route, $key);
-        if ($cached && $cached->response_status > 0) {
-            return ApiResponse::success($request, $cached->response_data, $cached->response_status);
-        }
-
         if ($request->has('location_id') && ! $request->has('service_location_id')) {
             $request->merge(['service_location_id' => $request->input('location_id')]);
         }
         $data = $validator->validate($request, $organization);
+        $route = $this->idempotencyRoute($request);
+        $requestSha256 = IdempotencyFingerprint::make($request->method(), $request->path(), $data);
+        $cached = $idempotency->replay($organization, $route, $key, $requestSha256);
+        if ($cached && $cached->response_status > 0) {
+            return ApiResponse::success($request, $cached->response_data, $cached->response_status);
+        }
 
-        [$status, $body] = $idempotency->once($organization, $request->user(), $route, $key, function () use ($organization, $request, $data, $creator) {
+        [$status, $body] = $idempotency->once($organization, $request->user(), $route, $key, $requestSha256, function () use ($organization, $request, $data, $creator) {
             $ticket = $creator->create($organization, $request->user(), $data, createVisit: false, confirmConflicts: false);
 
             return [201, TicketSummary::make($ticket)];
@@ -110,13 +111,6 @@ class TicketController extends Controller
             return $key;
         }
 
-        $route = $this->idempotencyRoute($request);
-        $cached = $idempotency->find($organization, $route, $key);
-        if ($cached && $cached->response_status > 0) {
-            return ApiResponse::success($request, $cached->response_data, $cached->response_status);
-        }
-
-        $ticketModel = $this->ticket($request, $ticket);
         $data = $request->validate([
             'priority' => ['sometimes', Rule::in(array_keys(config('service_tickets.priorities')))],
             'description_append' => ['sometimes', 'string', 'min:1', 'max:5000'],
@@ -126,8 +120,15 @@ class TicketController extends Controller
                 'priority' => 'At least one of priority or description_append is required.',
             ]);
         }
+        $route = $this->idempotencyRoute($request);
+        $requestSha256 = IdempotencyFingerprint::make($request->method(), $request->path(), $data);
+        $cached = $idempotency->replay($organization, $route, $key, $requestSha256);
+        if ($cached && $cached->response_status > 0) {
+            return ApiResponse::success($request, $cached->response_data, $cached->response_status);
+        }
+        $ticketModel = $this->ticket($request, $ticket);
 
-        [$status, $body] = $idempotency->once($organization, $request->user(), $route, $key, function () use ($organization, $request, $ticketModel, $data) {
+        [$status, $body] = $idempotency->once($organization, $request->user(), $route, $key, $requestSha256, function () use ($organization, $request, $ticketModel, $data) {
             $before = $ticketModel->getAttributes();
             $update = ['updated_by_id' => $request->user()->id];
             if (array_key_exists('priority', $data)) {
@@ -164,12 +165,22 @@ class TicketController extends Controller
 
     private function requireIdempotencyKey(Request $request): string|JsonResponse
     {
-        $key = trim((string) $request->header('Idempotency-Key'));
+        $rawKey = (string) $request->header('Idempotency-Key');
+        $key = trim($rawKey);
         if ($key === '') {
             return ApiResponse::error(
                 $request,
                 'idempotency_key_required',
                 'The Idempotency-Key header is required for this operation.',
+                400,
+            );
+        }
+
+        if ($key !== $rawKey || strlen($key) < 8 || strlen($key) > 128) {
+            return ApiResponse::error(
+                $request,
+                'invalid_idempotency_key',
+                'The Idempotency-Key header must contain between 8 and 128 characters without surrounding whitespace.',
                 400,
             );
         }

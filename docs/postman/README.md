@@ -7,7 +7,7 @@ OP-API-3 (ticket list/detail/create with idempotency), and OP-API-4
 
 ## Setup (local dev, `http://ops-portal-v2.test/`)
 
-1. Pull `feat/op-api-1-foundation-and-service-identity` and install as usual:
+1. Pull `feat/op-api-production-readiness-v1` and install as usual:
 
    ```powershell
    composer install
@@ -35,6 +35,10 @@ OP-API-3 (ticket list/detail/create with idempotency), and OP-API-4
    If you have more than one active `Organization` locally, pass
    `--organization=<slug-or-id>`.
 
+   The command prints the token expiration (90 days by default). Use
+   `--rotate` to revoke prior tokens before issuing one replacement. Never
+   place a real production token in this collection, source, docs, or logs.
+
 4. In Postman:
    - Import `ops-portal-v2-api-v1.postman_collection.json`.
    - Import `ops-portal-v2-local.postman_environment.json` and select it.
@@ -52,11 +56,16 @@ OP-API-3 (ticket list/detail/create with idempotency), and OP-API-4
    ticket using a fresh `Idempotency-Key` (generated once and reused),
    confirms it's retrievable, **replays the exact same create request with
    the same key** and asserts it returns the *same* ticket with no
-   duplicate, confirms the ticket list shows exactly one open ticket, then
+   duplicate, changes the body while retaining the key and verifies the
+   stable `409 idempotency_key_reused` response, confirms the ticket list
+   shows exactly one open ticket, then
    **PATCHes** that ticket's priority and appends to its description
    (asserting the description was appended, not overwritten). Re-running
    this folder generates a new `Idempotency-Key`, so it's safe to run
    repeatedly — each run creates one new ticket, not one per request.
+
+   Idempotency keys must be opaque strings between 8 and 128 characters. A
+   validation failure does not consume a key.
 
 7. Run **Projects (C-009)**. Lists projects for the customer captured
    earlier and fetches one project's detail. If your local database has no
@@ -68,6 +77,11 @@ OP-API-3 (ticket list/detail/create with idempotency), and OP-API-4
    exercise missing/invalid tokens, a missing required `q` parameter, and a
    guaranteed-nonexistent customer ID (confirming no internal class names or
    stack traces leak into 404 responses).
+
+API reads and writes have separate per-identity/organization rate buckets
+(120/minute and 30/minute by default). A `429` response uses the normal API
+envelope and retains `X-Request-ID`. JSON API bodies are limited to 256 KiB by
+default; browser and upload limits are unchanged.
 
 ## Optional: the insufficient-scope (403) request
 

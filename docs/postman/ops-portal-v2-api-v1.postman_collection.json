@@ -1,7 +1,7 @@
 {
   "info": {
     "name": "Ops Portal v2 — /api/v1 (JARVIS boundary)",
-    "description": "Covers OP-API-1 (auth/scopes), OP-API-2 (customers, contacts, locations), OP-API-3 (tickets + idempotency), and OP-API-4 (ticket PATCH + projects) from docs/OPS_PORTAL_API_IMPLEMENTATION_PLAN_CODEX_v0.1.md.\n\nSetup:\n1. Pull feat/op-api-1-foundation-and-service-identity locally and `composer install` (adds laravel/sanctum — required or the whole app 500s).\n2. composer phase:update (or migrate) so the new tables/capabilities/role exist.\n3. php artisan jarvis:create-service-account (prints a one-time bearer token).\n4. Import the companion environment file, set `token` to that value, and select it.\n5. Run 'Happy path' top to bottom, then 'Tickets (C-006/C-007/C-008)' top to bottom (it depends on customer_id/location_id/contact_id captured by Happy path), then 'Projects (C-009)', then 'Negative cases'.",
+    "description": "Covers the 11-operation JARVIS API V1 contract plus production-readiness behavior: expiring/rotatable service tokens, independent read/write rate limits, bounded Idempotency-Key values, payload-bound replay protection, and the API JSON size boundary.\n\nSetup:\n1. Pull feat/op-api-production-readiness-v1 locally and run `composer install`.\n2. Run composer phase:update (or migrate) so the additive API tables/capabilities exist.\n3. In a non-production environment, run php artisan jarvis:create-service-account (prints a one-time token and its expiry). Never place a real token in this collection or source control.\n4. Import the companion environment file, set `token` to that value, and select it.\n5. Run 'Happy path', 'Tickets (C-006/C-007/C-008)', 'Projects (C-009)', then 'Negative cases' in order.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "auth": {
@@ -306,6 +306,35 @@
           }
         },
         {
+          "name": "POST /tickets — changed body with same Idempotency-Key → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('stable key-reuse envelope', () => pm.expect(pm.response.json().error.code).to.eql('idempotency_key_reused'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{idempotency_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"customer_id\": {{customer_id}},\n  \"location_id\": {{location_id}},\n  \"contact_id\": {{contact_id}},\n  \"title\": \"Changed request must not execute\",\n  \"description\": \"This payload intentionally differs from the original create.\",\n  \"priority\": \"normal\",\n  \"source\": \"jarvis\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets", "host": ["{{base_url}}"], "path": ["tickets"] },
+            "description": "Uses the original create key with a different valid payload. The API must return idempotency_key_reused and leave the original ticket unchanged."
+          }
+        },
+        {
           "name": "GET /tickets?customer_id=... — after create (expect 1 open)",
           "event": [
             {
@@ -401,6 +430,15 @@
           "name": "PATCH /tickets/{{ticket_id}} — priority + description_append",
           "event": [
             {
+              "listen": "prerequest",
+              "script": {
+                "exec": [
+                  "pm.collectionVariables.set('patch_idempotency_key', pm.variables.replaceIn('{{$guid}}'));"
+                ],
+                "type": "text/javascript"
+              }
+            },
+            {
               "listen": "test",
               "script": {
                 "exec": [
@@ -420,12 +458,68 @@
             "header": [
               { "key": "Accept", "value": "application/json" },
               { "key": "Content-Type", "value": "application/json" },
-              { "key": "Idempotency-Key", "value": "{{$guid}}" }
+              { "key": "Idempotency-Key", "value": "{{patch_idempotency_key}}" }
             ],
             "body": {
               "mode": "raw",
               "raw": "{\n  \"priority\": \"high\",\n  \"description_append\": \"Caller confirmed reboots happen every 20 minutes.\"\n}"
             },
+            "url": { "raw": "{{base_url}}/tickets/{{ticket_id}}", "host": ["{{base_url}}"], "path": ["tickets", "{{ticket_id}}"] }
+          }
+        },
+        {
+          "name": "PATCH /tickets/{{ticket_id}} — replay same key without duplicate append",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('200 OK replay', () => pm.response.to.have.status(200));",
+                  "pm.test('original append appears once', () => {",
+                  "  const description = pm.response.json().data.description;",
+                  "  pm.expect(description.split('Caller confirmed reboots happen every 20 minutes.').length - 1).to.eql(1);",
+                  "});"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{patch_idempotency_key}}" }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"priority\": \"high\",\n  \"description_append\": \"Caller confirmed reboots happen every 20 minutes.\"\n}"
+            },
+            "url": { "raw": "{{base_url}}/tickets/{{ticket_id}}", "host": ["{{base_url}}"], "path": ["tickets", "{{ticket_id}}"] }
+          }
+        },
+        {
+          "name": "PATCH /tickets/{{ticket_id}} — changed body with same key → 409",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "exec": [
+                  "pm.test('409 Conflict', () => pm.response.to.have.status(409));",
+                  "pm.test('stable key-reuse envelope', () => pm.expect(pm.response.json().error.code).to.eql('idempotency_key_reused'));"
+                ],
+                "type": "text/javascript"
+              }
+            }
+          ],
+          "request": {
+            "method": "PATCH",
+            "header": [
+              { "key": "Accept", "value": "application/json" },
+              { "key": "Content-Type", "value": "application/json" },
+              { "key": "Idempotency-Key", "value": "{{patch_idempotency_key}}" }
+            ],
+            "body": { "mode": "raw", "raw": "{\n  \"priority\": \"urgent\"\n}" },
             "url": { "raw": "{{base_url}}/tickets/{{ticket_id}}", "host": ["{{base_url}}"], "path": ["tickets", "{{ticket_id}}"] }
           }
         },

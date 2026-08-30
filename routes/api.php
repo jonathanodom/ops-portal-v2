@@ -23,7 +23,7 @@ use Illuminate\Support\Facades\Route;
 |
 */
 
-Route::prefix('v1')->middleware(['auth:sanctum', 'active.organization'])->group(function (): void {
+Route::prefix('v1')->middleware(['api.request.size', 'auth:sanctum', 'active.organization', 'throttle:jarvis-api'])->group(function (): void {
     Route::get('/me', MeController::class)->name('api.v1.me');
 
     Route::middleware(['abilities:customers.read', 'capability:api.customers.read'])->group(function (): void {

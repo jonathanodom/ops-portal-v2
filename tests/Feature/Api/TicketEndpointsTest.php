@@ -4,12 +4,15 @@ namespace Tests\Feature\Api;
 
 use App\Models\Capability;
 use App\Models\Customer;
+use App\Models\IdempotencyKey;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Role;
 use App\Models\ServiceLocation;
 use App\Models\ServiceTicket;
 use App\Models\User;
+use App\Support\Api\IdempotencyKeyInFlightException;
+use App\Support\Api\IdempotencyStore;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
 use Illuminate\Support\Facades\Hash;
@@ -144,6 +147,72 @@ class TicketEndpointsTest extends TestCase
         $this->assertSame($first->json('data.id'), $second->json('data.id'));
         $this->assertDatabaseCount('service_tickets', 1);
         $this->assertDatabaseCount('idempotency_keys', 1);
+        $this->assertMatchesRegularExpression('/^[a-f0-9]{64}$/', (string) IdempotencyKey::query()->value('request_sha256'));
+    }
+
+    public function test_reusing_a_create_key_with_a_different_valid_payload_is_rejected(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $payload = $this->ticketPayload($customer, $location);
+
+        $this->bearer($token)->withHeader('Idempotency-Key', 'create-fingerprint-key')->postJson('/api/v1/tickets', $payload)->assertCreated();
+        $payload['title'] = 'A different incident';
+        $conflict = $this->bearer($token)->withHeader('Idempotency-Key', 'create-fingerprint-key')->postJson('/api/v1/tickets', $payload);
+
+        $conflict->assertStatus(409)->assertJsonPath('error.code', 'idempotency_key_reused');
+        $this->assertDatabaseCount('service_tickets', 1);
+        $this->assertDatabaseCount('idempotency_keys', 1);
+    }
+
+    public function test_idempotency_key_length_is_validated_before_database_work(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $payload = $this->ticketPayload($customer, $location);
+
+        foreach ([str_repeat('a', 7), str_repeat('b', 129), ' surrounded '] as $invalidKey) {
+            $this->bearer($token)->withHeader('Idempotency-Key', $invalidKey)
+                ->postJson('/api/v1/tickets', $payload)
+                ->assertStatus(400)
+                ->assertJsonPath('error.code', 'invalid_idempotency_key');
+        }
+
+        $this->assertDatabaseCount('service_tickets', 0);
+        $this->assertDatabaseCount('idempotency_keys', 0);
+    }
+
+    public function test_an_in_flight_claim_blocks_a_concurrent_duplicate_without_executing_it(): void
+    {
+        [$user, $organization] = $this->jarvisIdentity();
+        $fingerprint = str_repeat('a', 64);
+        IdempotencyKey::query()->create([
+            'organization_id' => $organization->id,
+            'actor_id' => $user->id,
+            'route' => 'POST api/v1/tickets',
+            'idempotency_key' => 'concurrent-request-key',
+            'request_sha256' => $fingerprint,
+            'response_status' => 0,
+        ]);
+        $executed = false;
+
+        try {
+            app(IdempotencyStore::class)->once(
+                $organization,
+                $user,
+                'POST api/v1/tickets',
+                'concurrent-request-key',
+                $fingerprint,
+                function () use (&$executed): array {
+                    $executed = true;
+
+                    return [201, ['unexpected' => true]];
+                },
+            );
+            $this->fail('The concurrent claim should have been rejected.');
+        } catch (IdempotencyKeyInFlightException) {
+            $this->assertFalse($executed);
+        }
     }
 
     public function test_a_validation_failure_does_not_consume_the_idempotency_key(): void
@@ -226,7 +295,7 @@ class TicketEndpointsTest extends TestCase
         [$customer, $location] = $this->customerAndLocation($organization);
         $ticket = $this->createTicket($organization, $customer, $location);
 
-        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'k2')->patchJson("/api/v1/tickets/{$ticket->id}", []);
+        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'empty-update-key')->patchJson("/api/v1/tickets/{$ticket->id}", []);
 
         $response->assertStatus(422)->assertJsonPath('error.code', 'validation_failed');
     }
@@ -244,6 +313,22 @@ class TicketEndpointsTest extends TestCase
         $first->assertOk();
         $second->assertOk();
         $this->assertSame("Base.\n\nAppended once.", $ticket->fresh()->description);
+    }
+
+    public function test_reusing_an_update_key_with_a_different_payload_is_rejected_without_a_second_mutation(): void
+    {
+        [, $organization, $token] = $this->jarvisIdentity();
+        [$customer, $location] = $this->customerAndLocation($organization);
+        $ticket = $this->createTicket($organization, $customer, $location, ['description' => 'Base.']);
+
+        $this->bearer($token)->withHeader('Idempotency-Key', 'update-fingerprint-key')
+            ->patchJson("/api/v1/tickets/{$ticket->id}", ['description_append' => 'First append.'])
+            ->assertOk();
+        $conflict = $this->bearer($token)->withHeader('Idempotency-Key', 'update-fingerprint-key')
+            ->patchJson("/api/v1/tickets/{$ticket->id}", ['description_append' => 'Changed append.']);
+
+        $conflict->assertStatus(409)->assertJsonPath('error.code', 'idempotency_key_reused');
+        $this->assertSame("Base.\n\nFirst append.", $ticket->fresh()->description);
     }
 
     public function test_the_same_idempotency_key_cannot_be_replayed_against_a_different_ticket(): void
@@ -269,7 +354,7 @@ class TicketEndpointsTest extends TestCase
         $location = ServiceLocation::factory()->for($customer)->create(['organization_id' => $other->id]);
         $ticket = $this->createTicket($other, $customer, $location);
 
-        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'k3')->patchJson("/api/v1/tickets/{$ticket->id}", ['priority' => 'high']);
+        $response = $this->bearer($token)->withHeader('Idempotency-Key', 'cross-org-update-key')->patchJson("/api/v1/tickets/{$ticket->id}", ['priority' => 'high']);
 
         $response->assertStatus(404)->assertJsonPath('error.code', 'not_found');
     }
