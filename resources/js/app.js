@@ -1,6 +1,37 @@
 import './bootstrap';
 import './field-visit-workspace-v2';
 
+const officeSidebarRoot = document.documentElement;
+const officeSidebar = document.querySelector('[data-office-sidebar]');
+const officeSidebarToggle = document.querySelector('[data-office-sidebar-toggle]');
+
+if (officeSidebar && officeSidebarToggle) {
+    const applyOfficeSidebarState = (requestedState, persist = false) => {
+        const state = ['expanded', 'collapsed'].includes(requestedState) ? requestedState : 'expanded';
+        const expanded = state === 'expanded';
+        const label = expanded ? 'Collapse office navigation' : 'Expand office navigation';
+
+        officeSidebarRoot.dataset.officeSidebarState = state;
+        officeSidebarToggle.setAttribute('aria-expanded', String(expanded));
+        officeSidebarToggle.setAttribute('aria-label', label);
+        officeSidebarToggle.setAttribute('title', label);
+
+        if (persist) {
+            try {
+                localStorage.setItem(officeSidebarRoot.dataset.officeSidebarKey, state);
+            } catch (_) {
+                // A blocked storage API must not prevent the shell from toggling.
+            }
+        }
+    };
+
+    applyOfficeSidebarState(officeSidebarRoot.dataset.officeSidebarState);
+    officeSidebarToggle.addEventListener('click', () => {
+        const nextState = officeSidebarRoot.dataset.officeSidebarState === 'collapsed' ? 'expanded' : 'collapsed';
+        applyOfficeSidebarState(nextState, true);
+    });
+}
+
 const connectivityBanner = document.querySelector('[data-connectivity-banner]');
 const connectivityStatus = document.querySelector('[data-connectivity-status]');
 const connectivityLabel = document.querySelector('[data-connectivity-label]');

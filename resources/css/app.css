@@ -1009,3 +1009,126 @@ body:has(dialog[data-payment-overlay][open]) {
         box-shadow: none;
     }
 }
+
+/* Shared desktop Office shell navigation. Mobile navigation remains independent. */
+@media (min-width: 1024px) {
+    [data-office-shell-grid] {
+        grid-template-columns: 248px minmax(0, 1fr);
+    }
+
+    html[data-office-sidebar-state="collapsed"] [data-office-shell-grid] {
+        grid-template-columns: 72px minmax(0, 1fr);
+    }
+
+    .office-sidebar {
+        min-width: 0;
+        overflow: visible;
+    }
+
+    .office-sidebar-brand {
+        display: flex;
+        align-items: center;
+        gap: 0.5rem;
+        min-height: 44px;
+    }
+
+    .office-sidebar-mark-logo {
+        display: none;
+    }
+
+    .office-sidebar-toggle {
+        display: inline-flex;
+        min-height: 44px;
+        width: 44px;
+        flex: 0 0 44px;
+        align-items: center;
+        justify-content: center;
+        border: 1px solid #cbd5e1;
+        background: #fff;
+        color: #334155;
+    }
+
+    .office-sidebar-toggle:hover {
+        background: #f8fafc;
+    }
+
+    .office-nav-link,
+    .office-account-context,
+    .office-sign-out {
+        position: relative;
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-sidebar {
+        padding: 0.5rem;
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-sidebar-brand {
+        flex-direction: column;
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-sidebar-full-logo,
+    html[data-office-sidebar-state="collapsed"] .office-sidebar-section-label,
+    html[data-office-sidebar-state="collapsed"] .office-nav-label,
+    html[data-office-sidebar-state="collapsed"] .office-account-copy {
+        display: none;
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-sidebar-mark-logo {
+        display: block;
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-sidebar-toggle svg {
+        transform: scaleX(-1);
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-nav-link,
+    html[data-office-sidebar-state="collapsed"] .office-account-context,
+    html[data-office-sidebar-state="collapsed"] .office-sign-out {
+        justify-content: center;
+        gap: 0;
+        padding-right: 0;
+        padding-left: 0;
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-sidebar-account {
+        padding-top: 0.75rem;
+    }
+
+    html[data-office-sidebar-state="collapsed"] .office-sidebar-account form {
+        margin-top: 0.5rem;
+    }
+
+    html[data-office-sidebar-state="collapsed"] [data-office-tooltip]::after {
+        position: absolute;
+        z-index: 60;
+        top: 50%;
+        left: calc(100% + 0.625rem);
+        width: max-content;
+        max-width: 18rem;
+        padding: 0.4rem 0.6rem;
+        transform: translateY(-50%);
+        border: 1px solid #334155;
+        background: #0f172a;
+        color: #fff;
+        content: attr(data-office-tooltip);
+        font-size: 0.75rem;
+        font-weight: 700;
+        line-height: 1.2;
+        opacity: 0;
+        pointer-events: none;
+        white-space: nowrap;
+    }
+
+    html[data-office-sidebar-state="collapsed"] [data-office-tooltip]:hover::after,
+    html[data-office-sidebar-state="collapsed"] [data-office-tooltip]:focus-visible::after {
+        opacity: 1;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    [data-office-shell-grid],
+    .office-sidebar,
+    .office-sidebar-toggle {
+        transition: none !important;
+    }
+}
