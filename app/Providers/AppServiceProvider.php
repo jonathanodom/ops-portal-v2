@@ -69,6 +69,9 @@ class AppServiceProvider extends ServiceProvider
 
             return Limit::perMinute($limit)->by("jarvis-api:{$organizationId}:{$identity}:".($isRead ? 'read' : 'write'));
         });
+        RateLimiter::for('public-leads', fn (Request $request): Limit => Limit::perMinute(
+            max(1, (int) config('lead-intake.rate_limit_per_minute', 5)),
+        )->by('public-leads:'.$request->ip()));
         Gate::policy(Customer::class, CustomerPolicy::class);
         Gate::policy(CommercialDocument::class, CommercialDocumentPolicy::class);
         Gate::policy(CustomerServiceEnrollment::class, CustomerServiceEnrollmentPolicy::class);

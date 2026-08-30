@@ -1,11 +1,16 @@
 <?php
 
+use App\Http\Controllers\Api\Public\V1\LeadController as PublicLeadController;
 use App\Http\Controllers\Api\V1\ContactController;
 use App\Http\Controllers\Api\V1\CustomerController;
 use App\Http\Controllers\Api\V1\MeController;
 use App\Http\Controllers\Api\V1\ProjectController;
 use App\Http\Controllers\Api\V1\TicketController;
 use Illuminate\Support\Facades\Route;
+
+Route::post('/public/v1/leads', PublicLeadController::class)
+    ->middleware(['api.request.size', 'throttle:public-leads'])
+    ->name('api.public.v1.leads.store');
 
 /*
 |--------------------------------------------------------------------------
