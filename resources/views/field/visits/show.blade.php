@@ -45,7 +45,7 @@
 
     <div class="flex flex-wrap items-center justify-between gap-2">
         <a href="{{ route('field.home') }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">← Today</a>
-        <a href="{{ route('field.visits.workspace-v2', $visit) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">Try new Visit workspace</a>
+        <a href="{{ route('field.visits.show', $visit) }}" class="inline-flex min-h-11 items-center text-sm font-bold text-brand-blue">Return to new Visit workspace</a>
     </div>
     <p class="mt-2 text-sm font-bold text-brand-blue">{{ $visit->serviceTicket->ticket_number }}</p>
     <h1 class="text-2xl font-bold">{{ $visit->serviceTicket->title }}</h1>

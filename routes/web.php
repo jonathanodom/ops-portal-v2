@@ -459,9 +459,11 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->middleware('capability:experience.field.access')
         ->group(function (): void {
             Route::get('/', [TodayController::class, 'index'])->name('home');
-            Route::get('/visits/{visit}', [TodayController::class, 'show'])->whereNumber('visit')->name('visits.show');
+            Route::get('/visits/{visit}', FieldVisitWorkspaceV2Controller::class)->whereNumber('visit')->name('visits.show');
+            Route::get('/visits/{visit}/classic', [TodayController::class, 'show'])->whereNumber('visit')->name('visits.classic');
             Route::get('/visits/{visit}/workspace-v2', FieldVisitWorkspaceV2Controller::class)->whereNumber('visit')->name('visits.workspace-v2');
             Route::post('/visits/{visit}/transition', [TodayController::class, 'transition'])->whereNumber('visit')->name('visits.transition');
+            Route::post('/visits/{visit}/start-route', [TodayController::class, 'startRoute'])->whereNumber('visit')->name('visits.start-route');
             Route::post('/visits/{visit}/draft', [ExecutionController::class, 'save'])->name('visits.draft');
             Route::post('/visits/{visit}/timer', [ExecutionController::class, 'timer'])->name('visits.timer');
             Route::post('/visits/{visit}/work-focus', [ExecutionController::class, 'switchWorkFocus'])->name('visits.work-focus');

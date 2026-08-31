@@ -63,4 +63,32 @@ class ServiceLocation extends Model
             trim($this->state.' '.$this->postal_code),
         ])->filter()->implode(', ');
     }
+
+    public function hasUsableMapAddress(): bool
+    {
+        return collect([
+            $this->address_line_1,
+            $this->city,
+            $this->state,
+            $this->postal_code,
+        ])->every(fn (?string $value): bool => filled($value));
+    }
+
+    public function mapsUrl(): ?string
+    {
+        if (! $this->hasUsableMapAddress()) {
+            return null;
+        }
+
+        return 'https://www.google.com/maps/search/?api=1&query='.rawurlencode($this->formattedAddress());
+    }
+
+    public function directionsUrl(): ?string
+    {
+        if (! $this->hasUsableMapAddress()) {
+            return null;
+        }
+
+        return 'https://www.google.com/maps/dir/?api=1&travelmode=driving&destination='.rawurlencode($this->formattedAddress());
+    }
 }

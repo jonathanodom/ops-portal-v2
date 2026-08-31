@@ -1241,16 +1241,15 @@ test.describe('mobile beta', () => {
         await context.setOffline(false);
     });
 
-    test('opt-in Field Visit Workspace V2 is reversible, accessible, and uploads a retryable multi-photo queue without reload', async ({ page }) => {
+    test('default Field Visit Workspace V2 is reversible, accessible, and uploads a retryable multi-photo queue without reload', async ({ page }) => {
         test.setTimeout(120_000);
         await login(page, 'technician');
         await page.goto('/field');
         await page.getByRole('link', { name: /BETA A:/ }).first().click();
+        await expect(page).toHaveURL(/\/field\/visits\/\d+$/);
         if (await page.getByRole('button', { name: 'Start En Route' }).count()) await page.getByRole('button', { name: 'Start En Route' }).click();
         if (await page.getByRole('button', { name: 'Mark On Site' }).count()) await page.getByRole('button', { name: 'Mark On Site' }).click();
-        await page.getByRole('link', { name: 'Try new Visit workspace' }).click();
-        await expect(page).toHaveURL(/\/field\/visits\/\d+\/workspace-v2/);
-        await expect(page.getByRole('link', { name: 'Switch to classic workspace' })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Classic workspace' })).toBeVisible();
 
         const tabs = page.getByRole('tablist', { name: 'Visit workspace' });
         await expect(tabs.getByRole('tab', { name: /Overview/ })).toHaveAttribute('aria-selected', 'true');

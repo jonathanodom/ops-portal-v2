@@ -82,6 +82,26 @@ class TodayController extends Controller
         return back()->with('status', $data['status'] === 'en_route' ? 'Travel started.' : 'Marked on site.');
     }
 
+    public function startRoute(Request $request, string $visit, ServiceTicketWorkflow $workflow, FieldExecution $execution): RedirectResponse
+    {
+        $visit = $this->visit($request, $visit);
+        Gate::authorize('execute', $visit);
+        $visit->loadMissing('serviceLocation');
+
+        $directionsUrl = $visit->serviceLocation->directionsUrl();
+        if (! $directionsUrl) {
+            return back()->withErrors(['navigation' => 'No usable service address is available.']);
+        }
+
+        if ($visit->status === 'assigned') {
+            $execution->transition($visit, $request->user(), 'en_route', $workflow);
+        } elseif ($visit->status !== 'en_route') {
+            return back()->withErrors(['navigation' => 'Route can only start for assigned or en route work.']);
+        }
+
+        return redirect()->away($directionsUrl);
+    }
+
     private function authorizedQuery(OrganizationMembership $membership)
     {
         return Visit::query()->forOrganization($membership->organization_id)
