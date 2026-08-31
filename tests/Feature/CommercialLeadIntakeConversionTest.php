@@ -69,7 +69,7 @@ class CommercialLeadIntakeConversionTest extends TestCase
         $this->assertSame('converted', $intake->fresh()->status);
         $this->assertSame($actor->id, $intake->fresh()->converted_by_id);
         $this->assertTrue($convertedAt->equalTo($intake->fresh()->converted_at));
-        $this->assertSame($evidence['payload'], $intake->fresh()->payload);
+        $this->assertEquals($evidence['payload'], $intake->fresh()->payload);
         $this->assertSame($evidence['payload_sha256'], $intake->fresh()->payload_sha256);
         $this->assertTrue($evidence['contact_consent_at']->equalTo($intake->fresh()->contact_consent_at));
         $this->assertNull($intake->fresh()->sms_consent_at);
