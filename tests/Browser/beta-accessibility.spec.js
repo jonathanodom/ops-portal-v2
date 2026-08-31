@@ -1262,7 +1262,39 @@ test.describe('mobile beta', () => {
         await expect(page.locator('[data-v2-panel="work"]')).toBeVisible();
         await expect(page.locator('[data-v2-panel="overview"]')).toBeHidden();
 
+        const swipe = async (startX, startY, endX, endY, target = '[data-v2-swipe-surface]') => {
+            await page.locator(target).evaluate((element, points) => {
+                const touchEvent = (type, touches, changedTouches) => {
+                    const event = new Event(type, { bubbles: true, cancelable: true });
+                    Object.defineProperties(event, {
+                        touches: { value: touches },
+                        changedTouches: { value: changedTouches },
+                    });
+                    element.dispatchEvent(event);
+                };
+                const start = { clientX: points.startX, clientY: points.startY };
+                const end = { clientX: points.endX, clientY: points.endY };
+                touchEvent('touchstart', [start], []);
+                touchEvent('touchend', [], [end]);
+            }, { startX, startY, endX, endY });
+        };
+
+        await swipe(320, 240, 210, 245);
+        await expect(tabs.getByRole('tab', { name: /Time/ })).toHaveAttribute('aria-selected', 'true');
+        await expect(page.locator('[data-v2-panel="time"]')).toBeVisible();
+        await expect(page).toHaveURL(/#time$/);
+
+        await swipe(210, 240, 170, 242);
+        await expect(tabs.getByRole('tab', { name: /Time/ })).toHaveAttribute('aria-selected', 'true');
+        await swipe(210, 180, 200, 300);
+        await expect(tabs.getByRole('tab', { name: /Time/ })).toHaveAttribute('aria-selected', 'true');
+
+        await swipe(120, 240, 230, 245);
+        await expect(tabs.getByRole('tab', { name: /Work/ })).toHaveAttribute('aria-selected', 'true');
+
         await tabs.getByRole('tab', { name: /Evidence/ }).click();
+        await swipe(320, 240, 210, 245, '[data-v2-media-list]');
+        await expect(tabs.getByRole('tab', { name: /Evidence/ })).toHaveAttribute('aria-selected', 'true');
         await page.locator('[data-v2-upload-form] label').filter({ hasText: /^After$/ }).click();
         let failedOnce = false;
         await page.route('**/field/visits/*/media', async (route) => {

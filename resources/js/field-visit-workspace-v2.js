@@ -10,6 +10,7 @@ const stepForField = (field) => {
 document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
     const tabs = [...root.querySelectorAll('[data-v2-tab]')];
     const panels = [...root.querySelectorAll('[data-v2-panel]')];
+    const swipeSurface = root.querySelector('[data-v2-swipe-surface]');
     const dialog = root.querySelector('[data-v2-finish-dialog]');
     const closeoutForm = root.querySelector('[data-v2-closeout-form]');
     const steps = [...root.querySelectorAll('[data-v2-step]')];
@@ -41,6 +42,59 @@ document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
         });
     });
     activateTab(window.location.hash.slice(1) || 'overview');
+
+    const swipeIgnoreSelector = [
+        '[data-v2-swipe-ignore]',
+        '[data-v2-media-list]',
+        '[data-photo-gallery]',
+        '[data-gallery]',
+        '[data-carousel]',
+        'dialog',
+        'a',
+        'button',
+        'input',
+        'select',
+        'textarea',
+        'summary',
+        '[contenteditable="true"]',
+    ].join(',');
+    const swipeThreshold = 64;
+    let swipeStart = null;
+
+    swipeSurface?.addEventListener('touchstart', (event) => {
+        if (event.touches.length !== 1 || event.target.closest(swipeIgnoreSelector)) {
+            swipeStart = null;
+            return;
+        }
+
+        swipeStart = {
+            x: event.touches[0].clientX,
+            y: event.touches[0].clientY,
+        };
+    }, { passive: true });
+
+    swipeSurface?.addEventListener('touchcancel', () => {
+        swipeStart = null;
+    }, { passive: true });
+
+    swipeSurface?.addEventListener('touchend', (event) => {
+        if (!swipeStart || event.changedTouches.length !== 1) {
+            swipeStart = null;
+            return;
+        }
+
+        const deltaX = event.changedTouches[0].clientX - swipeStart.x;
+        const deltaY = event.changedTouches[0].clientY - swipeStart.y;
+        swipeStart = null;
+
+        if (Math.abs(deltaX) < swipeThreshold || Math.abs(deltaX) <= Math.abs(deltaY) * 1.25) return;
+
+        const currentIndex = tabs.findIndex((tab) => tab.getAttribute('aria-selected') === 'true');
+        const nextIndex = currentIndex + (deltaX < 0 ? 1 : -1);
+        if (currentIndex < 0 || nextIndex < 0 || nextIndex >= tabs.length) return;
+
+        activateTab(tabs[nextIndex].dataset.v2Tab);
+    }, { passive: true });
 
     root.querySelectorAll('[data-v2-live-timer]').forEach((timer) => {
         const started = Date.parse(timer.dataset.startedAt);
