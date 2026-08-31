@@ -34,6 +34,7 @@ use App\Http\Controllers\Office\CustomerServiceEnrollmentController;
 use App\Http\Controllers\Office\DispatchController;
 use App\Http\Controllers\Office\FieldTestServiceTicketPurgeController;
 use App\Http\Controllers\Office\InvoiceController;
+use App\Http\Controllers\Office\LeadIntakeController;
 use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\OfficeSearchController;
 use App\Http\Controllers\Office\OperationalHealthController;
@@ -127,6 +128,14 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         ->group(function (): void {
             Route::get('/', [OfficeDashboardController::class, 'index'])->name('home');
             Route::get('/search', OfficeSearchController::class)->middleware('capability:customers.view')->name('search');
+            Route::prefix('leads')->name('leads.')->middleware('capability:opportunities.view')->group(function (): void {
+                Route::get('/', [LeadIntakeController::class, 'index'])->name('index');
+                Route::get('/{lead}', [LeadIntakeController::class, 'show'])->whereNumber('lead')->name('show');
+                Route::post('/{lead}/convert', [LeadIntakeController::class, 'convert'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('convert');
+                Route::post('/{lead}/spam', [LeadIntakeController::class, 'spam'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('spam');
+                Route::post('/{lead}/archive', [LeadIntakeController::class, 'archive'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('archive');
+                Route::post('/{lead}/reopen', [LeadIntakeController::class, 'reopen'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('reopen');
+            });
             Route::prefix('opportunities')->name('opportunities.')->middleware('capability:opportunities.view')->group(function (): void {
                 Route::get('/', [OpportunityController::class, 'index'])->name('index');
                 Route::get('/create', [OpportunityController::class, 'create'])->middleware('capability:opportunities.manage')->name('create');
