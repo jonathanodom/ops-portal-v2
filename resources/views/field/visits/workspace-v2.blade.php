@@ -74,7 +74,7 @@
             @endforeach
         </nav>
 
-        <div class="mt-3" data-v2-panels>
+        <div class="mt-3" data-v2-panels data-v2-swipe-surface>
             <section id="field-v2-panel-overview" role="tabpanel" aria-labelledby="field-v2-tab-overview" tabindex="0" data-v2-panel="overview" class="space-y-3">
                 <div class="surface p-5">
                     <h2 class="text-lg font-bold">Customer &amp; site</h2>

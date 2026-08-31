@@ -527,6 +527,7 @@ class MobileFieldExecutionTest extends TestCase
             ->assertSee('data-field-workspace-v2', false)
             ->assertSee('data-v2-tab="overview"', false)
             ->assertSee('data-v2-tab="closeout"', false)
+            ->assertSee('data-v2-swipe-surface', false)
             ->assertSee('data-v2-photo-camera', false)
             ->assertSee('data-v2-photo-gallery', false)
             ->assertSee('multiple', false);
