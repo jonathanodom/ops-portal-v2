@@ -60,7 +60,7 @@
             @endcan
         </header>
 
-        @if($visit->status === 'canceled')<div class="mt-3 rounded-lg border border-slate-300 bg-slate-100 p-4" role="status"><p class="font-bold">Canceled Visit · read-only</p><p class="mt-1 text-sm">Completed time remains available under Time.</p></div>@endif
+        @if($visit->status === 'canceled')<div class="mt-3 rounded-lg border border-slate-300 bg-slate-100 p-4" role="status"><p class="font-bold">Canceled Visit · read-only</p><p class="mt-1 text-sm">This visit was canceled. Completed time remains available under Time.</p></div>@endif
 
         <nav class="field-v2-tabs" aria-label="Visit workspace" role="tablist">
             @foreach([
