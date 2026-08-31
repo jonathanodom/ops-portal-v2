@@ -43,9 +43,21 @@
         :description="$activeOrganization->name.' · Your command center for service operations, projects, billing, and work needing attention.'"
         data-dashboard-header
     >
-        @if($primaryAction)
+        @if($primaryAction || count($home['quick_add']))
             <x-slot:actions>
-                <a class="button-primary w-full sm:w-auto" href="{{ route($primaryAction['route']) }}">{{ $primaryAction['label'] }}</a>
+                <div class="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
+                    @if(count($home['quick_add']))
+                        <details class="group relative w-full sm:w-auto" data-home-quick-add>
+                            <summary class="button-secondary min-h-11 w-full cursor-pointer list-none sm:w-auto">+ Quick Add</summary>
+                            <div class="absolute right-0 z-20 mt-2 w-64 max-w-[calc(100vw-2rem)] border border-slate-300 bg-white p-2 shadow-lg">
+                                @foreach($home['quick_add'] as $action)
+                                    <a class="flex min-h-11 items-center px-3 py-2 font-bold text-slate-800 hover:bg-blue-50 focus-visible:outline-2 focus-visible:outline-brand-blue" href="{{ $action['route'] }}">{{ $action['label'] }}</a>
+                                @endforeach
+                            </div>
+                        </details>
+                    @endif
+                    @if($primaryAction)<a class="button-primary w-full sm:w-auto" href="{{ route($primaryAction['route']) }}">{{ $primaryAction['label'] }}</a>@endif
+                </div>
             </x-slot:actions>
         @endif
     </x-office.page-header>

@@ -130,6 +130,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
             Route::get('/search', OfficeSearchController::class)->middleware('capability:customers.view')->name('search');
             Route::prefix('leads')->name('leads.')->middleware('capability:opportunities.view')->group(function (): void {
                 Route::get('/', [LeadIntakeController::class, 'index'])->name('index');
+                Route::get('/create', [LeadIntakeController::class, 'create'])->middleware('capability:opportunities.manage')->name('create');
+                Route::post('/', [LeadIntakeController::class, 'store'])->middleware('capability:opportunities.manage')->name('store');
                 Route::get('/{lead}', [LeadIntakeController::class, 'show'])->whereNumber('lead')->name('show');
                 Route::post('/{lead}/convert', [LeadIntakeController::class, 'convert'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('convert');
                 Route::post('/{lead}/spam', [LeadIntakeController::class, 'spam'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('spam');

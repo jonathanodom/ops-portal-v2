@@ -11,6 +11,9 @@
                     @endforeach
                 </x-office.view-switcher>
             </x-slot:viewSwitcher>
+            @can('create', [App\Models\CommercialLeadIntake::class, $activeOrganization])
+                <x-slot:primaryAction><a class="button-primary" href="{{ route('office.leads.create') }}">New lead</a></x-slot:primaryAction>
+            @endcan
         </x-office.primary-toolbar>
     </form>
 

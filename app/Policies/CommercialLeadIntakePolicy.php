@@ -21,6 +21,11 @@ final class CommercialLeadIntakePolicy
         return $this->hasCapability($user, $lead->organization_id, 'opportunities.view');
     }
 
+    public function create(User $user, Organization $organization): bool
+    {
+        return $this->hasCapability($user, $organization->id, 'opportunities.manage');
+    }
+
     public function convert(User $user, CommercialLeadIntake $lead): bool
     {
         return $this->hasCapability($user, $lead->organization_id, 'opportunities.manage');
