@@ -2,6 +2,7 @@
 
 namespace App\Http\Middleware;
 
+use App\Models\CommercialLeadIntake;
 use App\Models\OrganizationMembership;
 use Closure;
 use Illuminate\Http\Request;
@@ -31,6 +32,13 @@ class ResolveActiveOrganization
         $request->attributes->set('membership', $membership);
         View::share('activeOrganization', $membership->organization);
         View::share('activeMembership', $membership);
+        View::share('unresolvedLeadCount', str_starts_with($request->path(), 'office')
+            && $membership->hasCapability('opportunities.view')
+                ? CommercialLeadIntake::query()
+                    ->forOrganization($membership->organization_id)
+                    ->where('status', 'received')
+                    ->count()
+                : 0);
 
         return $next($request);
     }
