@@ -3,11 +3,15 @@
 namespace App\Http\Controllers\Office;
 
 use App\Domain\Commercial\LeadIntakeConverter;
+use App\Domain\Commercial\LeadIntakeCreator;
 use App\Domain\Commercial\LeadIntakeDisposition;
 use App\Http\Controllers\Controller;
+use App\Http\Requests\ManualLeadIntakeRequest;
 use App\Models\CommercialLeadIntake;
+use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\View\View;
 
@@ -20,6 +24,37 @@ final class LeadIntakeController extends Controller
         'spam' => 'spam',
         'all' => null,
     ];
+
+    public function create(Request $request): View
+    {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [CommercialLeadIntake::class, $organization]);
+
+        return view('office.leads.create', [
+            'serviceInterests' => config('lead-intake.service_interests', []),
+        ]);
+    }
+
+    public function store(
+        ManualLeadIntakeRequest $request,
+        LeadIntakeCreator $creator,
+        AuditRecorder $audit,
+    ): RedirectResponse {
+        $organization = $request->attributes->get('organization');
+        Gate::authorize('create', [CommercialLeadIntake::class, $organization]);
+
+        $lead = DB::transaction(function () use ($request, $creator, $audit, $organization): CommercialLeadIntake {
+            $lead = $creator->create($organization, $request->normalizedLeadData());
+            $audit->record($organization, $request->user(), 'commercial_lead_intake.created_manual', $lead, [
+                'lead_intake_id' => $lead->id,
+                'source' => 'manual',
+            ]);
+
+            return $lead;
+        });
+
+        return redirect()->route('office.leads.show', $lead)->with('status', 'Lead created.');
+    }
 
     public function index(Request $request): View
     {

@@ -27,9 +27,24 @@ final class NewDayHomeSnapshot
             'portal' => $portal,
             'projects' => $projects,
             'search_visible' => $membership->hasCapability('customers.view'),
+            'quick_add' => $this->quickAdd($membership),
             'launchers' => $this->launchers($membership),
             'attention_items' => $this->attention($organization, $membership, $portal, $projects),
         ];
+    }
+
+    private function quickAdd(OrganizationMembership $membership): array
+    {
+        return collect([
+            $membership->hasCapability('dispatch.manage') ? [
+                'label' => 'New Service Ticket',
+                'route' => route('office.service-tickets.create'),
+            ] : null,
+            $membership->hasCapability('opportunities.manage') ? [
+                'label' => 'New Lead',
+                'route' => route('office.leads.create'),
+            ] : null,
+        ])->filter()->values()->all();
     }
 
     private function launchers(OrganizationMembership $membership): array
