@@ -59,7 +59,18 @@ The marketing-site source repository was not available in the workspace or the a
 - production Turnstile site-key wiring could not be verified;
 - no deployment or production data mutation was attempted.
 
-These are production-rollout blockers, not application-code failures. Obtain the actual marketing-site source, apply the patch in `docs/CRM_LEAD_INTAKE_MARKETING_SITE_INTEGRATION_V1.md`, verify no old host or `/api/leads` references remain, and complete the controlled acceptance smoke before approving production rollout.
+Live production diagnosis on August 31, 2026 confirmed that the deployed Next.js
+bundle falls back to `https://portal.newdaytech.net/api/leads` and submits the SMS
+checkbox as `smsOptIn`. The obsolete path returns `404` without a CORS
+allow-origin header, which the browser surfaces as `Failed to fetch`. The V2
+endpoint, HTTPS, Apache routing, validation response, request IDs, rate limiting,
+and exact apex/`www` CORS policy are operating correctly.
+
+These are marketing-site rollout blockers, not Ops Portal application-code
+failures. Apply the exact source patch and verification procedure in
+`docs/CRM_PRODUCTION_LEAD_INTAKE_REPAIR_V1.md`, remove every old `/api/leads`
+reference, and complete the controlled acceptance smoke before approving
+production rollout.
 
 The required API target is `https://portal.newdaytech.net`. Do not hardcode `staging-portal.newdaytech.net` into the production website. Hostname cutover and routing must be confirmed during the owner-approved deployment window.
 
