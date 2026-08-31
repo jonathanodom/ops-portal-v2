@@ -100,9 +100,12 @@ class VisitScheduler
             }
             $from = $visit->status;
             $to = $window === null ? 'planned' : ($membershipIds === [] ? 'scheduled' : 'assigned');
+            $scheduleChanged = $visit->scheduled_start_at?->getTimestamp() !== ($window ? $window['start']->getTimestamp() : null)
+                || $visit->scheduled_end_at?->getTimestamp() !== ($window ? $window['end']->getTimestamp() : null);
             $visit->update([
                 'scheduled_start_at' => $window['start'] ?? null,
                 'scheduled_end_at' => $window['end'] ?? null,
+                'schedule_version' => $scheduleChanged ? $visit->schedule_version + 1 : $visit->schedule_version,
                 'scheduled_by_id' => $window ? $actor->id : null,
                 'status' => $to,
                 'updated_by_id' => $actor->id,

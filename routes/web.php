@@ -267,6 +267,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/service-tickets/{serviceTicket}/visits', [VisitController::class, 'store'])->whereNumber('serviceTicket')->name('service-tickets.visits.store');
                 Route::get('/visits/{visit}/edit', [VisitController::class, 'edit'])->whereNumber('visit')->name('visits.edit');
                 Route::put('/visits/{visit}', [VisitController::class, 'update'])->whereNumber('visit')->name('visits.update');
+                Route::post('/visits/{visit}/confirmation', [VisitController::class, 'confirm'])->whereNumber('visit')->name('visits.confirmation.store');
                 Route::post('/visits/{visit}/cancel', [VisitController::class, 'cancel'])->whereNumber('visit')->name('visits.cancel');
                 Route::post('/visits/{visit}/return', [VisitController::class, 'createReturn'])->whereNumber('visit')->name('visits.return');
             });
