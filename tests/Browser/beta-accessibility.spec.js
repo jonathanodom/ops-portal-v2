@@ -998,6 +998,7 @@ test.describe('desktop beta', () => {
 
         await page.setViewportSize({ width: 390, height: 844 });
         await page.goto('/field/visits/2');
+        await page.getByRole('tab', { name: /Evidence/ }).click();
         const catalogLauncher = page.getByRole('button', { name: 'Add Catalog item' });
         await expect(catalogLauncher).toBeVisible();
         await catalogLauncher.focus();
@@ -1073,10 +1074,12 @@ test.describe('field Work Items', () => {
         ]) {
             await page.setViewportSize(viewport);
             await page.goto(visitUrl);
-            await expect(page.getByRole('heading', { name: 'Primary scope' })).toBeVisible();
+            await page.getByRole('tab', { name: /Work/ }).click();
+            await expect(page.locator('[data-v2-panel="work"]').getByText('Primary scope', { exact: true })).toBeVisible();
             await expect(page.getByRole('heading', { name: 'Work Items' })).toBeVisible();
-            await expect(page.getByRole('combobox', { name: 'Work focus' })).toBeVisible();
             await expect(page.getByText('BETA AP-07 restored', { exact: true })).toBeVisible();
+            await page.getByRole('tab', { name: /Time/ }).click();
+            await expect(page.getByRole('combobox', { name: 'Work focus' })).toBeVisible();
             expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
             await expectAccessible(page);
         }
@@ -1168,6 +1171,7 @@ test.describe('mobile beta', () => {
         const visitLink = page.getByRole('link', { name: /BETA A:/ }).first();
         await expect(visitLink).toBeVisible();
         await visitLink.click();
+        await page.getByRole('link', { name: 'Classic workspace' }).click();
         await expectAccessible(page);
         await expect(page.locator('[data-connectivity-label]')).toHaveText('Online');
         const workspaceNavigation = page.getByRole('navigation', { name: 'Visit workspace sections' });
@@ -1241,16 +1245,15 @@ test.describe('mobile beta', () => {
         await context.setOffline(false);
     });
 
-    test('opt-in Field Visit Workspace V2 is reversible, accessible, and uploads a retryable multi-photo queue without reload', async ({ page }) => {
+    test('default Field Visit Workspace V2 is reversible, accessible, and uploads a retryable multi-photo queue without reload', async ({ page }) => {
         test.setTimeout(120_000);
         await login(page, 'technician');
         await page.goto('/field');
         await page.getByRole('link', { name: /BETA A:/ }).first().click();
+        await expect(page).toHaveURL(/\/field\/visits\/\d+(?:#overview)?$/);
         if (await page.getByRole('button', { name: 'Start En Route' }).count()) await page.getByRole('button', { name: 'Start En Route' }).click();
         if (await page.getByRole('button', { name: 'Mark On Site' }).count()) await page.getByRole('button', { name: 'Mark On Site' }).click();
-        await page.getByRole('link', { name: 'Try new Visit workspace' }).click();
-        await expect(page).toHaveURL(/\/field\/visits\/\d+\/workspace-v2/);
-        await expect(page.getByRole('link', { name: 'Switch to classic workspace' })).toBeVisible();
+        await expect(page.getByRole('link', { name: 'Classic workspace' })).toBeVisible();
 
         const tabs = page.getByRole('tablist', { name: 'Visit workspace' });
         await expect(tabs.getByRole('tab', { name: /Overview/ })).toHaveAttribute('aria-selected', 'true');
@@ -1306,9 +1309,9 @@ test.describe('mobile beta', () => {
         await finish.locator('[name="ack_unavailable_category"]').selectOption('');
         await finish.getByRole('button', { name: 'Close' }).click();
 
-        await page.getByRole('link', { name: 'Switch to classic workspace' }).click();
-        await expect(page.getByRole('link', { name: 'Try new Visit workspace' })).toBeVisible();
-        await page.getByRole('link', { name: 'Try new Visit workspace' }).click();
+        await page.getByRole('link', { name: 'Classic workspace' }).click();
+        await expect(page.getByRole('link', { name: 'Return to new Visit workspace' })).toBeVisible();
+        await page.getByRole('link', { name: 'Return to new Visit workspace' }).click();
         await expect(page.locator('[data-v2-media-list]')).toContainText('After');
 
         for (const viewport of [

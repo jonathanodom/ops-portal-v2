@@ -199,6 +199,10 @@
         @apply bg-blue-50 text-brand-blue-dark ring-2 ring-brand-blue/20;
     }
 
+    .field-v2-tabs [role="tab"][aria-selected="true"] small {
+        @apply text-brand-blue-dark;
+    }
+
     .field-v2-category {
         @apply flex min-h-12 cursor-pointer items-center justify-center rounded-lg border border-slate-300 bg-white px-3 text-center text-sm font-bold text-slate-700 hover:border-brand-blue;
     }

@@ -80,29 +80,76 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertDatabaseHas('visit_time_entries', ['visit_id' => $visit->id, 'user_id' => $lead->id, 'category' => 'on_site', 'active_user_id' => $lead->id]);
     }
 
+    public function test_navigation_opens_maps_and_start_route_reuses_the_authoritative_transition(): void
+    {
+        [$organization, $visit, $lead] = $this->executionGraph('assigned');
+        $mapsUrl = $visit->serviceLocation->mapsUrl();
+        $directionsUrl = $visit->serviceLocation->directionsUrl();
+
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('data-field-workspace-v2', false)
+            ->assertSee('Navigate')
+            ->assertSee('Open Maps')
+            ->assertSee($mapsUrl)
+            ->assertSee('Start Route');
+        $this->assertSame('assigned', $visit->fresh()->status);
+
+        $this->actingAs($lead)->post(route('field.visits.start-route', $visit))
+            ->assertRedirect($directionsUrl);
+        $visit->refresh();
+        $firstEnRouteAt = $visit->en_route_at;
+        $this->assertSame('en_route', $visit->status);
+        $this->assertDatabaseHas('audit_events', [
+            'organization_id' => $organization->id,
+            'event_type' => 'visit.transitioned',
+            'subject_type' => Visit::class,
+            'subject_id' => $visit->id,
+        ]);
+        $this->assertDatabaseCount('visit_time_entries', 1);
+
+        $this->actingAs($lead)->post(route('field.visits.start-route', $visit))
+            ->assertRedirect($directionsUrl);
+        $this->assertTrue($firstEnRouteAt->equalTo($visit->fresh()->en_route_at));
+        $this->assertDatabaseCount('visit_time_entries', 1);
+        $this->assertSame(1, AuditEvent::query()->where('event_type', 'visit.transitioned')->where('subject_id', $visit->id)->count());
+
+        $visit->serviceLocation->update(['address_line_1' => '']);
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('No map address')
+            ->assertDontSee('data-field-navigation', false);
+        $this->actingAs($lead)->from(route('field.visits.show', $visit))->post(route('field.visits.start-route', $visit))
+            ->assertRedirect(route('field.visits.show', $visit))
+            ->assertSessionHasErrors('navigation');
+
+        [$outsider] = $this->userWithRole('technician');
+        $this->actingAs($outsider)->post(route('field.visits.start-route', $visit))->assertNotFound();
+    }
+
     public function test_closeout_action_is_context_aware_compact_and_absent_before_on_site_or_after_submission(): void
     {
         [, $visit, $lead] = $this->executionGraph('assigned');
 
-        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
             ->assertOk()
             ->assertSee('Start En Route')
             ->assertDontSee('data-closeout-action-footer', false)
             ->assertDontSee('data-closeout-dialog', false);
 
         $visit->update(['status' => 'en_route']);
-        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
             ->assertOk()
             ->assertSee('Mark On Site')
             ->assertDontSee('data-closeout-action-footer', false);
 
         $visit->update(['status' => 'canceled']);
-        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
             ->assertOk()
             ->assertDontSee('data-closeout-action-footer', false);
 
         $visit->update(['status' => 'on_site']);
-        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
             ->assertOk()
             ->assertSee('data-closeout-action-footer', false)
             ->assertSee('data-closeout-dialog', false)
@@ -112,7 +159,7 @@ class MobileFieldExecutionTest extends TestCase
         $this->actingAs($lead)->post(route('field.visits.draft', $visit), $this->resolvedDraft())
             ->assertRedirect()
             ->assertSessionHasNoErrors();
-        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
             ->assertOk()
             ->assertSee('Resolved - Ready for final review')
             ->assertSee('>Final review<', false)
@@ -122,7 +169,7 @@ class MobileFieldExecutionTest extends TestCase
         $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
             ->assertRedirect()
             ->assertSessionHasNoErrors();
-        $this->actingAs($lead)->get(route('field.visits.show', $visit->fresh()))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit->fresh()))
             ->assertOk()
             ->assertDontSee('data-closeout-action-footer', false)
             ->assertDontSee('data-closeout-dialog', false);
@@ -156,7 +203,7 @@ class MobileFieldExecutionTest extends TestCase
             'outcome' => 'customer_unavailable',
         ])->assertRedirect()->assertSessionHasNoErrors();
 
-        $this->from("/field/visits/{$visit->id}")->followingRedirects()->post("/field/visits/{$visit->id}/submit", [
+        $this->from(route('field.visits.classic', $visit))->followingRedirects()->post("/field/visits/{$visit->id}/submit", [
             'submission_token' => (string) Str::uuid(),
         ])
             ->assertOk()
@@ -243,7 +290,7 @@ class MobileFieldExecutionTest extends TestCase
             'work_performed' => 'Made the system safe for a return visit.',
         ])->assertRedirect()->assertSessionHasNoErrors();
 
-        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
             ->assertOk()
             ->assertSee('data-closeout-field="return_reason"', false)
             ->assertSee('id="return_reason"', false)
@@ -313,7 +360,7 @@ class MobileFieldExecutionTest extends TestCase
     {
         [, $visit, $lead] = $this->executionGraph('on_site');
 
-        $response = $this->actingAs($lead)->get(route('field.visits.show', $visit));
+        $response = $this->actingAs($lead)->get(route('field.visits.classic', $visit));
         $response->assertOk()
             ->assertSee('Take photo')
             ->assertSee('Choose from gallery or files')
@@ -329,7 +376,7 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertStringNotContainsString('capture=', $libraryInput[0]);
 
         $visit->update(['status' => 'returned_for_correction']);
-        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
             ->assertOk()
             ->assertSee('Take photo')
             ->assertSee('Choose from gallery or files');
@@ -459,19 +506,24 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertStringNotContainsString('Private correction explanation', json_encode($event->metadata));
     }
 
-    public function test_opt_in_workspace_v2_preserves_classic_default_policy_and_shared_visit(): void
+    public function test_workspace_v2_is_the_default_and_classic_remains_an_explicit_fallback(): void
     {
         [$organization, $visit, $lead] = $this->executionGraph('on_site');
 
         $this->actingAs($lead)->get(route('field.visits.show', $visit))
             ->assertOk()
-            ->assertSee('Try new Visit workspace')
-            ->assertSee(route('field.visits.workspace-v2', $visit), false);
+            ->assertSee('data-field-workspace-v2', false)
+            ->assertSee('Classic workspace')
+            ->assertSee(route('field.visits.classic', $visit), false);
+
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
+            ->assertOk()
+            ->assertSee('Return to new Visit workspace')
+            ->assertSee(route('field.visits.show', $visit), false)
+            ->assertDontSee('data-field-workspace-v2', false);
 
         $this->actingAs($lead)->get(route('field.visits.workspace-v2', $visit))
             ->assertOk()
-            ->assertSee('Switch to classic workspace')
-            ->assertSee(route('field.visits.show', $visit), false)
             ->assertSee('data-field-workspace-v2', false)
             ->assertSee('data-v2-tab="overview"', false)
             ->assertSee('data-v2-tab="closeout"', false)
@@ -480,7 +532,7 @@ class MobileFieldExecutionTest extends TestCase
             ->assertSee('multiple', false);
 
         [$outsider] = $this->userWithRole('technician');
-        $this->actingAs($outsider)->get(route('field.visits.workspace-v2', $visit))->assertNotFound();
+        $this->actingAs($outsider)->get(route('field.visits.show', $visit))->assertNotFound();
         $this->assertDatabaseHas('audit_events', ['organization_id' => $outsider->memberships()->firstOrFail()->organization_id, 'event_type' => 'security.cross_organization_record_denied']);
         $this->assertFalse(Schema::hasTable('field_visit_workspaces'));
         $this->assertSame($organization->id, $visit->organization_id);
@@ -607,13 +659,13 @@ class MobileFieldExecutionTest extends TestCase
             return [$queries, $elapsed];
         };
 
-        [$v1Queries] = $measure('field.visits.show');
-        [$v2Queries] = $measure('field.visits.workspace-v2');
+        [$v1Queries] = $measure('field.visits.classic');
+        [$v2Queries] = $measure('field.visits.show');
         $v1Times = [];
         $v2Times = [];
         for ($run = 0; $run < 10; $run++) {
-            [, $v1Times[]] = $measure('field.visits.show');
-            [, $v2Times[]] = $measure('field.visits.workspace-v2');
+            [, $v1Times[]] = $measure('field.visits.classic');
+            [, $v2Times[]] = $measure('field.visits.show');
         }
         sort($v1Times);
         sort($v2Times);

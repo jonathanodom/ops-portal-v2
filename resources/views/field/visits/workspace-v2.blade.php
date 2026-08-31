@@ -20,6 +20,7 @@
         $followUpItems = $handledItems->where('status', 'needs_follow_up');
         $completedHelper = collect([$visit->serviceTicket->description])->filter()->merge($completedItems->map(fn ($item) => '- '.$item->title.($item->work_note ? ': '.$item->work_note : '')))->join("\n");
         $followUpHelper = $followUpItems->map(fn ($item) => '- '.$item->title.($item->followUpServiceTicket ? ' ('.$item->followUpServiceTicket->ticket_number.')' : '').($item->work_note ? ': '.$item->work_note : ''))->join("\n");
+        $mapsUrl = $visit->serviceLocation->mapsUrl();
     @endphp
 
     <div data-field-workspace-v2 data-visit-id="{{ $visit->id }}">
@@ -47,7 +48,7 @@
                 @else
                     <p class="text-xs font-semibold text-slate-500">No active timer</p>
                 @endif
-                <a href="{{ route('field.visits.show', $visit) }}" class="inline-flex min-h-11 items-center text-xs font-bold text-brand-blue">Switch to classic workspace</a>
+                <a href="{{ route('field.visits.classic', $visit) }}" class="inline-flex min-h-11 items-center text-xs font-bold text-brand-blue">Classic workspace</a>
             </div>
             @can('execute', $visit)
                 <div class="col-span-2 grid grid-cols-2 gap-2">
@@ -59,7 +60,7 @@
             @endcan
         </header>
 
-        @if($visit->status === 'canceled')<div class="mt-3 rounded-lg border border-slate-300 bg-slate-100 p-4" role="status"><p class="font-bold">Canceled Visit · read-only</p><p class="mt-1 text-sm">Completed time remains available under Time.</p></div>@endif
+        @if($visit->status === 'canceled')<div class="mt-3 rounded-lg border border-slate-300 bg-slate-100 p-4" role="status"><p class="font-bold">Canceled Visit · read-only</p><p class="mt-1 text-sm">This visit was canceled. Completed time remains available under Time.</p></div>@endif
 
         <nav class="field-v2-tabs" aria-label="Visit workspace" role="tablist">
             @foreach([
@@ -75,7 +76,33 @@
 
         <div class="mt-3" data-v2-panels>
             <section id="field-v2-panel-overview" role="tabpanel" aria-labelledby="field-v2-tab-overview" tabindex="0" data-v2-panel="overview" class="space-y-3">
-                <div class="surface p-5"><h2 class="text-lg font-bold">Customer &amp; site</h2><div class="mt-3 grid gap-3 sm:grid-cols-2"><div><p class="font-bold">{{ $visit->serviceTicket->customer->display_name }}</p><p>{{ $visit->serviceLocation->name }}<br>{{ $visit->serviceLocation->formattedAddress() }}</p></div><div>@if($contact)<p class="font-bold">{{ $contact->name }}</p><div class="mt-2 flex flex-wrap gap-2">@if($contact->phone)<a class="button-secondary" href="tel:{{ $contact->phone }}">Call</a>@endif @if($contact->email)<a class="button-secondary" href="mailto:{{ $contact->email }}">Email</a>@endif</div>@else<p class="text-sm text-slate-500">No designated contact.</p>@endif</div></div>@if($visit->serviceLocation->access_instructions)<div class="mt-4 border-t border-slate-200 pt-4"><h3 class="text-sm font-bold text-brand-orange">Access instructions</h3><p class="mt-1 whitespace-pre-line">{{ $visit->serviceLocation->access_instructions }}</p></div>@endif</div>
+                <div class="surface p-5">
+                    <h2 class="text-lg font-bold">Customer &amp; site</h2>
+                    <div class="mt-3 grid gap-3 sm:grid-cols-2">
+                        <div><p class="font-bold">{{ $visit->serviceTicket->customer->display_name }}</p><p>{{ $visit->serviceLocation->name }}<br>{{ $visit->serviceLocation->formattedAddress() }}</p></div>
+                        <div>@if($contact)<p class="font-bold">{{ $contact->name }}</p>@else<p class="text-sm text-slate-500">No designated contact.</p>@endif</div>
+                    </div>
+                    <div class="mt-4 flex flex-wrap gap-2">
+                        @if($contact?->phone)<a class="button-secondary" href="tel:{{ $contact->phone }}">Call</a>@endif
+                        @if($contact?->email)<a class="button-secondary" href="mailto:{{ $contact->email }}">Email</a>@endif
+                        @if($mapsUrl)
+                            <details class="relative" data-field-navigation>
+                                <summary class="button-secondary cursor-pointer list-none">Navigate</summary>
+                                <div class="absolute left-0 z-20 mt-1 grid min-w-44 gap-1 border border-slate-300 bg-white p-2 shadow-lg">
+                                    <a class="button-secondary w-full" href="{{ $mapsUrl }}" target="_blank" rel="noopener">Open Maps</a>
+                                    @can('execute', $visit)
+                                        @if(in_array($visit->status, ['assigned', 'en_route'], true))
+                                            <form method="POST" action="{{ route('field.visits.start-route', $visit) }}">@csrf<button class="button-action w-full">Start Route</button></form>
+                                        @endif
+                                    @endcan
+                                </div>
+                            </details>
+                        @else
+                            <span class="inline-flex min-h-11 items-center text-sm font-semibold text-slate-500">No map address</span>
+                        @endif
+                    </div>
+                    @if($visit->serviceLocation->access_instructions)<div class="mt-4 border-t border-slate-200 pt-4"><h3 class="text-sm font-bold text-brand-orange">Access instructions</h3><p class="mt-1 whitespace-pre-line">{{ $visit->serviceLocation->access_instructions }}</p></div>@endif
+                </div>
                 <div class="surface p-5"><h2 class="text-lg font-bold">Primary scope</h2><p class="mt-2 font-semibold">{{ $visit->serviceTicket->title }}</p><p class="mt-2 whitespace-pre-line text-sm text-slate-700">{{ $visit->serviceTicket->description ?: 'No detailed scope recorded.' }}</p></div>
                 <div class="surface p-5"><div class="grid gap-4 sm:grid-cols-2"><div><h2 class="font-bold">Schedule</h2><p class="mt-1 text-sm">{{ $visit->scheduledStartLocal()?->format('M j, Y · g:i A T') ?? 'Unscheduled' }}@if($visit->scheduledEndLocal())<br>to {{ $visit->scheduledEndLocal()->format('g:i A T') }}@endif</p></div><div><h2 class="font-bold">Crew</h2>@foreach($visit->assignments as $assignment)<p class="mt-1 text-sm">{{ $assignment->membership->user->name }}{{ $assignment->is_lead ? ' · Lead' : '' }}</p>@endforeach</div></div>@if($visit->returnOfVisit)<p class="mt-4 border-t border-slate-200 pt-4 text-sm font-semibold text-brand-orange">Return of {{ $visit->returnOfVisit->displayNumber() }}</p>@endif</div>
             </section>
