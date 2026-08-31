@@ -70,7 +70,9 @@ class CommercialLeadManualEntryTest extends TestCase
 
         $event = AuditEvent::query()->where('event_type', 'commercial_lead_intake.created_manual')->sole();
         $this->assertSame($admin->id, $event->actor_id);
-        $this->assertSame(['lead_intake_id' => $lead->id, 'source' => 'manual'], $event->metadata);
+        $this->assertSame($lead->id, $event->metadata['lead_intake_id']);
+        $this->assertSame('manual', $event->metadata['source']);
+        $this->assertCount(2, $event->metadata);
         $this->assertStringNotContainsString($lead->email, json_encode($event->metadata));
     }
 
