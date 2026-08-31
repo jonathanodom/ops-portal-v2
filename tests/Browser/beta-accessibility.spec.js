@@ -55,6 +55,84 @@ async function expectAccessible(page) {
 
 test.skip(!password, 'BETA_DEMO_PASSWORD is required.');
 
+test.describe('CRM Lead Intake V1', () => {
+    test('manual lead, dispositions, conversion, and Home Quick Add are responsive and accessible', async ({ page }, testInfo) => {
+        test.skip(testInfo.project.name !== 'desktop', 'One browser project loops through all required widths.');
+        test.setTimeout(120_000);
+        await login(page, 'super_admin');
+
+        for (const viewport of [
+            { width: 390, height: 844 },
+            { width: 768, height: 1024 },
+            { width: 1280, height: 900 },
+            { width: 1440, height: 900 },
+            { width: 1920, height: 1080 },
+        ]) {
+            await page.setViewportSize(viewport);
+            await page.goto('/office');
+            const quickAdd = page.locator('[data-home-quick-add]');
+            await expect(quickAdd).toBeVisible();
+            await quickAdd.locator('summary').click();
+            await expect(quickAdd.getByRole('link', { name: 'New Lead' })).toHaveAttribute('href', /\/office\/leads\/create$/);
+            await expect(quickAdd.getByRole('link', { name: 'New Service Ticket' })).toHaveAttribute('href', /\/office\/service-tickets\/create$/);
+            expect(await quickAdd.locator('summary').evaluate((element) => element.getBoundingClientRect().height)).toBeGreaterThanOrEqual(44);
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+
+            await page.goto('/office/leads');
+            await expect(page.getByRole('heading', { name: 'Leads', exact: true })).toBeVisible();
+            await expect(page.getByRole('link', { name: 'New lead' })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+
+            await page.goto('/office/leads/create');
+            await expect(page.getByRole('heading', { name: 'New Lead', exact: true })).toBeVisible();
+            expect(await page.evaluate(() => document.body.scrollWidth <= innerWidth)).toBeTruthy();
+            await expectAccessible(page);
+        }
+
+        await page.setViewportSize({ width: 390, height: 844 });
+        await page.goto('/office');
+        await page.locator('[data-home-quick-add] summary').click();
+        await page.locator('[data-home-quick-add]').getByRole('link', { name: 'New Service Ticket' }).click();
+        await expect(page).toHaveURL(/\/office\/service-tickets\/create$/);
+        await expect(page.getByRole('heading', { name: 'New Service Ticket' })).toBeVisible();
+
+        await page.goto('/office/leads/create');
+        const suffix = Date.now();
+        await page.getByLabel('First name').fill('Browser');
+        await page.getByLabel('Last name').fill(`Lead ${suffix}`);
+        await page.getByLabel('Phone').fill('940-555-0199');
+        await page.getByLabel('Email').fill(`browser.lead.${suffix}@example.test`);
+        await page.getByLabel('Customer type').selectOption('Individual');
+        await page.getByLabel('ZIP').fill('76450');
+        await page.getByLabel('Preferred contact').selectOption('Text');
+        await page.getByLabel('Service interest').selectOption('Technology Support');
+        await page.getByLabel('Timeline').fill('Within 30 days');
+        await page.getByLabel('Details').fill('Controlled beta Lead Intake V1 browser validation request.');
+        await page.getByLabel('General contact permission confirmed').check();
+        await page.getByRole('button', { name: 'Create lead' }).click();
+
+        await expect(page).toHaveURL(/\/office\/leads\/\d+$/);
+        const leadUrl = page.url();
+        await expect(page.getByRole('heading', { name: 'Contact consent' }).locator('..').getByText('Confirmed', { exact: true })).toBeVisible();
+        await expect(page.getByRole('heading', { name: 'SMS consent' }).locator('..').getByText('Not provided', { exact: true })).toBeVisible();
+        await expectAccessible(page);
+
+        await page.getByRole('button', { name: 'Mark spam' }).click();
+        await expect(page.getByText('Spam', { exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Reopen lead' }).click();
+        await expect(page.locator('.status-priority').getByText('Received', { exact: true })).toBeVisible();
+        await page.getByRole('button', { name: 'Convert to Opportunity' }).click();
+        await expect(page).toHaveURL(/\/office\/opportunities\/\d+$/);
+        await expectAccessible(page);
+
+        await page.goto(leadUrl);
+        await expect(page.getByRole('link', { name: 'Open Opportunity' }).first()).toBeVisible();
+        await expect(page.getByRole('button', { name: 'Convert to Opportunity' })).toHaveCount(0);
+    });
+});
+
 test.describe('Commercial Operations Phase 4', () => {
     test('Proposal library and approval queue are responsive and accessible', async ({ page }, testInfo) => {
         test.skip(testInfo.project.name !== 'desktop', 'One browser project loops through all required widths.');
