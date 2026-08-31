@@ -105,7 +105,7 @@ class DispatchSchedule
     private function scheduledQuery(Organization $organization, array $filters): Builder
     {
         return $this->filteredQuery($organization, $filters)
-            ->with(['serviceTicket.customer', 'serviceLocation', 'assignments.membership.user']);
+            ->with(['serviceTicket.customer', 'serviceLocation', 'assignments.membership.user', 'confirmations.confirmedBy']);
     }
 
     /**

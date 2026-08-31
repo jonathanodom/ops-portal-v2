@@ -15,7 +15,7 @@ use Illuminate\Database\Eloquent\SoftDeletes;
 
 #[Fillable([
     'organization_id', 'service_ticket_id', 'ticket_visit_number', 'service_location_id', 'return_of_visit_id', 'current_closeout_id',
-    'status', 'timezone', 'scheduled_start_at', 'scheduled_end_at', 'en_route_at',
+    'status', 'timezone', 'scheduled_start_at', 'scheduled_end_at', 'schedule_version', 'en_route_at',
     'en_route_by_id', 'on_site_at', 'on_site_by_id', 'canceled_at', 'canceled_by_id',
     'cancellation_reason', 'return_reason', 'scheduled_by_id', 'created_by_id', 'updated_by_id',
     'archived_by_id', 'archive_reason', 'restored_by_id', 'restored_at',
@@ -38,6 +38,7 @@ class Visit extends Model
         return [
             'scheduled_start_at' => 'datetime',
             'scheduled_end_at' => 'datetime',
+            'schedule_version' => 'integer',
             'en_route_at' => 'datetime',
             'on_site_at' => 'datetime',
             'canceled_at' => 'datetime',
@@ -68,6 +69,46 @@ class Visit extends Model
     public function assignments(): HasMany
     {
         return $this->hasMany(VisitAssignment::class);
+    }
+
+    public function confirmations(): HasMany
+    {
+        return $this->hasMany(VisitConfirmation::class)->latest('confirmed_at')->latest('id');
+    }
+
+    public function confirmationForCurrentSchedule(): ?VisitConfirmation
+    {
+        if ($this->relationLoaded('confirmations')) {
+            return $this->confirmations->firstWhere('schedule_version', $this->schedule_version);
+        }
+
+        return $this->confirmations()->where('schedule_version', $this->schedule_version)->first();
+    }
+
+    public function confirmationState(?CarbonInterface $now = null, ?string $organizationTimezone = null): string
+    {
+        if ($this->confirmationForCurrentSchedule()) {
+            return 'confirmed';
+        }
+
+        if (! $this->scheduled_start_at || ! in_array($this->status, ['scheduled', 'assigned'], true)) {
+            return 'scheduled';
+        }
+
+        $timezone = $organizationTimezone ?: $this->timezone;
+        $today = ($now ?: now())->copy()->timezone($timezone)->startOfDay();
+        $confirmationDue = $this->scheduled_start_at->copy()->timezone($timezone)->startOfDay()->subDay();
+
+        return $today->greaterThanOrEqualTo($confirmationDue) ? 'needs_confirmation' : 'scheduled';
+    }
+
+    public function confirmationLabel(?CarbonInterface $now = null, ?string $organizationTimezone = null): string
+    {
+        return match ($this->confirmationState($now, $organizationTimezone)) {
+            'confirmed' => 'Confirmed',
+            'needs_confirmation' => 'Needs Confirmation',
+            default => 'Scheduled',
+        };
     }
 
     public function currentCloseout(): BelongsTo

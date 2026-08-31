@@ -3,6 +3,7 @@
 namespace App\Http\Controllers\Office;
 
 use App\Domain\ServiceTicketWorkflow;
+use App\Domain\VisitConfirmationWorkflow;
 use App\Domain\VisitCreator;
 use App\Domain\VisitScheduler;
 use App\Http\Controllers\Controller;
@@ -16,6 +17,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Gate;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 
@@ -116,6 +118,20 @@ class VisitController extends Controller
         $workflow->cancelVisit($visit, $request->user(), $data['reason'], $request->boolean('confirm_stop_active_timers'));
 
         return back()->with('status', 'Visit canceled.');
+    }
+
+    public function confirm(Request $request, string $visit, VisitConfirmationWorkflow $workflow): RedirectResponse
+    {
+        $visit = $this->visit($request, $visit);
+        Gate::authorize('dispatch', [Visit::class, $this->organization($request)]);
+        $data = $request->validate([
+            'confirmation_method' => ['required', Rule::in(['call', 'text', 'email', 'in_person'])],
+            'confirmation_note' => ['nullable', 'string', 'max:2000'],
+        ]);
+
+        $workflow->confirm($visit, $request->user(), $data['confirmation_method'], $data['confirmation_note'] ?? null);
+
+        return back()->with('status', 'Visit confirmation recorded.');
     }
 
     public function createReturn(Request $request, string $visit, AuditRecorder $audit, VisitCreator $visitCreator): RedirectResponse
