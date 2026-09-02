@@ -17,6 +17,45 @@ class ServiceTicketCompletion
 {
     public function __construct(private readonly AuditRecorder $audit) {}
 
+    public function completeForReturnFollowUp(ServiceTicket $ticket, User $actor, Closeout $closeout, CloseoutReview $review): bool
+    {
+        return DB::transaction(function () use ($ticket, $actor, $closeout, $review): bool {
+            $ticket = ServiceTicket::query()->lockForUpdate()->findOrFail($ticket->id);
+            if ($ticket->status === 'completed') {
+                return true;
+            }
+            if (! in_array($ticket->status, ['open', 'on_hold'], true)
+                || $closeout->outcome !== 'needs_return_trip'
+                || $closeout->status !== 'submitted'
+                || $review->decision !== 'approved'
+                || $ticket->visits()->whereNotIn('status', ['approved', 'canceled', 'customer_unavailable'])->exists()
+                || ServiceTicketWorkItem::query()->where('service_ticket_id', $ticket->id)->whereIn('status', ServiceTicketWorkItem::BLOCKING_STATUSES)->exists()) {
+                return false;
+            }
+
+            $followUp = $ticket->returnFollowUpTickets()->where('return_follow_up_source_closeout_id', $closeout->id)->first();
+            if (! $followUp) {
+                return false;
+            }
+            $ticket->update([
+                'status' => 'completed',
+                'status_reason' => null,
+                'status_changed_at' => now(),
+                'status_changed_by_id' => $actor->id,
+                'updated_by_id' => $actor->id,
+            ]);
+            $this->audit->record($ticket->organization, $actor, 'service_ticket.completed_with_return_follow_up', $ticket, [
+                'ticket_id' => $ticket->id,
+                'visit_id' => $closeout->visit_id,
+                'closeout_id' => $closeout->id,
+                'review_id' => $review->id,
+                'return_follow_up_ticket_id' => $followUp->id,
+            ]);
+
+            return true;
+        });
+    }
+
     public function completeIfEligible(ServiceTicket $ticket, User $actor, ?Closeout $closeout = null, ?CloseoutReview $review = null): ?BillingHandoff
     {
         return DB::transaction(function () use ($ticket, $actor, $closeout, $review): ?BillingHandoff {

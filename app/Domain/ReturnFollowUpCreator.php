@@ -6,6 +6,7 @@ use App\Models\Closeout;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Support\AuditRecorder;
+use Illuminate\Support\Str;
 
 final class ReturnFollowUpCreator
 {
@@ -29,7 +30,7 @@ final class ReturnFollowUpCreator
             'customer_id' => $source->customer_id,
             'service_location_id' => $source->service_location_id,
             'contact_id' => $source->contact_id,
-            'title' => 'Return Visit — '.$source->title,
+            'title' => $this->title($source),
             'description' => $this->description($closeout),
             'customer_visible_summary' => null,
             'priority' => $source->priority,
@@ -62,5 +63,12 @@ final class ReturnFollowUpCreator
         ])->filter(fn (?string $value): bool => filled($value))
             ->map(fn (string $value, string $label): string => $label."\n".$value)
             ->implode("\n\n");
+    }
+
+    private function title(ServiceTicket $source): string
+    {
+        $title = preg_replace('/^(?:Return Visit —\s*)+/u', '', trim($source->title)) ?: 'Follow-Up';
+
+        return Str::limit('Return Visit — '.$title, 255, '');
     }
 }

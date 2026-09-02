@@ -160,6 +160,50 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->assertDatabaseCount('visits', 2);
     }
 
+    public function test_approved_return_closeout_completes_parent_when_generated_follow_up_exists(): void
+    {
+        [$organization, $visit, $closeout] = $this->submittedCloseout('needs_return_trip');
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+        $source = $visit->serviceTicket;
+        $followUp = ServiceTicket::query()->create([
+            'organization_id' => $organization->id,
+            'customer_id' => $source->customer_id,
+            'service_location_id' => $source->service_location_id,
+            'contact_id' => $source->contact_id,
+            'ticket_number' => 'NDT-ST-2026-0002',
+            'title' => 'Return Visit — '.$source->title,
+            'description' => $closeout->return_reason,
+            'priority' => $source->priority,
+            'source' => 'internal',
+            'purpose' => $source->canonicalPurpose(),
+            'billing_disposition' => $source->billing_disposition,
+            'status' => 'open',
+            'return_follow_up_source_ticket_id' => $source->id,
+            'return_follow_up_source_closeout_id' => $closeout->id,
+            'return_follow_up_original_purpose' => $source->purpose,
+            'return_follow_up_status' => 'needs_review',
+        ]);
+        $token = (string) Str::uuid();
+
+        $this->actingAs($reviewer)->post(route('office.closeout-reviews.approve', $closeout), [
+            'decision_token' => $token,
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($reviewer)->post(route('office.closeout-reviews.approve', $closeout), [
+            'decision_token' => $token,
+        ])->assertRedirect();
+
+        $this->assertSame('approved', $visit->fresh()->status);
+        $this->assertSame('completed', $source->fresh()->status);
+        $this->assertSame('open', $followUp->fresh()->status);
+        $this->assertSame($source->id, $followUp->return_follow_up_source_ticket_id);
+        $this->assertDatabaseCount('closeout_reviews', 1);
+        $this->assertDatabaseCount('billing_handoffs', 0);
+        $this->assertDatabaseHas('audit_events', [
+            'event_type' => 'service_ticket.completed_with_return_follow_up',
+            'subject_id' => $source->id,
+        ]);
+    }
+
     public function test_final_resolved_return_trip_clearly_completes_a_multi_visit_ticket(): void
     {
         [$organization, $finalVisit, $closeout] = $this->submittedCloseout();

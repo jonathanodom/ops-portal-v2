@@ -200,6 +200,23 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
             ->assertSee('35-foot lift')
             ->assertSee($originalTechnician->name);
 
+        $this->actingAs($dispatcher)->put(route('office.service-tickets.update', $followUp), [
+            'customer_id' => $followUp->customer_id,
+            'service_location_id' => $followUp->service_location_id,
+            'contact_id' => $followUp->contact_id,
+            'title' => 'Return Visit — Updated office scope',
+            'description' => 'Coordinate lift access before arrival.',
+            'priority' => $followUp->priority,
+            'source' => $followUp->source,
+            'purpose' => $followUp->purpose,
+            'billing_disposition' => $followUp->billing_disposition,
+        ])->assertRedirect(route('office.service-tickets.show', $followUp));
+
+        $sourceCloseout->refresh();
+        $this->assertSame('Final exterior camera requires lift access.', $sourceCloseout->return_reason);
+        $this->assertSame('Install and aim the final camera.', $sourceCloseout->unfinished_work);
+        $this->assertSame('35-foot lift', $sourceCloseout->needed_equipment);
+
         $this->actingAs($dispatcher)->post(route('office.service-tickets.transition', $followUp), [
             'status' => 'canceled',
             'reason' => 'Customer no longer requires the return.',

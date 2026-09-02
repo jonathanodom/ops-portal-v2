@@ -153,12 +153,19 @@ class CloseoutReviewWorkflow
                 $visit->update(['status' => 'approved', 'updated_by_id' => $actor->id]);
             }
 
-            $this->ticketCompletion->completeIfEligible(
-                $ticket,
-                $actor,
-                $closeout->outcome === 'resolved' ? $closeout : null,
-                $closeout->outcome === 'resolved' ? $review : null,
-            );
+            if ($closeout->outcome === 'needs_return_trip') {
+                $completedForFollowUp = $this->ticketCompletion->completeForReturnFollowUp($ticket, $actor, $closeout, $review);
+                if (! $completedForFollowUp) {
+                    $this->ticketCompletion->completeIfEligible($ticket, $actor);
+                }
+            } else {
+                $this->ticketCompletion->completeIfEligible(
+                    $ticket,
+                    $actor,
+                    $closeout->outcome === 'resolved' ? $closeout : null,
+                    $closeout->outcome === 'resolved' ? $review : null,
+                );
+            }
 
             $this->audit->record($ticket->organization, $actor, 'closeout.approved', $closeout, [
                 'visit_id' => $visit->id,

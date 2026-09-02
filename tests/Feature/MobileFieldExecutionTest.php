@@ -829,6 +829,7 @@ class MobileFieldExecutionTest extends TestCase
     public function test_return_follow_up_can_create_the_next_ticket_in_the_chain(): void
     {
         [, $sourceVisit, $lead] = $this->executionGraph('on_site');
+        $sourceVisit->serviceTicket->update(['title' => str_repeat('A', 255)]);
         $this->actingAs($lead)->post(route('field.visits.draft', $sourceVisit), $this->returnDraft())->assertRedirect()->assertSessionHasNoErrors();
         $this->actingAs($lead)->post(route('field.visits.submit', $sourceVisit), ['submission_token' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
 
@@ -853,9 +854,35 @@ class MobileFieldExecutionTest extends TestCase
 
         $secondFollowUp = $firstFollowUp->fresh()->returnFollowUpTickets()->sole();
         $this->assertSame($firstFollowUp->id, $secondFollowUp->return_follow_up_source_ticket_id);
+        $this->assertSame($firstFollowUp->title, $secondFollowUp->title);
+        $this->assertSame(255, mb_strlen($secondFollowUp->title));
+        $this->assertStringStartsWith('Return Visit — ', $secondFollowUp->title);
+        $this->assertNotSame($secondFollowUp->id, $secondFollowUp->return_follow_up_source_ticket_id);
         $this->assertNotSame($sourceVisit->service_ticket_id, $secondFollowUp->id);
         $this->assertCount(1, $sourceVisit->serviceTicket->fresh()->returnFollowUpTickets);
         $this->assertSame('open', $sourceVisit->serviceTicket->fresh()->status);
+    }
+
+    public function test_follow_up_creation_failure_rolls_back_closeout_submission(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $this->returnDraft())->assertRedirect()->assertSessionHasNoErrors();
+
+        $failNextFollowUpInsert = true;
+        DB::listen(function ($query) use (&$failNextFollowUpInsert): void {
+            if ($failNextFollowUpInsert && str_contains(strtolower($query->sql), 'insert into') && str_contains(strtolower($query->sql), 'service_tickets')) {
+                $failNextFollowUpInsert = false;
+                throw new \RuntimeException('Forced follow-up creation failure.');
+            }
+        });
+
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), [
+            'submission_token' => (string) Str::uuid(),
+        ])->assertServerError();
+
+        $this->assertSame('draft', $visit->fresh()->currentCloseout->status);
+        $this->assertSame('on_site', $visit->fresh()->status);
+        $this->assertDatabaseCount('service_tickets', 1);
     }
 
     public function test_private_media_is_opaque_authorized_soft_removed_and_queued_for_cleanup(): void

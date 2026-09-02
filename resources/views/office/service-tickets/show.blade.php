@@ -20,7 +20,7 @@
             </div>
             <dl class="mt-4 grid gap-4 text-sm sm:grid-cols-2">
                 <div><dt class="font-bold text-slate-600">Original Ticket</dt><dd><a class="inline-flex min-h-11 items-center break-words font-bold text-brand-blue underline" href="{{ route('office.service-tickets.show', $ticket->returnFollowUpSourceTicket) }}">{{ $ticket->returnFollowUpSourceTicket->ticket_number }}</a></dd></div>
-                <div><dt class="font-bold text-slate-600">Original Purpose</dt><dd class="mt-1 break-words font-semibold">{{ \App\Domain\ServiceTicketPurpose::label($ticket->return_follow_up_original_purpose) }}</dd></div>
+                <div><dt class="font-bold text-slate-600">Original Visit Purpose</dt><dd class="mt-1 break-words font-semibold">{{ \App\Domain\ServiceTicketPurpose::label($ticket->return_follow_up_original_purpose) }}</dd></div>
                 <div class="sm:col-span-2"><dt class="font-bold text-slate-600">Return Reason</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $sourceCloseout->return_reason }}</dd></div>
                 @if(filled($sourceCloseout->unfinished_work))<div class="sm:col-span-2"><dt class="font-bold text-slate-600">Unfinished Work</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $sourceCloseout->unfinished_work }}</dd></div>@endif
                 @if(filled($sourceCloseout->needed_equipment))<div class="sm:col-span-2"><dt class="font-bold text-slate-600">Needed Parts / Equipment</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $sourceCloseout->needed_equipment }}</dd></div>@endif
