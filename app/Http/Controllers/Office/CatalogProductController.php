@@ -110,7 +110,13 @@ class CatalogProductController extends Controller
         if (! $canManagePricing && $request->hasAny(self::PROTECTED_PRICING_FIELDS)) {
             abort(403);
         }
-        $request->merge(['product_code' => strtoupper((string) $request->input('product_code'))]);
+        $productCode = trim((string) $request->input('product_code'));
+        if ($product === null && $productCode === '') {
+            $productCode = filled($request->input('sku'))
+                ? trim((string) $request->input('sku'))
+                : $this->manufacturerModelCode($request);
+        }
+        $request->merge(['product_code' => strtoupper($productCode)]);
         $unitRule = function (?int $currentId = null) use ($organizationId) {
             return Rule::exists('units_of_measure', 'id')->where(function ($query) use ($organizationId, $currentId): void {
                 $query->where('organization_id', $organizationId)->where(function ($query) use ($currentId): void {
@@ -159,6 +165,16 @@ class CatalogProductController extends Controller
         }
 
         return $data;
+    }
+
+    private function manufacturerModelCode(Request $request): string
+    {
+        $code = collect([$request->input('manufacturer'), $request->input('model')])
+            ->map(fn ($value) => trim((string) $value))
+            ->filter()
+            ->implode('-');
+
+        return trim((string) preg_replace('/[^A-Za-z0-9._-]+/', '-', $code), '.-_');
     }
 
     /** @return array{0: Collection, 1: Collection} */

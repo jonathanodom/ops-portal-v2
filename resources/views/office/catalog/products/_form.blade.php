@@ -1,6 +1,6 @@
 @php($editing=isset($product))
 <div class="grid gap-5 sm:grid-cols-2">
-    <div><label class="form-label" for="product_code">Product code</label><input class="form-input" id="product_code" name="product_code" value="{{ old('product_code',$product->product_code ?? '') }}" required></div>
+    <div><label class="form-label" for="product_code">Product code</label><input class="form-input" id="product_code" name="product_code" value="{{ old('product_code',$product->product_code ?? '') }}" @if($editing) required @else data-product-code-autofill @endif><p class="mt-1 text-xs text-slate-500">{{ $editing ? 'Canonical internal identifier.' : 'Defaults from SKU, or manufacturer and model. You can override it.' }}</p></div>
     <div><label class="form-label" for="sku">SKU</label><input class="form-input" id="sku" name="sku" value="{{ old('sku',$product->sku ?? '') }}"></div>
     <div class="sm:col-span-2"><label class="form-label" for="name">Product name</label><input class="form-input" id="name" name="name" value="{{ old('name',$product->name ?? '') }}" required></div>
     <div><label class="form-label" for="manufacturer">Manufacturer</label><input class="form-input" id="manufacturer" name="manufacturer" value="{{ old('manufacturer',$product->manufacturer ?? '') }}"></div>
