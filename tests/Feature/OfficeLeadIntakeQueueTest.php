@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Domain\Commercial\LeadIntakeCreator;
 use App\Models\AuditEvent;
 use App\Models\Capability;
+use App\Models\CommercialLeadActivity;
 use App\Models\CommercialLeadIntake;
 use App\Models\Contact;
 use App\Models\Customer;
@@ -183,6 +184,86 @@ class OfficeLeadIntakeQueueTest extends TestCase
         $dispatcherMembership->update(['status' => 'inactive']);
         $this->actingAs($dispatcher)->get(route('office.leads.index'))->assertForbidden();
         $this->assertSame($other->id, $otherDispatcher->memberships()->sole()->organization_id);
+    }
+
+    public function test_open_leads_default_to_new_and_authorized_staff_can_record_follow_up_history(): void
+    {
+        [$organization, $dispatcher] = $this->organizationMember('dispatcher');
+        $lead = $this->lead($organization);
+
+        $this->assertNull($lead->engagement_status);
+        $this->assertSame('new', $lead->engagementStatus());
+        $this->actingAs($dispatcher)->get(route('office.leads.show', $lead))
+            ->assertOk()->assertSee('New')->assertSee('Lead received from newdaytech.net');
+
+        $this->actingAs($dispatcher)->post(route('office.leads.follow-up.update', $lead), [
+            'engagement_status' => 'left_voicemail',
+            'next_follow_up_at' => '2026-09-03T09:30',
+            'note' => 'Asked the customer to call the Office line.',
+        ])->assertRedirect()->assertSessionHas('status', 'Lead follow-up updated.');
+
+        $lead->refresh();
+        $this->assertSame('left_voicemail', $lead->engagement_status);
+        $this->assertSame('2026-09-03 14:30:00', $lead->next_follow_up_at->utc()->format('Y-m-d H:i:s'));
+        $this->assertTrue($lead->engagementChangedBy->is($dispatcher));
+        $this->assertSame(now()->format('Y-m-d H:i:s'), $lead->engagement_changed_at->format('Y-m-d H:i:s'));
+        $this->assertSame(
+            ['status_changed', 'follow_up_changed', 'note_added'],
+            CommercialLeadActivity::query()->where('commercial_lead_intake_id', $lead->id)->orderBy('id')->pluck('event_type')->all(),
+        );
+        $this->assertDatabaseHas('commercial_lead_activities', [
+            'organization_id' => $organization->id,
+            'commercial_lead_intake_id' => $lead->id,
+            'actor_id' => $dispatcher->id,
+            'event_type' => 'note_added',
+            'note' => 'Asked the customer to call the Office line.',
+        ]);
+        $audit = AuditEvent::query()->where('event_type', 'commercial_lead_intake.follow_up_updated')->sole();
+        $this->assertSame(['engagement_status', 'next_follow_up_at', 'note'], $audit->metadata['changed_fields']);
+        $this->assertStringNotContainsString('Asked the customer', json_encode($audit->metadata));
+    }
+
+    public function test_follow_up_updates_require_manage_access_and_active_organization_scope(): void
+    {
+        [$organization, $dispatcher] = $this->organizationMember('dispatcher');
+        [, $reviewer, $reviewerMembership] = $this->organizationMember('reviewer', $organization);
+        [, $otherDispatcher] = $this->organizationMember('dispatcher');
+        $lead = $this->lead($organization);
+        $reviewerMembership->capabilityOverrides()->attach(
+            Capability::query()->where('key', 'opportunities.view')->sole(),
+            ['effect' => 'grant'],
+        );
+
+        $payload = ['engagement_status' => 'contacted', 'next_follow_up_at' => '', 'note' => 'Safe note'];
+        $this->actingAs($reviewer)->post(route('office.leads.follow-up.update', $lead), $payload)->assertForbidden();
+        $this->actingAs($otherDispatcher)->post(route('office.leads.follow-up.update', $lead), $payload)->assertNotFound();
+        $this->assertNull($lead->fresh()->engagement_status);
+        $this->assertDatabaseCount('commercial_lead_activities', 0);
+        $this->actingAs($dispatcher)->post(route('office.leads.follow-up.update', $lead), [
+            'engagement_status' => 'unsupported',
+        ])->assertSessionHasErrors('engagement_status');
+    }
+
+    public function test_queue_filters_new_due_overdue_and_named_follow_up_states(): void
+    {
+        [$organization, $dispatcher] = $this->organizationMember('dispatcher');
+        $new = $this->lead($organization, ['first_name' => 'Newlead']);
+        $overdue = $this->lead($organization, ['first_name' => 'Pastduelead', 'email' => 'overdue@example.test']);
+        $due = $this->lead($organization, ['first_name' => 'Duetoday', 'email' => 'due@example.test']);
+        $contacted = $this->lead($organization, ['first_name' => 'Reached', 'email' => 'reached@example.test']);
+        $overdue->update(['engagement_status' => 'follow_up_needed', 'next_follow_up_at' => now()->subMinute()]);
+        $due->update(['engagement_status' => 'left_voicemail', 'next_follow_up_at' => now()->addHour()]);
+        $contacted->update(['engagement_status' => 'contacted']);
+
+        $this->actingAs($dispatcher)->get(route('office.leads.index', ['engagement' => 'new']))
+            ->assertOk()->assertSee('Newlead')->assertDontSee('Pastduelead')->assertDontSee('Duetoday')->assertDontSee('Reached');
+        $this->actingAs($dispatcher)->get(route('office.leads.index', ['engagement' => 'overdue']))
+            ->assertOk()->assertSee('Pastduelead')->assertDontSee('Duetoday')->assertDontSee('Newlead');
+        $this->actingAs($dispatcher)->get(route('office.leads.index', ['engagement' => 'due']))
+            ->assertOk()->assertSee('Duetoday')->assertDontSee('Pastduelead')->assertDontSee('Newlead');
+        $this->actingAs($dispatcher)->get(route('office.leads.index', ['engagement' => 'contacted']))
+            ->assertOk()->assertSee('Reached')->assertDontSee('Duetoday')->assertDontSee('Newlead');
+        $this->assertSame('new', $new->engagementStatus());
     }
 
     private function organizationMember(string $role, ?Organization $organization = null): array

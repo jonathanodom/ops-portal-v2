@@ -2,11 +2,13 @@
 
 namespace App\Http\Controllers\Office;
 
+use App\Domain\Commercial\LeadFollowUpWorkflow;
 use App\Domain\Commercial\LeadIntakeConverter;
 use App\Domain\Commercial\LeadIntakeCreator;
 use App\Domain\Commercial\LeadIntakeDisposition;
 use App\Http\Controllers\Controller;
 use App\Http\Requests\ManualLeadIntakeRequest;
+use App\Http\Requests\UpdateLeadFollowUpRequest;
 use App\Models\CommercialLeadIntake;
 use App\Support\AuditRecorder;
 use Illuminate\Http\RedirectResponse;
@@ -23,6 +25,12 @@ final class LeadIntakeController extends Controller
         'archived' => 'archived',
         'spam' => 'spam',
         'all' => null,
+    ];
+
+    private const ENGAGEMENT_FILTERS = [
+        'all', 'new', 'due', 'overdue', 'attempted_contact', 'left_voicemail',
+        'contacted', 'waiting_on_customer', 'follow_up_needed', 'qualified',
+        'not_qualified', 'closed_no_response',
     ];
 
     public function create(Request $request): View
@@ -82,18 +90,60 @@ final class LeadIntakeController extends Controller
             });
         }
 
-        $leads = $query->latest('received_at')->latest('id')->paginate(30)->withQueryString();
+        $engagement = $request->string('engagement')->toString();
+        if (! in_array($engagement, self::ENGAGEMENT_FILTERS, true)) {
+            $engagement = 'all';
+        }
+        $now = now();
+        if ($engagement === 'new') {
+            $query->where(fn ($query) => $query->whereNull('engagement_status')->orWhere('engagement_status', 'new'));
+        } elseif ($engagement === 'due') {
+            $endOfToday = now($organization->timezone)->endOfDay()->utc();
+            $query->whereBetween('next_follow_up_at', [$now, $endOfToday]);
+        } elseif ($engagement === 'overdue') {
+            $query->where('next_follow_up_at', '<', $now);
+        } elseif ($engagement !== 'all') {
+            $query->where('engagement_status', $engagement);
+        }
 
-        return view('office.leads.index', compact('leads', 'filter'));
+        if (in_array($engagement, ['due', 'overdue'], true)) {
+            $query->orderBy('next_follow_up_at');
+        }
+
+        $leads = $query->latest('received_at')
+            ->latest('id')
+            ->paginate(30)
+            ->withQueryString();
+
+        return view('office.leads.index', compact('leads', 'filter', 'engagement'));
     }
 
     public function show(Request $request, CommercialLeadIntake $lead): View
     {
         $lead = $this->scoped($request, $lead);
         Gate::authorize('view', $lead);
-        $lead->load('opportunity');
+        $lead->load(['opportunity', 'convertedBy', 'engagementChangedBy', 'activities.actor']);
 
         return view('office.leads.show', compact('lead'));
+    }
+
+    public function updateFollowUp(
+        UpdateLeadFollowUpRequest $request,
+        CommercialLeadIntake $lead,
+        LeadFollowUpWorkflow $workflow,
+    ): RedirectResponse {
+        $lead = $this->scoped($request, $lead);
+        Gate::authorize('manage', $lead);
+        $workflow->update(
+            $request->attributes->get('organization'),
+            $lead,
+            $request->user(),
+            $request->validated('engagement_status'),
+            $request->nextFollowUpAt(),
+            $request->validated('note'),
+        );
+
+        return back()->with('status', 'Lead follow-up updated.');
     }
 
     public function convert(Request $request, CommercialLeadIntake $lead, LeadIntakeConverter $converter): RedirectResponse
