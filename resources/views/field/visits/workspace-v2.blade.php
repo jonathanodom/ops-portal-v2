@@ -2,7 +2,10 @@
     @php
         $closeout = $visit->currentCloseout;
         $selectedOutcome = old('outcome', $closeout?->outcome);
-        $outcomeLabels = ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'];
+        $installationCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
+        $outcomeLabels = $installationCloseout
+            ? ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']
+            : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'];
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();

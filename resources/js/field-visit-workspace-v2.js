@@ -121,7 +121,9 @@ document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
     const updateOutcome = () => {
         const outcome = closeoutForm?.querySelector('[name="outcome"]:checked')?.value ?? '';
         root.querySelectorAll('[data-v2-outcomes]').forEach((group) => {
-            group.hidden = !group.dataset.v2Outcomes.split(' ').includes(outcome);
+            const hidden = !group.dataset.v2Outcomes.split(' ').includes(outcome);
+            group.hidden = hidden;
+            group.querySelectorAll('input, select, textarea').forEach((control) => control.disabled = hidden);
         });
         const fallback = closeoutForm?.querySelector('[name="ack_unavailable_category"]')?.value;
         const signaturePath = root.querySelector('[data-v2-signature-path]');

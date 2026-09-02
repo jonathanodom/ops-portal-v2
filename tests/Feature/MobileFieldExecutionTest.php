@@ -302,6 +302,125 @@ class MobileFieldExecutionTest extends TestCase
             ->assertSee('Return reason is required when a return Visit is needed.');
     }
 
+    public function test_installation_closeout_submits_without_diagnosis_and_requires_work_performed(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'installation_project']);
+        $payload = [
+            'content_version' => 1,
+            'outcome' => 'resolved',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Confirmed remotely',
+            'no_photo_category' => 'not_applicable',
+            'no_photo_detail' => 'No visual change',
+        ];
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $payload)->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertSessionHasErrors('work_performed')
+            ->assertSessionDoesntHaveErrors('diagnosis');
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [...$payload,
+            'content_version' => 2,
+            'work_performed' => 'Installed camera and configured recording.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('submitted', $visit->fresh()->currentCloseout->status);
+        $this->assertNull($visit->fresh()->currentCloseout->diagnosis);
+    }
+
+    public function test_installation_return_visit_requires_only_work_and_return_reason(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'installation_project']);
+        $payload = [
+            'content_version' => 1,
+            'outcome' => 'needs_return_trip',
+            'work_performed' => 'Installed NVR and configured six cameras.',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Confirmed remotely',
+        ];
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $payload)->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertSessionHasErrors('return_reason');
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [...$payload,
+            'content_version' => 2,
+            'return_reason' => 'Final parking-lot camera requires lift access.',
+            'unfinished_work' => 'Install final exterior camera.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $closeout = $visit->fresh()->currentCloseout;
+        $this->assertSame('submitted', $closeout->status);
+        $this->assertNull($closeout->needed_equipment);
+        $this->assertNull($closeout->recommendations);
+        $this->assertNotNull($closeout->return_visit_id);
+    }
+
+    public function test_installation_can_change_from_return_required_to_completed_without_stale_validation(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'installation_project']);
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [
+            'content_version' => 1,
+            'outcome' => 'needs_return_trip',
+            'work_performed' => 'Initial installation phase.',
+            'return_reason' => 'Access was initially unavailable.',
+            'unfinished_work' => 'Complete final device.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [
+            'content_version' => 2,
+            'outcome' => 'resolved',
+            'work_performed' => 'Installed final device and verified operation.',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Confirmed remotely',
+            'no_photo_category' => 'not_applicable',
+            'no_photo_detail' => 'No visual change',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('resolved', $visit->fresh()->currentCloseout->outcome);
+        $this->assertNull($visit->fresh()->currentCloseout->return_visit_id);
+    }
+
+    public function test_installation_workspace_uses_installation_labels_and_preserves_legacy_diagnosis_display(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'installation_project']);
+        $closeout = Closeout::query()->create([
+            'organization_id' => $visit->organization_id,
+            'visit_id' => $visit->id,
+            'version' => 1,
+            'status' => 'draft',
+            'content_version' => 1,
+            'diagnosis' => 'Legacy diagnostic detail remains readable.',
+        ]);
+        $visit->update(['current_closeout_id' => $closeout->id]);
+
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('Installation completion')
+            ->assertSee('Work Performed')
+            ->assertSee('Post-Visit Recommendations')
+            ->assertSee('Exceptions / Additional Work')
+            ->assertSee('Return Visit Required')
+            ->assertSee('Legacy diagnostic detail remains readable.')
+            ->assertDontSee('name="diagnosis"', false);
+
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
+            ->assertOk()
+            ->assertSee('Installation closeout')
+            ->assertSee('Exceptions / Additional Work')
+            ->assertDontSee('name="diagnosis"', false);
+    }
+
     public function test_all_submission_outcomes_apply_their_atomic_effects(): void
     {
         [$organization, $returnVisit, $lead] = $this->executionGraph('on_site');

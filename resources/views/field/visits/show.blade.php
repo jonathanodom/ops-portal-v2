@@ -2,7 +2,10 @@
     @php
         $closeout = $visit->currentCloseout;
         $selectedOutcome = old('outcome', $closeout?->outcome);
-        $outcomeLabels = ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'];
+        $installationCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
+        $outcomeLabels = $installationCloseout
+            ? ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']
+            : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'];
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
@@ -249,10 +252,10 @@
                     </fieldset>
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
-                        <legend class="px-1 text-base font-bold text-slate-900">Work summary</legend>
-                        @foreach (['diagnosis' => 'Diagnosis', 'work_performed' => 'Work performed', 'exceptions' => 'Exceptions', 'recommendations' => 'Recommendations'] as $field => $label)
+                        <legend class="px-1 text-base font-bold text-slate-900">{{ $installationCloseout ? 'Installation closeout' : 'Work summary' }}</legend>
+                        @foreach ($installationCloseout ? ['work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'] : ['diagnosis' => 'Diagnosis', 'work_performed' => 'Work performed', 'exceptions' => 'Exceptions', 'recommendations' => 'Recommendations'] as $field => $label)
                             <div data-closeout-field="{{ $field }}">
-                                <label class="form-label" for="{{ $field }}">{{ $label }}</label>
+                                <label class="form-label" for="{{ $field }}">{{ $label }} @if($installationCloseout && $field === 'work_performed')<span class="text-red-700">(required)</span>@elseif($installationCloseout)<span class="font-normal text-slate-500">(optional)</span>@endif</label>
                                 <textarea class="form-textarea mt-1 {{ $closeoutFieldError($field) ? 'border-red-500 bg-red-50' : '' }}" id="{{ $field }}" name="{{ $field }}" @if($closeoutFieldError($field)) aria-invalid="true" aria-describedby="{{ $field }}-error" @endif>{{ old($field, $closeout?->$field) }}</textarea>
                                 <x-field-error :field="$field" :message="$closeoutMissing->get($field)" />
                             </div>
@@ -260,8 +263,8 @@
                     </fieldset>
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
-                        <legend class="px-1 text-base font-bold text-slate-900">Return trip or hold details</legend>
-                        <p class="text-sm text-slate-600">Complete the fields that apply when another visit is needed or work is placed on hold.</p>
+                        <legend class="px-1 text-base font-bold text-slate-900">{{ $installationCloseout ? 'Return Visit' : 'Return trip or hold details' }}</legend>
+                        <p class="text-sm text-slate-600">{{ $installationCloseout ? 'Return Reason is required only when Return Visit Required is selected. Unfinished Work and Needed Parts / Equipment are optional.' : 'Complete the fields that apply when another visit is needed or work is placed on hold.' }}</p>
                         @foreach (['return_reason' => 'Return reason', 'unfinished_work' => 'Unfinished work', 'needed_equipment' => 'Needed parts / equipment', 'hold_reason' => 'Hold reason'] as $field => $label)
                             <div data-closeout-field="{{ $field }}">
                                 <label class="form-label" for="{{ $field }}">{{ $label }}</label>
