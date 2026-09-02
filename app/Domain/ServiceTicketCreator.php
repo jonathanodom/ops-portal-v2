@@ -44,12 +44,16 @@ final class ServiceTicketCreator
                 'source' => $data['source'],
                 'purpose' => $data['purpose'],
                 'billing_disposition' => $data['billing_disposition'],
+                'return_follow_up_source_ticket_id' => $data['return_follow_up_source_ticket_id'] ?? null,
+                'return_follow_up_source_closeout_id' => $data['return_follow_up_source_closeout_id'] ?? null,
+                'return_follow_up_original_purpose' => $data['return_follow_up_original_purpose'] ?? null,
+                'return_follow_up_status' => $data['return_follow_up_status'] ?? null,
                 'status' => 'open',
                 'created_by_id' => $actor->id,
                 'updated_by_id' => $actor->id,
             ]);
 
-            $this->audit->record($organization, $actor, 'service_ticket.created', $ticket, [
+            $auditMetadata = [
                 'customer_id' => $ticket->customer_id,
                 'service_location_id' => $ticket->service_location_id,
                 'contact_id' => $ticket->contact_id,
@@ -57,7 +61,15 @@ final class ServiceTicketCreator
                 'source' => $ticket->source,
                 'purpose' => $ticket->purpose,
                 'billing_disposition' => $ticket->billing_disposition,
-            ]);
+            ];
+            if ($ticket->isReturnFollowUp()) {
+                $auditMetadata += [
+                    'return_follow_up_source_ticket_id' => $ticket->return_follow_up_source_ticket_id,
+                    'return_follow_up_source_closeout_id' => $ticket->return_follow_up_source_closeout_id,
+                    'return_follow_up_status' => $ticket->return_follow_up_status,
+                ];
+            }
+            $this->audit->record($organization, $actor, 'service_ticket.created', $ticket, $auditMetadata);
 
             if ($createVisit) {
                 $visit = $this->visits->create($ticket, [
