@@ -15,6 +15,7 @@ use Illuminate\Database\Eloquent\Relations\HasOne;
 #[Fillable([
     'organization_id', 'customer_id', 'service_location_id', 'contact_id', 'ticket_number',
     'title', 'description', 'customer_visible_summary', 'priority', 'source', 'purpose', 'billing_disposition', 'status', 'next_visit_number',
+    'return_follow_up_source_ticket_id', 'return_follow_up_source_closeout_id', 'return_follow_up_original_purpose', 'return_follow_up_status',
     'status_reason', 'status_changed_at', 'status_changed_by_id', 'created_by_id', 'updated_by_id',
 ])]
 class ServiceTicket extends Model
@@ -34,6 +35,26 @@ class ServiceTicket extends Model
     public function purposeLabel(): string
     {
         return ServiceTicketPurpose::label($this->purpose);
+    }
+
+    public function isReturnFollowUp(): bool
+    {
+        return $this->return_follow_up_source_ticket_id !== null;
+    }
+
+    public function returnFollowUpSourceTicket(): BelongsTo
+    {
+        return $this->belongsTo(self::class, 'return_follow_up_source_ticket_id');
+    }
+
+    public function returnFollowUpTickets(): HasMany
+    {
+        return $this->hasMany(self::class, 'return_follow_up_source_ticket_id')->oldest('id');
+    }
+
+    public function returnFollowUpSourceCloseout(): BelongsTo
+    {
+        return $this->belongsTo(Closeout::class, 'return_follow_up_source_closeout_id');
     }
 
     public function organization(): BelongsTo

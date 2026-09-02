@@ -23,6 +23,8 @@ final class FieldVisitWorkspaceV2Controller extends Controller
         $visit->load([
             'serviceTicket.customer',
             'serviceTicket.contact',
+            'serviceTicket.returnFollowUpSourceTicket',
+            'serviceTicket.returnFollowUpSourceCloseout.submittedBy',
             'serviceTicket.workItems' => fn ($query) => $query->with(['discoveredVisit.returnOfVisit', 'visits.returnOfVisit', 'followUpServiceTicket'])->orderBy('id'),
             'serviceTicket.invoices' => fn ($query) => $query->where('status', 'issued')->latest('issued_at'),
             'serviceTicket.visits' => fn ($query) => $query->select(['id', 'service_ticket_id', 'ticket_visit_number', 'return_of_visit_id', 'status', 'scheduled_start_at', 'timezone'])->with('returnOfVisit:id,ticket_visit_number')->orderBy('ticket_visit_number'),

@@ -19,7 +19,7 @@ class FieldExecution
 {
     public function __construct(
         private readonly AuditRecorder $audit,
-        private readonly VisitCreator $visitCreator,
+        private readonly ReturnFollowUpCreator $returnFollowUps,
         private readonly CloseoutReadiness $readiness,
         private readonly TimeConflictDiagnostic $timeConflictDiagnostic,
         private readonly ServiceTicketWorkItemWorkflow $workItems,
@@ -275,15 +275,14 @@ class FieldExecution
                     $storedSignature = $this->signatureCapture->store($c, $actor, $decodedSignature);
                 }
                 $c->timeEntries()->whereNull('ended_at')->update(['ended_at' => now(), 'active_user_id' => null, 'source' => 'system_auto']);
-                $return = null;
+                $returnFollowUp = null;
                 if ($c->outcome === 'needs_return_trip') {
-                    $return = $c->return_visit_id ? Visit::query()->find($c->return_visit_id) : null;
-                    $return ??= $this->visitCreator->create($v->serviceTicket, ['service_location_id' => $v->service_location_id, 'return_of_visit_id' => $v->id, 'status' => 'planned', 'timezone' => $v->timezone, 'return_reason' => $c->return_reason, 'created_by_id' => $actor->id, 'updated_by_id' => $actor->id]);
+                    $returnFollowUp = $this->returnFollowUps->create($c, $actor);
                 } if ($c->outcome === 'on_hold') {
                     ServiceTicket::whereKey($v->service_ticket_id)->update(['status' => 'on_hold', 'status_reason' => $c->hold_reason, 'status_changed_at' => now(), 'status_changed_by_id' => $actor->id]);
-                } $c->update(['status' => 'submitted', 'submitted_token' => $token, 'submitted_by_id' => $actor->id, 'submitted_at' => now(), 'acknowledged_at' => filled($c->representative_name) ? ($c->acknowledged_at ?? now()) : null, 'return_visit_id' => $return?->id]);
+                } $c->update(['status' => 'submitted', 'submitted_token' => $token, 'submitted_by_id' => $actor->id, 'submitted_at' => now(), 'acknowledged_at' => filled($c->representative_name) ? ($c->acknowledged_at ?? now()) : null, 'return_visit_id' => null]);
                 $v->update(['status' => $c->outcome === 'customer_unavailable' ? 'customer_unavailable' : 'pending_closeout', 'updated_by_id' => $actor->id]);
-                $this->audit->record($v->serviceTicket->organization, $actor, 'closeout.submitted', $c, ['visit_id' => $v->id, 'outcome' => $c->outcome, 'return_visit_id' => $return?->id, 'execute_any_override' => $executeAny, 'administrative_override' => $manualCompletion]);
+                $this->audit->record($v->serviceTicket->organization, $actor, 'closeout.submitted', $c, ['visit_id' => $v->id, 'outcome' => $c->outcome, 'return_follow_up_ticket_id' => $returnFollowUp?->id, 'execute_any_override' => $executeAny, 'administrative_override' => $manualCompletion]);
 
                 return $c->fresh('acknowledgmentSignature');
             });

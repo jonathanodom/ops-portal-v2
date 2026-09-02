@@ -9,6 +9,7 @@ use App\Models\Closeout;
 use App\Models\CloseoutAcknowledgmentSignature;
 use App\Models\Contact;
 use App\Models\Customer;
+use App\Models\DocumentSequence;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Role;
@@ -359,7 +360,15 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertSame('submitted', $closeout->status);
         $this->assertNull($closeout->needed_equipment);
         $this->assertNull($closeout->recommendations);
-        $this->assertNotNull($closeout->return_visit_id);
+        $this->assertNull($closeout->return_visit_id);
+        $followUp = $visit->serviceTicket->fresh()->returnFollowUpTickets()->sole();
+        $this->assertSame('installation_project', $followUp->purpose);
+        $this->assertSame('needs_review', $followUp->return_follow_up_status);
+        $this->assertSame($closeout->id, $followUp->return_follow_up_source_closeout_id);
+        $this->assertSame($visit->serviceTicket->customer_id, $followUp->customer_id);
+        $this->assertSame($visit->serviceTicket->service_location_id, $followUp->service_location_id);
+        $this->assertStringContainsString('Final parking-lot camera requires lift access.', $followUp->description);
+        $this->assertStringContainsString('Install final exterior camera.', $followUp->description);
     }
 
     public function test_installation_can_change_from_return_required_to_completed_without_stale_validation(): void
@@ -388,6 +397,7 @@ class MobileFieldExecutionTest extends TestCase
 
         $this->assertSame('resolved', $visit->fresh()->currentCloseout->outcome);
         $this->assertNull($visit->fresh()->currentCloseout->return_visit_id);
+        $this->assertCount(0, $visit->serviceTicket->fresh()->returnFollowUpTickets);
     }
 
     public function test_installation_workspace_uses_installation_labels_and_preserves_legacy_diagnosis_display(): void
@@ -516,6 +526,7 @@ class MobileFieldExecutionTest extends TestCase
         $this->actingAs($lead)->post(route('field.visits.draft', $visit), $payload)->assertRedirect();
         $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
             ->assertSessionHasErrors('return_reason');
+        $this->assertCount(0, $visit->serviceTicket->fresh()->returnFollowUpTickets);
         $this->actingAs($lead)->post(route('field.visits.draft', $visit), [...$payload,
             'content_version' => 2,
             'return_reason' => 'Replacement access point must be ordered.',
@@ -526,7 +537,11 @@ class MobileFieldExecutionTest extends TestCase
         $closeout = $visit->fresh()->currentCloseout;
         $this->assertNull($closeout->unfinished_work);
         $this->assertNull($closeout->needed_equipment);
-        $this->assertNotNull($closeout->return_visit_id);
+        $this->assertNull($closeout->return_visit_id);
+        $followUp = $visit->serviceTicket->fresh()->returnFollowUpTickets()->sole();
+        $this->assertSame('service_call', $followUp->purpose);
+        $this->assertSame('Outdoor access point has failed power circuitry.', $closeout->diagnosis);
+        $this->assertSame('Replacement access point must be ordered.', $followUp->returnFollowUpSourceCloseout->return_reason);
     }
 
     public function test_service_visit_can_be_temporarily_resolved_on_hold_without_recommendations(): void
@@ -578,6 +593,7 @@ class MobileFieldExecutionTest extends TestCase
 
         $this->assertSame('resolved', $visit->fresh()->currentCloseout->outcome);
         $this->assertNull($visit->fresh()->currentCloseout->return_visit_id);
+        $this->assertCount(0, $visit->serviceTicket->fresh()->returnFollowUpTickets);
     }
 
     public function test_service_visit_workspace_identifies_resolution_and_diagnostic_fields(): void
@@ -783,8 +799,13 @@ class MobileFieldExecutionTest extends TestCase
         $token = (string) Str::uuid();
         $this->actingAs($lead)->post("/field/visits/{$returnVisit->id}/submit", ['submission_token' => $token])->assertRedirect()->assertSessionHasNoErrors();
         $this->actingAs($lead)->post("/field/visits/{$returnVisit->id}/submit", ['submission_token' => $token])->assertRedirect();
-        $this->assertDatabaseCount('visits', 2);
-        $this->assertDatabaseHas('visits', ['return_of_visit_id' => $returnVisit->id, 'status' => 'planned']);
+        $this->assertDatabaseCount('visits', 1);
+        $this->assertDatabaseCount('service_tickets', 2);
+        $this->assertCount(1, $returnVisit->serviceTicket->fresh()->returnFollowUpTickets);
+        $this->assertDatabaseHas('service_tickets', [
+            'return_follow_up_source_ticket_id' => $returnVisit->service_ticket_id,
+            'return_follow_up_source_closeout_id' => $returnVisit->fresh()->current_closeout_id,
+        ]);
 
         $holdVisit = $this->additionalAssignedVisit($returnVisit, $lead, 'on_site');
         $this->actingAs($lead)->post("/field/visits/{$holdVisit->id}/draft", $this->holdDraft())->assertRedirect();
@@ -803,6 +824,65 @@ class MobileFieldExecutionTest extends TestCase
         $this->assertSame('customer_unavailable', $unavailableVisit->fresh()->status);
         $this->assertSame('open', $unavailableVisit->serviceTicket->fresh()->status);
         $this->assertStringNotContainsString('No authorized representative', AuditEvent::query()->where('organization_id', $organization->id)->get()->pluck('metadata')->toJson());
+    }
+
+    public function test_return_follow_up_can_create_the_next_ticket_in_the_chain(): void
+    {
+        [, $sourceVisit, $lead] = $this->executionGraph('on_site');
+        $sourceVisit->serviceTicket->update(['title' => str_repeat('A', 255)]);
+        $this->actingAs($lead)->post(route('field.visits.draft', $sourceVisit), $this->returnDraft())->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $sourceVisit), ['submission_token' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
+
+        $firstFollowUp = $sourceVisit->serviceTicket->fresh()->returnFollowUpTickets()->sole();
+        $membership = $lead->memberships()->where('organization_id', $firstFollowUp->organization_id)->firstOrFail();
+        $followUpVisit = Visit::query()->create([
+            'organization_id' => $firstFollowUp->organization_id,
+            'service_ticket_id' => $firstFollowUp->id,
+            'service_location_id' => $firstFollowUp->service_location_id,
+            'status' => 'on_site',
+            'timezone' => 'America/Chicago',
+        ]);
+        VisitAssignment::query()->create([
+            'organization_id' => $firstFollowUp->organization_id,
+            'visit_id' => $followUpVisit->id,
+            'organization_membership_id' => $membership->id,
+            'is_lead' => true,
+        ]);
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $followUpVisit), $this->returnDraft())->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $followUpVisit), ['submission_token' => (string) Str::uuid()])->assertRedirect()->assertSessionHasNoErrors();
+
+        $secondFollowUp = $firstFollowUp->fresh()->returnFollowUpTickets()->sole();
+        $this->assertSame($firstFollowUp->id, $secondFollowUp->return_follow_up_source_ticket_id);
+        $this->assertSame($firstFollowUp->title, $secondFollowUp->title);
+        $this->assertSame(255, mb_strlen($secondFollowUp->title));
+        $this->assertStringStartsWith('Return Visit — ', $secondFollowUp->title);
+        $this->assertNotSame($secondFollowUp->id, $secondFollowUp->return_follow_up_source_ticket_id);
+        $this->assertNotSame($sourceVisit->service_ticket_id, $secondFollowUp->id);
+        $this->assertCount(1, $sourceVisit->serviceTicket->fresh()->returnFollowUpTickets);
+        $this->assertSame('open', $sourceVisit->serviceTicket->fresh()->status);
+    }
+
+    public function test_follow_up_creation_failure_rolls_back_closeout_submission(): void
+    {
+        [, $visit, $lead] = $this->executionGraph('on_site');
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $this->returnDraft())->assertRedirect()->assertSessionHasNoErrors();
+
+        $failNextFollowUpInsert = true;
+        DB::listen(function ($query) use (&$failNextFollowUpInsert): void {
+            if ($failNextFollowUpInsert && str_contains(strtolower($query->sql), 'insert into') && str_contains(strtolower($query->sql), 'service_tickets')) {
+                $failNextFollowUpInsert = false;
+                throw new \RuntimeException('Forced follow-up creation failure.');
+            }
+        });
+
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), [
+            'submission_token' => (string) Str::uuid(),
+        ])->assertServerError();
+
+        $this->assertSame('draft', $visit->fresh()->currentCloseout->status);
+        $this->assertSame('on_site', $visit->fresh()->status);
+        $this->assertDatabaseCount('service_tickets', 1);
     }
 
     public function test_private_media_is_opaque_authorized_soft_removed_and_queued_for_cleanup(): void
@@ -1160,6 +1240,12 @@ class MobileFieldExecutionTest extends TestCase
         $contact = Contact::query()->create(['organization_id' => $organization->id, 'customer_id' => $customer->id, 'name' => 'Field Contact', 'is_preferred' => true, 'active' => true]);
         $location = ServiceLocation::query()->create(['organization_id' => $organization->id, 'customer_id' => $customer->id, 'primary_contact_id' => $contact->id, 'name' => 'Field Site', 'address_line_1' => '100 Main', 'city' => 'Fort Worth', 'state' => 'TX', 'postal_code' => '76102', 'timezone' => 'America/Chicago', 'is_primary' => true, 'active' => true]);
         $ticket = ServiceTicket::query()->create(['organization_id' => $organization->id, 'customer_id' => $customer->id, 'service_location_id' => $location->id, 'contact_id' => $contact->id, 'ticket_number' => 'NDT-ST-2026-0001', 'title' => 'Field execution', 'description' => 'Restore service', 'priority' => 'normal', 'source' => 'phone', 'status' => 'open']);
+        DocumentSequence::query()->create([
+            'organization_id' => $organization->id,
+            'document_type' => 'service_ticket',
+            'year' => now($organization->timezone)->year,
+            'current_value' => 1,
+        ]);
         $visit = Visit::query()->create(['organization_id' => $organization->id, 'service_ticket_id' => $ticket->id, 'service_location_id' => $location->id, 'status' => $status, 'timezone' => 'America/Chicago']);
         VisitAssignment::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'organization_membership_id' => $leadMembership->id, 'is_lead' => true]);
         VisitAssignment::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'organization_membership_id' => $crewMembership->id, 'is_lead' => false]);
