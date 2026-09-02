@@ -37,7 +37,11 @@ return new class extends Migration
         Schema::create('portal_notification_recipients', function (Blueprint $table): void {
             $table->id();
             $table->foreignId('organization_id')->constrained()->restrictOnDelete();
-            $table->foreignId('portal_notification_event_id')->constrained()->cascadeOnDelete();
+            $table->unsignedBigInteger('portal_notification_event_id');
+            $table->foreign('portal_notification_event_id', 'portal_notification_event_fk')
+                ->references('id')
+                ->on('portal_notification_events')
+                ->cascadeOnDelete();
             $table->foreignId('user_id')->constrained()->restrictOnDelete();
             $table->json('channels');
             $table->timestamp('read_at')->nullable();
