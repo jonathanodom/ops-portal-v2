@@ -17,7 +17,7 @@ use Illuminate\Validation\ValidationException;
 class CloseoutReviewWorkflow
 {
     private const COPY_FIELDS = [
-        'outcome', 'diagnosis', 'work_performed', 'exceptions', 'recommendations',
+        'outcome', 'diagnosis', 'work_performed', 'result_summary', 'exceptions', 'recommendations',
         'return_reason', 'unfinished_work', 'needed_equipment', 'hold_reason',
         'unavailable_category', 'unavailable_detail', 'representative_name', 'representative_role',
         'ack_unavailable_category', 'ack_unavailable_detail',

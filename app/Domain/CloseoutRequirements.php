@@ -12,10 +12,14 @@ final class CloseoutRequirements
                 ? ['diagnosis', 'work_performed']
                 : [],
             ServiceTicketPurpose::SITE_SURVEY,
-            ServiceTicketPurpose::INSTALLATION_PROJECT,
-            ServiceTicketPurpose::WARRANTY_MAINTENANCE,
-            ServiceTicketPurpose::INTERNAL_TESTING => in_array($outcome, ['resolved', 'needs_return_trip'], true)
+            ServiceTicketPurpose::WARRANTY_MAINTENANCE => in_array($outcome, ['resolved', 'needs_return_trip', 'on_hold'], true)
                 ? ['work_performed']
+                : [],
+            ServiceTicketPurpose::INSTALLATION_PROJECT => in_array($outcome, ['resolved', 'needs_return_trip'], true)
+                ? ['work_performed']
+                : [],
+            ServiceTicketPurpose::INTERNAL_TESTING => in_array($outcome, ['resolved', 'needs_return_trip', 'on_hold'], true)
+                ? ['work_performed', 'result_summary']
                 : [],
             default => in_array($outcome, ['resolved', 'needs_return_trip'], true)
                 ? ['diagnosis', 'work_performed']

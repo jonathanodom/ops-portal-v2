@@ -28,9 +28,16 @@ class CloseoutReadiness
         $purpose = $closeout->visit->serviceTicket->purpose;
         foreach ($this->requirements->narrativeFields($purpose, $closeout->outcome) as $field) {
             if (blank($closeout->$field)) {
-                $errors[$field] = $field === 'diagnosis'
-                    ? 'Diagnosis is required for a Service Visit.'
-                    : 'Work performed is required.';
+                $errors[$field] = match ($field) {
+                    'diagnosis' => 'Diagnosis is required for a Service Visit.',
+                    'result_summary' => 'Result / Outcome is required for Internal / Testing.',
+                    'work_performed' => match (ServiceTicketPurpose::canonical($purpose)) {
+                        ServiceTicketPurpose::SITE_SURVEY => 'Visit / Survey Summary is required.',
+                        ServiceTicketPurpose::INTERNAL_TESTING => 'Work / Test Performed is required.',
+                        default => 'Work performed is required.',
+                    },
+                    default => 'This field is required.',
+                };
             }
         }
 
@@ -52,7 +59,8 @@ class CloseoutReadiness
                 $errors['unavailable_detail'] = 'Customer unavailable details are required.';
             }
         }
-        if (in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true)) {
+        if (ServiceTicketPurpose::canonical($purpose) !== ServiceTicketPurpose::INTERNAL_TESTING
+            && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true)) {
             if (filled($closeout->ack_unavailable_category)) {
                 if (blank($closeout->ack_unavailable_detail)) {
                     $errors['ack_unavailable_detail'] = 'Acknowledgment fallback details are required.';

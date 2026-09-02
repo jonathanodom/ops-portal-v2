@@ -2,20 +2,48 @@
     @php
         $closeout = $visit->currentCloseout;
         $selectedOutcome = old('outcome', $closeout?->outcome);
-        $installationCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
-        $serviceVisitCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::SERVICE_VISIT;
-        $outcomeLabels = $installationCloseout
-            ? ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']
-            : ($serviceVisitCloseout
-                ? ['resolved' => 'Resolved', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'Temporarily Resolved / On Hold']
-                : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']);
+        $ticketPurpose = $visit->serviceTicket->canonicalPurpose();
+        $installationCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
+        $serviceVisitCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::SERVICE_VISIT;
+        $siteSurveyCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::SITE_SURVEY;
+        $warrantyMaintenanceCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::WARRANTY_MAINTENANCE;
+        $internalTestingCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::INTERNAL_TESTING;
+        $outcomeLabels = match ($ticketPurpose) {
+            \App\Domain\ServiceTicketPurpose::SITE_SURVEY => ['resolved' => 'Survey Complete', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+            \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT => ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+            \App\Domain\ServiceTicketPurpose::SERVICE_VISIT => ['resolved' => 'Resolved', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'Temporarily Resolved / On Hold'],
+            \App\Domain\ServiceTicketPurpose::WARRANTY_MAINTENANCE => ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+            \App\Domain\ServiceTicketPurpose::INTERNAL_TESTING => ['resolved' => 'Completed / Passed', 'needs_return_trip' => 'Follow-up Required', 'customer_unavailable' => 'Unavailable', 'on_hold' => 'On hold'],
+            default => ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+        };
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
         $inheritedMedia = ($versions ?? collect())->where('id','!=',$closeout?->id)->flatMap->media->where('state','stored');
         $closeoutMissing = collect($closeoutReadinessErrors ?? ['outcome' => 'Choose an outcome.']);
         $closeoutDraftMissing = $closeoutMissing->except('signature_data');
-        $signaturePath = $closeout && blank($closeout->ack_unavailable_category) && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true);
+        $signaturePath = ! $internalTestingCloseout && $closeout && blank($closeout->ack_unavailable_category) && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true);
+        $closeoutHeading = match ($ticketPurpose) {
+            \App\Domain\ServiceTicketPurpose::SITE_SURVEY => 'Site / Survey closeout',
+            \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT => 'Installation closeout',
+            \App\Domain\ServiceTicketPurpose::SERVICE_VISIT => 'Service Visit closeout',
+            \App\Domain\ServiceTicketPurpose::WARRANTY_MAINTENANCE => 'Warranty / Maintenance closeout',
+            \App\Domain\ServiceTicketPurpose::INTERNAL_TESTING => 'Internal / Testing closeout',
+            default => 'Work summary',
+        };
+        $closeoutNarrativeFields = match ($ticketPurpose) {
+            \App\Domain\ServiceTicketPurpose::SITE_SURVEY => ['work_performed' => 'Visit / Survey Summary', 'result_summary' => 'Site Findings / Technical Notes', 'recommendations' => 'Recommended Scope / Next Action', 'exceptions' => 'Exceptions / Additional Work'],
+            \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT => ['work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'],
+            \App\Domain\ServiceTicketPurpose::SERVICE_VISIT => ['diagnosis' => 'Diagnosis / Root Cause', 'work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'],
+            \App\Domain\ServiceTicketPurpose::WARRANTY_MAINTENANCE => ['work_performed' => 'Work Performed', 'result_summary' => 'Findings', 'diagnosis' => 'Diagnosis / Cause', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'],
+            \App\Domain\ServiceTicketPurpose::INTERNAL_TESTING => ['work_performed' => 'Work / Test Performed', 'result_summary' => 'Result / Outcome', 'recommendations' => 'Recommended Action', 'exceptions' => 'Exceptions / Additional Work'],
+            default => ['diagnosis' => 'Diagnosis', 'work_performed' => 'Work performed', 'exceptions' => 'Exceptions', 'recommendations' => 'Recommendations'],
+        };
+        $requiredNarrativeFields = match ($ticketPurpose) {
+            \App\Domain\ServiceTicketPurpose::SERVICE_VISIT => ['diagnosis', 'work_performed'],
+            \App\Domain\ServiceTicketPurpose::INTERNAL_TESTING => ['work_performed', 'result_summary'],
+            default => ['work_performed'],
+        };
         $closeoutReadyForFinalReview = $closeoutDraftMissing->isEmpty();
         $closeoutFieldError = fn (string $field) => $errors->first($field) ?: $closeoutMissing->get($field);
         $showCloseoutAction = in_array($visit->status, ['on_site', 'returned_for_correction'], true) && (! $closeout || $closeout->status === 'draft');
@@ -255,10 +283,10 @@
                     </fieldset>
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
-                        <legend class="px-1 text-base font-bold text-slate-900">{{ $installationCloseout ? 'Installation closeout' : ($serviceVisitCloseout ? 'Service Visit closeout' : 'Work summary') }}</legend>
-                        @foreach ($installationCloseout ? ['work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'] : ($serviceVisitCloseout ? ['diagnosis' => 'Diagnosis / Root Cause', 'work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'] : ['diagnosis' => 'Diagnosis', 'work_performed' => 'Work performed', 'exceptions' => 'Exceptions', 'recommendations' => 'Recommendations']) as $field => $label)
+                        <legend class="px-1 text-base font-bold text-slate-900">{{ $closeoutHeading }}</legend>
+                        @foreach ($closeoutNarrativeFields as $field => $label)
                             <div data-closeout-field="{{ $field }}">
-                                <label class="form-label" for="{{ $field }}">{{ $label }} @if(($installationCloseout && $field === 'work_performed') || ($serviceVisitCloseout && in_array($field, ['diagnosis', 'work_performed'], true)))<span class="text-red-700">(required)</span>@elseif($installationCloseout || $serviceVisitCloseout)<span class="font-normal text-slate-500">(optional)</span>@endif</label>
+                                <label class="form-label" for="{{ $field }}">{{ $label }} @if(in_array($field, $requiredNarrativeFields, true))<span class="text-red-700">(required)</span>@else<span class="font-normal text-slate-500">(optional)</span>@endif</label>
                                 <textarea class="form-textarea mt-1 {{ $closeoutFieldError($field) ? 'border-red-500 bg-red-50' : '' }}" id="{{ $field }}" name="{{ $field }}" @if($closeoutFieldError($field)) aria-invalid="true" aria-describedby="{{ $field }}-error" @endif>{{ old($field, $closeout?->$field) }}</textarea>
                                 <x-field-error :field="$field" :message="$closeoutMissing->get($field)" />
                             </div>
@@ -292,6 +320,7 @@
                         </div>
                     </fieldset>
 
+                    @unless($internalTestingCloseout)
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
                         <legend class="px-1 text-base font-bold text-slate-900">Customer acknowledgment</legend>
                         <p class="text-sm text-slate-600">For an on-site acknowledgment, enter the POC who will sign during final review. Otherwise choose a valid fallback and explain it.</p>
@@ -319,6 +348,7 @@
                             </div>
                         </div>
                     </fieldset>
+                    @endunless
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
                         <legend class="px-1 text-base font-bold text-slate-900">No-photo fallback</legend>

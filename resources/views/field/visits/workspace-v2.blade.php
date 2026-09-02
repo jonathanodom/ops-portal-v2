@@ -2,19 +2,26 @@
     @php
         $closeout = $visit->currentCloseout;
         $selectedOutcome = old('outcome', $closeout?->outcome);
-        $installationCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
-        $serviceVisitCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::SERVICE_VISIT;
-        $outcomeLabels = $installationCloseout
-            ? ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']
-            : ($serviceVisitCloseout
-                ? ['resolved' => 'Resolved', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'Temporarily Resolved / On Hold']
-                : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']);
+        $ticketPurpose = $visit->serviceTicket->canonicalPurpose();
+        $installationCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
+        $serviceVisitCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::SERVICE_VISIT;
+        $siteSurveyCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::SITE_SURVEY;
+        $warrantyMaintenanceCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::WARRANTY_MAINTENANCE;
+        $internalTestingCloseout = $ticketPurpose === \App\Domain\ServiceTicketPurpose::INTERNAL_TESTING;
+        $outcomeLabels = match ($ticketPurpose) {
+            \App\Domain\ServiceTicketPurpose::SITE_SURVEY => ['resolved' => 'Survey Complete', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+            \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT => ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+            \App\Domain\ServiceTicketPurpose::SERVICE_VISIT => ['resolved' => 'Resolved', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'Temporarily Resolved / On Hold'],
+            \App\Domain\ServiceTicketPurpose::WARRANTY_MAINTENANCE => ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+            \App\Domain\ServiceTicketPurpose::INTERNAL_TESTING => ['resolved' => 'Completed / Passed', 'needs_return_trip' => 'Follow-up Required', 'customer_unavailable' => 'Unavailable', 'on_hold' => 'On hold'],
+            default => ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'],
+        };
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
         $inheritedMedia = ($versions ?? collect())->where('id', '!=', $closeout?->id)->flatMap->media->where('state', 'stored');
         $closeoutMissing = collect($closeoutReadinessErrors ?? ['outcome' => 'Choose an outcome.']);
-        $signaturePath = $closeout && blank($closeout->ack_unavailable_category) && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true);
+        $signaturePath = ! $internalTestingCloseout && $closeout && blank($closeout->ack_unavailable_category) && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true);
         $activeTimer = $closeout?->timeEntries?->first(fn ($entry) => $entry->active_user_id === auth()->id());
         $workItemWritable = in_array($visit->serviceTicket->status, ['open', 'on_hold'], true)
             && in_array($visit->status, ['on_site', 'returned_for_correction'], true)
@@ -29,7 +36,7 @@
         $mapsUrl = $visit->serviceLocation->mapsUrl();
     @endphp
 
-    <div data-field-workspace-v2 data-visit-id="{{ $visit->id }}" data-service-visit="{{ $serviceVisitCloseout ? 'true' : 'false' }}">
+    <div data-field-workspace-v2 data-visit-id="{{ $visit->id }}" data-service-visit="{{ $serviceVisitCloseout ? 'true' : 'false' }}" data-ticket-purpose="{{ $ticketPurpose }}">
         <script type="application/json" data-v2-initial-readiness>@json($closeoutMissing)</script>
         @if(session('status'))<div class="mb-3 rounded-lg border border-emerald-400 bg-emerald-50 p-3 text-sm font-semibold text-emerald-950" role="status">{{ session('status') }}</div>@endif
         <x-form-errors />

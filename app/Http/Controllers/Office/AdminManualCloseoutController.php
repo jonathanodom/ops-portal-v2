@@ -195,6 +195,7 @@ class AdminManualCloseoutController extends Controller
             'content_version' => ['required', 'integer', 'min:1'],
             'diagnosis' => ['nullable', 'string', 'max:10000'],
             'work_performed' => ['nullable', 'string', 'max:10000'],
+            'result_summary' => ['nullable', 'string', 'max:10000'],
             'exceptions' => ['nullable', 'string', 'max:10000'],
             'recommendations' => ['nullable', 'string', 'max:10000'],
             'representative_name' => ['nullable', 'string', 'max:255'],
