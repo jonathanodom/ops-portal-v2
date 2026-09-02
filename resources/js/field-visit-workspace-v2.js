@@ -13,6 +13,13 @@ document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
     const swipeSurface = root.querySelector('[data-v2-swipe-surface]');
     const dialog = root.querySelector('[data-v2-finish-dialog]');
     const closeoutForm = root.querySelector('[data-v2-closeout-form]');
+    const resultSection = root.querySelector('[data-v2-result-section]');
+    const resultGroup = resultSection?.firstElementChild;
+    const workGroup = closeoutForm?.querySelector('[name="work_performed"]')?.closest('[data-v2-outcomes]');
+    if (resultGroup && workGroup) {
+        workGroup.insertAdjacentElement('afterend', resultGroup);
+        resultSection.remove();
+    }
     const steps = [...root.querySelectorAll('[data-v2-step]')];
     const stepButtons = [...root.querySelectorAll('[data-v2-step-button]')];
     const stepNames = ['outcome', 'summary', 'check', 'acknowledgment', 'review'];

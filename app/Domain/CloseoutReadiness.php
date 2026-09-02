@@ -29,12 +29,12 @@ class CloseoutReadiness
         foreach ($this->requirements->narrativeFields($purpose, $closeout->outcome) as $field) {
             if (blank($closeout->$field)) {
                 $errors[$field] = match ($field) {
-                    'diagnosis' => 'Diagnosis is required for a Service Visit.',
+                    'diagnosis' => 'Diagnosis / Root Cause is required for a Service Visit.',
                     'result_summary' => 'Result / Outcome is required for Internal / Testing.',
                     'work_performed' => match (ServiceTicketPurpose::canonical($purpose)) {
                         ServiceTicketPurpose::SITE_SURVEY => 'Visit / Survey Summary is required.',
                         ServiceTicketPurpose::INTERNAL_TESTING => 'Work / Test Performed is required.',
-                        default => 'Work performed is required.',
+                        default => 'Work Performed is required.',
                     },
                     default => 'This field is required.',
                 };

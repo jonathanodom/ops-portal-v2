@@ -37,9 +37,9 @@ class PurposeAwareCloseoutFoundationTest extends TestCase
         $this->assertArrayHasKey('diagnosis', app(CloseoutReadiness::class)->errors($closeout));
     }
 
-    public function test_non_diagnostic_purposes_require_work_but_not_diagnosis(): void
+    public function test_site_installation_and_warranty_require_work_but_not_diagnosis(): void
     {
-        foreach (['site_survey', 'installation_project', 'warranty', 'internal_test'] as $purpose) {
+        foreach (['site_survey', 'installation_project', 'warranty'] as $purpose) {
             $complete = $this->closeout($purpose, 'resolved', ['work_performed' => 'Purpose-appropriate summary']);
             $errors = app(CloseoutReadiness::class)->errors($complete);
             $this->assertArrayNotHasKey('diagnosis', $errors, $purpose);
@@ -50,11 +50,34 @@ class PurposeAwareCloseoutFoundationTest extends TestCase
         }
     }
 
+    public function test_internal_testing_requires_work_and_result_but_not_diagnosis_or_acknowledgment(): void
+    {
+        $complete = $this->closeout('internal_test', 'resolved', [
+            'work_performed' => 'Bench-tested access point firmware',
+            'result_summary' => 'Passed stability testing',
+            'ack_unavailable_category' => null,
+            'ack_unavailable_detail' => null,
+        ]);
+        $errors = app(CloseoutReadiness::class)->errors($complete, false, true);
+        $this->assertArrayNotHasKey('diagnosis', $errors);
+        $this->assertArrayNotHasKey('representative_name', $errors);
+        $this->assertArrayNotHasKey('signature_data', $errors);
+
+        $missingWork = $this->closeout('internal_test', 'resolved', ['result_summary' => 'Failed']);
+        $this->assertArrayHasKey('work_performed', app(CloseoutReadiness::class)->errors($missingWork));
+
+        $missingResult = $this->closeout('internal_test', 'resolved', ['work_performed' => 'Ran test']);
+        $this->assertSame(
+            'Result / Outcome is required for Internal / Testing.',
+            app(CloseoutReadiness::class)->errors($missingResult)['result_summary'],
+        );
+    }
+
     public function test_service_visits_require_diagnosis_and_work_performed(): void
     {
         $missingDiagnosis = $this->closeout('service_call', 'resolved', ['work_performed' => 'Replaced failed extender']);
         $errors = app(CloseoutReadiness::class)->errors($missingDiagnosis);
-        $this->assertSame('Diagnosis is required for a Service Visit.', $errors['diagnosis']);
+        $this->assertSame('Diagnosis / Root Cause is required for a Service Visit.', $errors['diagnosis']);
         $this->assertArrayNotHasKey('work_performed', $errors);
 
         $complete = $this->closeout('service_call', 'resolved', [
@@ -83,6 +106,32 @@ class PurposeAwareCloseoutFoundationTest extends TestCase
             'return_reason' => 'Additional camera requires lift access',
         ]);
         $this->assertArrayNotHasKey('return_reason', app(CloseoutReadiness::class)->errors($complete));
+    }
+
+    public function test_validation_uses_the_current_purpose_and_ignores_stale_return_fields(): void
+    {
+        $closeout = $this->closeout('service_call', 'needs_return_trip', [
+            'diagnosis' => 'Entered while this was a Service Visit',
+            'work_performed' => 'Initial work',
+            'return_reason' => 'Initial return reason',
+            'unfinished_work' => 'Stale unfinished work',
+            'needed_equipment' => 'Stale equipment note',
+        ]);
+        $this->assertArrayNotHasKey('return_reason', app(CloseoutReadiness::class)->errors($closeout));
+
+        $closeout->visit->serviceTicket->update(['purpose' => 'installation_project']);
+        $closeout->update(['outcome' => 'resolved', 'diagnosis' => null]);
+        $errors = app(CloseoutReadiness::class)->errors($closeout->fresh());
+        $this->assertArrayNotHasKey('diagnosis', $errors);
+        $this->assertArrayNotHasKey('return_reason', $errors);
+        $this->assertArrayNotHasKey('unfinished_work', $errors);
+        $this->assertArrayNotHasKey('needed_equipment', $errors);
+
+        $closeout->visit->serviceTicket->update(['purpose' => 'service_call']);
+        $this->assertArrayHasKey('diagnosis', app(CloseoutReadiness::class)->errors($closeout->fresh()));
+
+        $closeout->visit->serviceTicket->update(['purpose' => 'site_survey']);
+        $this->assertArrayNotHasKey('diagnosis', app(CloseoutReadiness::class)->errors($closeout->fresh()));
     }
 
     private function closeout(string $purpose, string $outcome, array $attributes = []): Closeout

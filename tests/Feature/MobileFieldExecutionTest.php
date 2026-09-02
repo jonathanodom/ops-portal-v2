@@ -421,6 +421,33 @@ class MobileFieldExecutionTest extends TestCase
             ->assertDontSee('name="diagnosis"', false);
     }
 
+    public function test_legacy_completed_closeout_keeps_historical_narrative_visible_in_review(): void
+    {
+        [$organization, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'installation_project']);
+        $closeout = Closeout::query()->create([
+            'organization_id' => $organization->id,
+            'visit_id' => $visit->id,
+            'version' => 1,
+            'status' => 'submitted',
+            'content_version' => 1,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Legacy diagnosis remains historical evidence.',
+            'work_performed' => 'Legacy installation work remains readable.',
+            'result_summary' => 'Legacy result and findings remain readable.',
+            'submitted_by_id' => $lead->id,
+            'submitted_at' => now(),
+        ]);
+        $visit->update(['current_closeout_id' => $closeout->id, 'status' => 'pending_closeout']);
+        [$reviewer] = $this->userWithRole('reviewer', $organization);
+
+        $this->actingAs($reviewer)->get(route('office.closeout-reviews.show', $closeout))
+            ->assertOk()
+            ->assertSee('Legacy diagnosis remains historical evidence.')
+            ->assertSee('Legacy installation work remains readable.')
+            ->assertSee('Legacy result and findings remain readable.');
+    }
+
     public function test_service_visit_submits_resolved_with_required_narrative_and_optional_follow_up_fields_blank(): void
     {
         [, $visit, $lead] = $this->executionGraph();
