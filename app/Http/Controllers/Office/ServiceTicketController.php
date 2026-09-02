@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Office;
 use App\Domain\AdminManualCloseoutWorkflow;
 use App\Domain\ServiceTicketCreationValidator;
 use App\Domain\ServiceTicketCreator;
+use App\Domain\ServiceTicketPurpose;
 use App\Domain\ServiceTicketWorkflow;
 use App\Http\Controllers\Controller;
 use App\Models\AuditEvent;
@@ -149,7 +150,7 @@ class ServiceTicketController extends Controller
             ? $ticket->visits->filter(fn (Visit $visit): bool => $manualCloseout->canStart($visit))->pluck('id')->all()
             : [];
 
-        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds', 'canCorrectSubmittedTime') + $this->options());
+        return view('office.service-tickets.show', compact('ticket', 'events', 'executableVisitIds', 'archivableVisitIds', 'manualCloseoutVisitIds', 'canCorrectSubmittedTime') + $this->options($ticket));
     }
 
     public function edit(Request $request, string $serviceTicket): View
@@ -158,7 +159,7 @@ class ServiceTicketController extends Controller
         Gate::authorize('update', $ticket);
         $ticket->load(['customer.contacts' => fn ($query) => $query->where('active', true), 'customer.serviceLocations' => fn ($query) => $query->where('active', true)]);
 
-        return view('office.service-tickets.edit', ['ticket' => $ticket, ...$this->options()]);
+        return view('office.service-tickets.edit', ['ticket' => $ticket, ...$this->options($ticket)]);
     }
 
     public function update(Request $request, string $serviceTicket, AuditRecorder $audit): RedirectResponse
@@ -246,7 +247,7 @@ class ServiceTicketController extends Controller
             'customer_visible_summary' => ['nullable', 'string', 'max:5000'],
             'priority' => ['required', Rule::in(array_keys(config('service_tickets.priorities')))],
             'source' => ['required', Rule::in(array_keys(config('service_tickets.sources')))],
-            'purpose' => ['sometimes', Rule::in(array_keys(config('service_tickets.purposes')))],
+            'purpose' => ['sometimes', Rule::in(array_keys(ServiceTicketPurpose::selectable($ticket?->purpose)))],
             'billing_disposition' => ['sometimes', Rule::in(array_keys(config('service_tickets.billing_dispositions')))],
         ];
         if (! $ticket) {
@@ -304,13 +305,13 @@ class ServiceTicketController extends Controller
             ->sortBy(fn ($membership) => $membership->user->name)->values();
     }
 
-    private function options(): array
+    private function options(?ServiceTicket $ticket = null): array
     {
         return [
             'priorities' => config('service_tickets.priorities'),
             'sources' => config('service_tickets.sources'),
             'statuses' => config('service_tickets.statuses'),
-            'purposes' => config('service_tickets.purposes'),
+            'purposes' => ServiceTicketPurpose::selectable($ticket?->purpose),
             'billingDispositions' => config('service_tickets.billing_dispositions'),
         ];
     }

@@ -37,6 +37,7 @@ class CloseoutReviewBillingHandoffTest extends TestCase
     public function test_return_creates_an_immutable_correction_version_with_copied_content_and_parts(): void
     {
         [$organization, $visit, $closeout, $technician] = $this->submittedCloseout();
+        $closeout->update(['result_summary' => 'Purpose-specific result remains immutable across correction versions.']);
         [$reviewer] = $this->userWithRole('reviewer', $organization);
         $part = VisitPartProposal::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'proposed_by_id' => $technician->id, 'description' => 'Replacement switch', 'quantity' => 1, 'unit' => 'each', 'billing_treatment' => 'billable']);
         VisitTimeEntry::query()->create(['organization_id' => $organization->id, 'visit_id' => $visit->id, 'closeout_id' => $closeout->id, 'user_id' => $technician->id, 'category' => 'on_site', 'started_at' => now()->subHour(), 'ended_at' => now(), 'source' => 'timer']);
@@ -52,6 +53,7 @@ class CloseoutReviewBillingHandoffTest extends TestCase
         $this->assertSame(2, $next->version);
         $this->assertSame($closeout->id, $next->parent_closeout_id);
         $this->assertSame($closeout->diagnosis, $next->diagnosis);
+        $this->assertSame($closeout->result_summary, $next->result_summary);
         $this->assertSame('returned_for_correction', $visit->fresh()->status);
         $this->assertDatabaseHas('visit_part_proposals', ['closeout_id' => $next->id, 'source_proposal_id' => $part->id]);
         $this->assertDatabaseCount('visit_time_entries', 1);

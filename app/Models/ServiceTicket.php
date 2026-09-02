@@ -2,6 +2,7 @@
 
 namespace App\Models;
 
+use App\Domain\ServiceTicketPurpose;
 use Illuminate\Database\Eloquent\Attributes\Fillable;
 use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
@@ -23,6 +24,16 @@ class ServiceTicket extends Model
     protected function casts(): array
     {
         return ['status_changed_at' => 'datetime'];
+    }
+
+    public function canonicalPurpose(): string
+    {
+        return ServiceTicketPurpose::canonical($this->purpose);
+    }
+
+    public function purposeLabel(): string
+    {
+        return ServiceTicketPurpose::label($this->purpose);
     }
 
     public function organization(): BelongsTo

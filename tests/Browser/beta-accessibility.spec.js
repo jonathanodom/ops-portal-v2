@@ -1184,8 +1184,8 @@ test.describe('mobile beta', () => {
         await page.getByRole('button', { name: 'Mark On Site' }).click();
         await expect(page.locator('[data-closeout-action-footer]')).toBeVisible();
         expect(await page.locator('[data-closeout-action-footer]').evaluate((element) => element.getBoundingClientRect().height)).toBeLessThanOrEqual(80);
-        await page.getByText('Needs return trip', { exact: true }).click();
-        await expect(page.locator('[data-selected-outcome]')).toHaveText('Needs return trip');
+        await page.getByText('Return Visit Required', { exact: true }).click();
+        await expect(page.locator('[data-selected-outcome]')).toHaveText('Return Visit Required');
         await expect(page.locator('[data-selected-outcome]')).toHaveAttribute('data-outcome', 'needs_return_trip');
         await page.getByLabel('Diagnosis').fill('Additional work is required.');
         await page.getByLabel('Work performed').fill('Made the system safe for a return visit.');
@@ -1321,7 +1321,7 @@ test.describe('mobile beta', () => {
         await page.getByRole('button', { name: 'Finish Visit' }).first().click();
         const finish = page.getByRole('dialog', { name: 'Finish Visit' });
         await expect(finish).toBeVisible();
-        await finish.getByText('Needs return trip', { exact: true }).click();
+        await finish.getByText('Return Visit Required', { exact: true }).click();
         await finish.getByRole('button', { name: '2 Work' }).click();
         await expect(finish.getByLabel('Return reason')).toBeVisible();
         await expect(finish.getByLabel('Exceptions')).toBeHidden();

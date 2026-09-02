@@ -13,12 +13,69 @@ document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
     const swipeSurface = root.querySelector('[data-v2-swipe-surface]');
     const dialog = root.querySelector('[data-v2-finish-dialog]');
     const closeoutForm = root.querySelector('[data-v2-closeout-form]');
+    const resultSection = root.querySelector('[data-v2-result-section]');
+    const resultGroup = resultSection?.firstElementChild;
+    const workGroup = closeoutForm?.querySelector('[name="work_performed"]')?.closest('[data-v2-outcomes]');
+    if (resultGroup && workGroup) {
+        workGroup.insertAdjacentElement('afterend', resultGroup);
+        resultSection.remove();
+    }
     const steps = [...root.querySelectorAll('[data-v2-step]')];
     const stepButtons = [...root.querySelectorAll('[data-v2-step-button]')];
     const stepNames = ['outcome', 'summary', 'check', 'acknowledgment', 'review'];
     let activeStep = 'outcome';
     let dialogLauncher = null;
     let readinessErrors = {};
+
+    const purposeCopy = {
+        service_call: [
+            ['[data-v2-step="outcome"] h3', 'Resolution Status'],
+            ['[data-v2-step="summary"] h3', 'Service Visit closeout'],
+            ['label[for="v2_diagnosis"]', 'Diagnosis / Root Cause (required)'],
+            ['label[for="v2_work_performed"]', 'Work Performed (required)'],
+            ['label[for="v2_recommendations"]', 'Post-Visit Recommendations (optional)'],
+            ['label[for="v2_exceptions"]', 'Exceptions / Additional Work (optional)'],
+        ],
+        site_survey: [
+            ['[data-v2-step="outcome"] h3', 'Visit Outcome'],
+            ['[data-v2-step="summary"] h3', 'Site / Survey closeout'],
+            ['label[for="v2_work_performed"]', 'Visit / Survey Summary (required)'],
+            ['label[for="v2_result_summary"]', 'Site Findings / Technical Notes (optional)'],
+            ['label[for="v2_recommendations"]', 'Recommended Scope / Next Action (optional)'],
+            ['label[for="v2_exceptions"]', 'Exceptions / Additional Work (optional)'],
+        ],
+        warranty: [
+            ['[data-v2-step="summary"] h3', 'Warranty / Maintenance closeout'],
+            ['label[for="v2_work_performed"]', 'Work Performed (required)'],
+            ['label[for="v2_result_summary"]', 'Findings (optional)'],
+            ['label[for="v2_diagnosis"]', 'Diagnosis / Cause (optional)'],
+            ['label[for="v2_recommendations"]', 'Post-Visit Recommendations (optional)'],
+            ['label[for="v2_exceptions"]', 'Exceptions / Additional Work (optional)'],
+        ],
+        internal_test: [
+            ['[data-v2-step="summary"] h3', 'Internal / Testing closeout'],
+            ['label[for="v2_work_performed"]', 'Work / Test Performed (required)'],
+            ['label[for="v2_result_summary"]', 'Result / Outcome (required)'],
+            ['label[for="v2_recommendations"]', 'Recommended Action (optional)'],
+            ['label[for="v2_exceptions"]', 'Exceptions / Additional Work (optional)'],
+        ],
+    };
+    (purposeCopy[root.dataset.ticketPurpose] ?? []).forEach(([selector, label]) => {
+        const element = root.querySelector(selector);
+        if (element) element.textContent = label;
+    });
+
+    if (['site_survey', 'internal_test'].includes(root.dataset.ticketPurpose)) {
+        const diagnosisGroup = root.querySelector('[name="diagnosis"]')?.closest('[data-v2-outcomes]');
+        if (diagnosisGroup) diagnosisGroup.dataset.v2PurposeExcluded = 'true';
+    }
+
+    if (root.dataset.ticketPurpose === 'internal_test') {
+        const acknowledgment = root.querySelector('[data-v2-step="acknowledgment"]');
+        if (acknowledgment) {
+            acknowledgment.innerHTML = '<h3 class="text-lg font-bold">No customer acknowledgment required</h3><p class="mt-2 text-sm text-slate-600">Internal / Testing work does not require customer-facing acknowledgment.</p>';
+        }
+    }
 
     const activateTab = (name, focus = false) => {
         if (!tabs.some((tab) => tab.dataset.v2Tab === name)) name = 'overview';
@@ -121,12 +178,14 @@ document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
     const updateOutcome = () => {
         const outcome = closeoutForm?.querySelector('[name="outcome"]:checked')?.value ?? '';
         root.querySelectorAll('[data-v2-outcomes]').forEach((group) => {
-            group.hidden = !group.dataset.v2Outcomes.split(' ').includes(outcome);
+            const hidden = group.dataset.v2PurposeExcluded === 'true' || !group.dataset.v2Outcomes.split(' ').includes(outcome);
+            group.hidden = hidden;
+            group.querySelectorAll('input, select, textarea').forEach((control) => control.disabled = hidden);
         });
         const fallback = closeoutForm?.querySelector('[name="ack_unavailable_category"]')?.value;
         const signaturePath = root.querySelector('[data-v2-signature-path]');
         const fallbackPath = root.querySelector('[data-v2-fallback-path]');
-        const signatureRequired = ['resolved', 'needs_return_trip', 'on_hold'].includes(outcome) && !fallback;
+        const signatureRequired = root.dataset.ticketPurpose !== 'internal_test' && ['resolved', 'needs_return_trip', 'on_hold'].includes(outcome) && !fallback;
         const confirmation = signaturePath?.querySelector('[data-v2-acknowledgment-confirmation]');
 
         if (signaturePath) {

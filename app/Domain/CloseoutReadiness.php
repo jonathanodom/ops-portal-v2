@@ -8,6 +8,8 @@ use App\Models\VisitMedia;
 
 class CloseoutReadiness
 {
+    public function __construct(private readonly CloseoutRequirements $requirements) {}
+
     /** @return array<string, string> */
     public function errors(Closeout $closeout, bool $signatureProvided = false, bool $requireSignature = false): array
     {
@@ -23,27 +25,30 @@ class CloseoutReadiness
         if (! $closeout->outcome) {
             $errors['outcome'] = 'Choose an outcome.';
         }
-        if (in_array($closeout->outcome, ['resolved', 'needs_return_trip'], true)) {
-            if (blank($closeout->diagnosis)) {
-                $errors['diagnosis'] = 'Diagnosis is required.';
-            }
-            if (blank($closeout->work_performed)) {
-                $errors['work_performed'] = 'Work performed is required.';
+        $purpose = $closeout->visit->serviceTicket->purpose;
+        foreach ($this->requirements->narrativeFields($purpose, $closeout->outcome) as $field) {
+            if (blank($closeout->$field)) {
+                $errors[$field] = match ($field) {
+                    'diagnosis' => 'Diagnosis / Root Cause is required for a Service Visit.',
+                    'result_summary' => 'Result / Outcome is required for Internal / Testing.',
+                    'work_performed' => match (ServiceTicketPurpose::canonical($purpose)) {
+                        ServiceTicketPurpose::SITE_SURVEY => 'Visit / Survey Summary is required.',
+                        ServiceTicketPurpose::INTERNAL_TESTING => 'Work / Test Performed is required.',
+                        default => 'Work Performed is required.',
+                    },
+                    default => 'This field is required.',
+                };
             }
         }
-        if ($closeout->outcome === 'needs_return_trip') {
-            foreach (['return_reason', 'unfinished_work', 'needed_equipment', 'recommendations'] as $field) {
-                if (blank($closeout->$field)) {
-                    $errors[$field] = 'Required for a return trip.';
-                }
+
+        foreach ($this->requirements->returnTripFields($closeout->outcome) as $field) {
+            if (blank($closeout->$field)) {
+                $errors[$field] = 'Return reason is required when a return Visit is needed.';
             }
         }
         if ($closeout->outcome === 'on_hold') {
             if (blank($closeout->hold_reason)) {
                 $errors['hold_reason'] = 'Hold reason is required.';
-            }
-            if (blank($closeout->recommendations)) {
-                $errors['recommendations'] = 'Recommendations are required when work is placed on hold.';
             }
         }
         if ($closeout->outcome === 'customer_unavailable') {
@@ -54,7 +59,8 @@ class CloseoutReadiness
                 $errors['unavailable_detail'] = 'Customer unavailable details are required.';
             }
         }
-        if (in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true)) {
+        if (ServiceTicketPurpose::canonical($purpose) !== ServiceTicketPurpose::INTERNAL_TESTING
+            && in_array($closeout->outcome, ['resolved', 'needs_return_trip', 'on_hold'], true)) {
             if (filled($closeout->ack_unavailable_category)) {
                 if (blank($closeout->ack_unavailable_detail)) {
                     $errors['ack_unavailable_detail'] = 'Acknowledgment fallback details are required.';
