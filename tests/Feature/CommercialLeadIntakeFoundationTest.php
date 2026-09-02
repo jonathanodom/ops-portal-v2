@@ -32,6 +32,7 @@ class CommercialLeadIntakeFoundationTest extends TestCase
         $intake = app(LeadIntakeCreator::class)->create($organization, [
             'organization_id' => $otherOrganization->id,
             'source' => 'website',
+            'engagement_status' => 'qualified',
             'first_name' => 'Jordan',
             'last_name' => 'Rivera',
             'phone' => '555-010-2200',
@@ -65,6 +66,8 @@ class CommercialLeadIntakeFoundationTest extends TestCase
         $this->assertTrue($intake->organization->is($organization));
         $this->assertSame('received', $intake->status);
         $this->assertSame('website', $intake->source);
+        $this->assertNull($intake->engagement_status);
+        $this->assertSame('new', $intake->engagementStatus());
         $this->assertSame('Jordan', $intake->first_name);
         $this->assertSame('jordan@example.test', $intake->email);
         $this->assertSame('north-texas-it', $intake->utm_campaign);

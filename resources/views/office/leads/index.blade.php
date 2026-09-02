@@ -7,10 +7,19 @@
             <x-slot:viewSwitcher>
                 <x-office.view-switcher aria-label="Lead status">
                     @foreach(['open'=>'Open','converted'=>'Converted','archived'=>'Archived','spam'=>'Spam','all'=>'All'] as $value=>$label)
-                        <a @if($filter===$value) aria-current="page" @endif href="{{ route('office.leads.index',array_filter(['filter'=>$value,'search'=>request('search')])) }}">{{ $label }}</a>
+                        <a @if($filter===$value) aria-current="page" @endif href="{{ route('office.leads.index',array_filter(['filter'=>$value,'engagement'=>$engagement,'search'=>request('search')])) }}">{{ $label }}</a>
                     @endforeach
                 </x-office.view-switcher>
             </x-slot:viewSwitcher>
+            <x-slot:filters>
+                <label class="sr-only" for="lead-engagement-filter">Follow-up status</label>
+                <select class="form-input" id="lead-engagement-filter" name="engagement">
+                    @foreach(['all'=>'All follow-up states','new'=>'New','due'=>'Follow-up due today','overdue'=>'Overdue','attempted_contact'=>'Attempted Contact','left_voicemail'=>'Left Voicemail','contacted'=>'Contacted','waiting_on_customer'=>'Waiting on Customer','follow_up_needed'=>'Follow-Up Needed','qualified'=>'Qualified','not_qualified'=>'Not Qualified','closed_no_response'=>'Closed / No Response'] as $value=>$label)
+                        <option value="{{ $value }}" @selected($engagement===$value)>{{ $label }}</option>
+                    @endforeach
+                </select>
+                <button class="button-secondary" type="submit">Filter</button>
+            </x-slot:filters>
             @can('create', [App\Models\CommercialLeadIntake::class, $activeOrganization])
                 <x-slot:primaryAction><a class="button-primary" href="{{ route('office.leads.create') }}">New lead</a></x-slot:primaryAction>
             @endcan
@@ -23,15 +32,15 @@
         <div class="office-table-wrap">
             <table class="office-data-table">
                 <caption class="sr-only">Commercial lead intakes</caption>
-                <thead><tr><th scope="col">Lead</th><th scope="col">Company</th><th scope="col">Service interest</th><th scope="col">Preferred contact</th><th scope="col">Received</th><th scope="col">Status</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead>
+                <thead><tr><th scope="col">Lead</th><th scope="col">Company</th><th scope="col">Service interest</th><th scope="col">Follow-up</th><th scope="col">Next follow-up</th><th scope="col">Lifecycle</th><th scope="col"><span class="sr-only">Open</span></th></tr></thead>
                 <tbody>
                     @foreach($leads as $lead)
                         <tr>
                             <td><strong>{{ $lead->first_name }} {{ $lead->last_name }}</strong><span class="block text-xs text-slate-500">{{ $lead->email }} · {{ $lead->phone }}</span></td>
                             <td>{{ $lead->company ?: 'Individual' }}</td>
                             <td>{{ $lead->service_interest }}</td>
-                            <td>{{ $lead->preferred_contact }}</td>
-                            <td><time datetime="{{ $lead->received_at->toAtomString() }}">{{ $lead->received_at->timezone($activeOrganization->timezone)->format('M j, Y g:i A') }}</time></td>
+                            <td><span class="{{ $lead->engagementStatus() === 'converted' ? 'status-success' : ($lead->engagementStatus() === 'follow_up_needed' ? 'status-priority' : 'status-muted') }}">{{ $lead->engagementStatus() === 'converted' ? 'Converted' : str($lead->engagementStatus())->headline() }}</span></td>
+                            <td>@if($lead->next_follow_up_at)<time class="{{ $lead->next_follow_up_at->isPast() ? 'font-bold text-red-700' : '' }}" datetime="{{ $lead->next_follow_up_at->toAtomString() }}">{{ $lead->next_follow_up_at->timezone($activeOrganization->timezone)->format('M j, Y g:i A') }}</time>@else<span class="text-slate-500">Not scheduled</span>@endif</td>
                             <td><span class="{{ $lead->status === 'received' ? 'status-priority' : ($lead->status === 'converted' ? 'status-success' : 'status-muted') }}">{{ str($lead->status)->headline() }}</span></td>
                             <td class="text-right"><a class="button-secondary" href="{{ route('office.leads.show',$lead) }}">Open</a></td>
                         </tr>
@@ -43,7 +52,7 @@
             @foreach($leads as $lead)
                 <article class="office-mobile-card">
                     <div class="flex items-start justify-between gap-3"><div><h2 class="font-bold">{{ $lead->first_name }} {{ $lead->last_name }}</h2><p class="mt-1 text-sm text-slate-600">{{ $lead->company ?: $lead->customer_type }}</p></div><span class="{{ $lead->status === 'received' ? 'status-priority' : ($lead->status === 'converted' ? 'status-success' : 'status-muted') }}">{{ str($lead->status)->headline() }}</span></div>
-                    <p class="mt-3 text-sm font-semibold">{{ $lead->service_interest }}</p><p class="mt-1 text-xs text-slate-500">Received {{ $lead->received_at->timezone($activeOrganization->timezone)->format('M j, Y g:i A') }}</p>
+                    <p class="mt-3 text-sm font-semibold">{{ $lead->service_interest }}</p><p class="mt-2 text-sm">Follow-up: <strong>{{ $lead->engagementStatus() === 'converted' ? 'Converted' : str($lead->engagementStatus())->headline() }}</strong></p><p class="mt-1 text-xs {{ $lead->next_follow_up_at?->isPast() ? 'font-bold text-red-700' : 'text-slate-500' }}">{{ $lead->next_follow_up_at ? 'Next '.$lead->next_follow_up_at->timezone($activeOrganization->timezone)->format('M j, Y g:i A') : 'No follow-up scheduled' }}</p>
                     <a class="button-secondary mt-4 w-full" href="{{ route('office.leads.show',$lead) }}">Open lead</a>
                 </article>
             @endforeach

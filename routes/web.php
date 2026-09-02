@@ -137,6 +137,7 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
                 Route::post('/{lead}/spam', [LeadIntakeController::class, 'spam'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('spam');
                 Route::post('/{lead}/archive', [LeadIntakeController::class, 'archive'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('archive');
                 Route::post('/{lead}/reopen', [LeadIntakeController::class, 'reopen'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('reopen');
+                Route::post('/{lead}/follow-up', [LeadIntakeController::class, 'updateFollowUp'])->whereNumber('lead')->middleware('capability:opportunities.manage')->name('follow-up.update');
             });
             Route::prefix('opportunities')->name('opportunities.')->middleware('capability:opportunities.view')->group(function (): void {
                 Route::get('/', [OpportunityController::class, 'index'])->name('index');
