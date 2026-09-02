@@ -158,6 +158,83 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
         $this->actingAs($otherDispatcher)->get(route('office.service-tickets.show', $middle))->assertNotFound();
     }
 
+    public function test_generated_follow_up_uses_normal_assignment_scheduling_field_and_cancellation_workflows(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [$originalTechnician, , $originalMembership] = $this->userWithRole('technician', $organization);
+        [$returnTechnician, , $returnMembership] = $this->userWithRole('technician', $organization);
+        [$customer, , $location] = $this->customerGraph($organization);
+        $source = $this->ticket($organization, $customer, $location);
+        $source->update(['purpose' => 'installation_project']);
+        $sourceVisit = $this->visit($source, 'pending_closeout');
+        VisitAssignment::query()->create(['organization_id' => $organization->id, 'visit_id' => $sourceVisit->id, 'organization_membership_id' => $originalMembership->id, 'is_lead' => true]);
+        $sourceCloseout = $this->returnCloseout($sourceVisit, [
+            'return_reason' => 'Final exterior camera requires lift access.',
+            'unfinished_work' => 'Install and aim the final camera.',
+            'needed_equipment' => '35-foot lift',
+            'submitted_by_id' => $originalTechnician->id,
+        ]);
+        $followUp = $this->followUpTicket($source, $sourceCloseout);
+
+        $this->assertSame('open', $followUp->status);
+        $this->assertSame('installation_project', $followUp->purpose);
+        $this->assertCount(0, $followUp->visits);
+
+        $this->actingAs($dispatcher)->post(route('office.service-tickets.visits.store', $followUp), [
+            'scheduled_start' => '2026-09-10T09:00',
+            'scheduled_end' => '2026-09-10T11:00',
+            'assignees' => [$returnMembership->id],
+        ])->assertRedirect(route('office.service-tickets.show', $followUp));
+
+        $returnVisit = $followUp->visits()->sole();
+        $this->assertSame('assigned', $returnVisit->status);
+        $this->assertDatabaseHas('visit_assignments', ['visit_id' => $returnVisit->id, 'organization_membership_id' => $returnMembership->id, 'is_lead' => true]);
+        $this->assertDatabaseMissing('visit_assignments', ['visit_id' => $returnVisit->id, 'organization_membership_id' => $originalMembership->id]);
+
+        $this->actingAs($returnTechnician)->get(route('field.visits.show', $returnVisit))
+            ->assertOk()
+            ->assertSee('data-field-return-follow-up', false)
+            ->assertSee($source->ticket_number)
+            ->assertSee('Final exterior camera requires lift access.')
+            ->assertSee('Install and aim the final camera.')
+            ->assertSee('35-foot lift')
+            ->assertSee($originalTechnician->name);
+
+        $this->actingAs($dispatcher)->post(route('office.service-tickets.transition', $followUp), [
+            'status' => 'canceled',
+            'reason' => 'Customer no longer requires the return.',
+        ])->assertRedirect();
+
+        $this->assertSame('canceled', $followUp->fresh()->status);
+        $this->assertSame('canceled', $returnVisit->fresh()->status);
+        $this->assertSame($source->id, $followUp->fresh()->return_follow_up_source_ticket_id);
+    }
+
+    public function test_follow_up_of_follow_up_can_remain_unscheduled_then_use_normal_scheduler(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [, , $technicianMembership] = $this->userWithRole('technician', $organization);
+        [$customer, , $location] = $this->customerGraph($organization);
+        $source = $this->ticket($organization, $customer, $location);
+        $firstFollowUp = $this->followUpTicket($source, $this->returnCloseout($this->visit($source, 'pending_closeout')));
+        $secondFollowUp = $this->followUpTicket($firstFollowUp, $this->returnCloseout($this->visit($firstFollowUp, 'pending_closeout')));
+
+        $this->actingAs($dispatcher)->post(route('office.service-tickets.visits.store', $secondFollowUp), [])->assertRedirect();
+        $visit = $secondFollowUp->visits()->sole();
+        $this->assertSame('planned', $visit->status);
+        $this->assertNull($visit->scheduled_start_at);
+
+        $this->actingAs($dispatcher)->put(route('office.visits.update', $visit), [
+            'scheduled_start' => '2026-09-12T13:00',
+            'scheduled_end' => '2026-09-12T15:00',
+            'assignees' => [$technicianMembership->id],
+        ])->assertRedirect(route('office.service-tickets.show', $secondFollowUp));
+
+        $this->assertSame('assigned', $visit->fresh()->status);
+        $this->assertSame($firstFollowUp->id, $secondFollowUp->return_follow_up_source_ticket_id);
+        $this->assertSame($source->id, $firstFollowUp->return_follow_up_source_ticket_id);
+    }
+
     public function test_failed_initial_visit_rolls_back_ticket_and_sequence(): void
     {
         [$dispatcher, $organization] = $this->userWithRole('dispatcher');
