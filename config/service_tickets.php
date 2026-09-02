@@ -18,12 +18,17 @@ return [
         'other' => 'Other',
     ],
     'purposes' => [
-        'service_call' => 'Service call',
-        'site_survey' => 'Site survey / sales visit',
-        'installation_project' => 'Installation / project',
-        'callback' => 'Callback / return visit',
-        'warranty' => 'Warranty',
-        'internal_test' => 'Internal / test',
+        'site_survey' => 'Site / Survey Visit',
+        'installation_project' => 'Installation / Project',
+        'service_call' => 'Service Visit',
+        'warranty' => 'Warranty / Maintenance Visit',
+        'internal_test' => 'Internal / Testing',
+    ],
+    'legacy_purposes' => [
+        'callback' => 'Callback / Return Visit (legacy)',
+    ],
+    'purpose_aliases' => [
+        'callback' => 'service_call',
     ],
     'billing_dispositions' => [
         'billable' => 'Billable',

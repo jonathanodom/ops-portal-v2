@@ -8,6 +8,8 @@ use App\Models\VisitMedia;
 
 class CloseoutReadiness
 {
+    public function __construct(private readonly CloseoutRequirements $requirements) {}
+
     /** @return array<string, string> */
     public function errors(Closeout $closeout, bool $signatureProvided = false, bool $requireSignature = false): array
     {
@@ -23,19 +25,18 @@ class CloseoutReadiness
         if (! $closeout->outcome) {
             $errors['outcome'] = 'Choose an outcome.';
         }
-        if (in_array($closeout->outcome, ['resolved', 'needs_return_trip'], true)) {
-            if (blank($closeout->diagnosis)) {
-                $errors['diagnosis'] = 'Diagnosis is required.';
-            }
-            if (blank($closeout->work_performed)) {
-                $errors['work_performed'] = 'Work performed is required.';
+        $purpose = $closeout->visit->serviceTicket->purpose;
+        foreach ($this->requirements->narrativeFields($purpose, $closeout->outcome) as $field) {
+            if (blank($closeout->$field)) {
+                $errors[$field] = $field === 'diagnosis'
+                    ? 'Diagnosis is required for a Service Visit.'
+                    : 'Work performed is required.';
             }
         }
-        if ($closeout->outcome === 'needs_return_trip') {
-            foreach (['return_reason', 'unfinished_work', 'needed_equipment', 'recommendations'] as $field) {
-                if (blank($closeout->$field)) {
-                    $errors[$field] = 'Required for a return trip.';
-                }
+
+        foreach ($this->requirements->returnTripFields($closeout->outcome) as $field) {
+            if (blank($closeout->$field)) {
+                $errors[$field] = 'Return reason is required when a return Visit is needed.';
             }
         }
         if ($closeout->outcome === 'on_hold') {

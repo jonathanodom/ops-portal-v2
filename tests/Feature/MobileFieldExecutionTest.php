@@ -299,10 +299,7 @@ class MobileFieldExecutionTest extends TestCase
             ->assertSee('aria-describedby="return_reason-error"', false)
             ->assertSee('id="return_reason-error"', false)
             ->assertSee('data-closeout-fix-target="return_reason"', false)
-            ->assertSee('data-closeout-fix-target="unfinished_work"', false)
-            ->assertSee('data-closeout-fix-target="needed_equipment"', false)
-            ->assertSee('data-closeout-fix-target="recommendations"', false)
-            ->assertSee('Required for a return trip.');
+            ->assertSee('Return reason is required when a return Visit is needed.');
     }
 
     public function test_all_submission_outcomes_apply_their_atomic_effects(): void

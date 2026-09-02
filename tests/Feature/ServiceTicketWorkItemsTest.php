@@ -151,7 +151,7 @@ class ServiceTicketWorkItemsTest extends TestCase
             'work_note' => 'Schedule after material arrives.',
             'status' => 'needs_follow_up',
         ]);
-        $payload = ['priority' => 'high', 'purpose' => 'callback', 'billing_disposition' => 'warranty'];
+        $payload = ['priority' => 'high', 'purpose' => 'service_call', 'billing_disposition' => 'warranty'];
 
         $first = app(ServiceTicketWorkItemWorkflow::class)->transfer($item, $organization, $admin, $payload);
         $second = app(ServiceTicketWorkItemWorkflow::class)->transfer($item->fresh(), $organization, $admin, $payload);
@@ -162,7 +162,7 @@ class ServiceTicketWorkItemsTest extends TestCase
         $this->assertSame($ticket->customer_id, $first->customer_id);
         $this->assertSame($ticket->service_location_id, $first->service_location_id);
         $this->assertSame('internal', $first->source);
-        $this->assertSame('callback', $first->purpose);
+        $this->assertSame('service_call', $first->purpose);
         $this->assertSame('warranty', $first->billing_disposition);
         $this->assertDatabaseCount('service_tickets', 2);
         $this->assertDatabaseCount('visits', 1);
