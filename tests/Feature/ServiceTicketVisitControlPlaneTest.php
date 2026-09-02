@@ -4,6 +4,7 @@ namespace Tests\Feature;
 
 use App\Models\AuditEvent;
 use App\Models\Capability;
+use App\Models\Closeout;
 use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\DocumentSequence;
@@ -73,6 +74,88 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
             ->assertOk()
             ->assertSee('Site / Survey Visit')
             ->assertSee('Non-billable');
+    }
+
+    public function test_original_and_generated_follow_up_ticket_render_linked_return_context(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [$customer, , $location] = $this->customerGraph($organization);
+        $source = $this->ticket($organization, $customer, $location);
+        $source->update(['purpose' => 'installation_project', 'title' => 'Parking Lot Camera Installation']);
+        $sourceVisit = $this->visit($source, 'pending_closeout');
+        $sourceCloseout = $this->returnCloseout($sourceVisit, [
+            'return_reason' => 'Final exterior camera requires lift access.',
+            'unfinished_work' => 'Install and aim final parking-lot camera.',
+            'needed_equipment' => '35-foot lift',
+        ]);
+        $followUp = $this->followUpTicket($source, $sourceCloseout);
+
+        $this->actingAs($dispatcher)->get(route('office.service-tickets.show', $source))
+            ->assertOk()
+            ->assertSee('data-return-visit-section', false)
+            ->assertSee('Final exterior camera requires lift access.')
+            ->assertSee('Install and aim final parking-lot camera.')
+            ->assertSee('35-foot lift')
+            ->assertSee($followUp->ticket_number)
+            ->assertSee(route('office.service-tickets.show', $followUp), false);
+
+        $this->actingAs($dispatcher)->get(route('office.service-tickets.show', $followUp))
+            ->assertOk()
+            ->assertSee('data-return-follow-up-source', false)
+            ->assertSee('Return Visit Follow-Up')
+            ->assertSee('Installation / Project')
+            ->assertSee($source->ticket_number)
+            ->assertSee(route('office.service-tickets.show', $source), false)
+            ->assertSee('Final exterior camera requires lift access.');
+    }
+
+    public function test_optional_and_legacy_return_context_render_without_empty_or_broken_links(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [$customer, , $location] = $this->customerGraph($organization);
+        $legacy = $this->ticket($organization, $customer, $location);
+        $legacyCloseout = $this->returnCloseout($this->visit($legacy, 'pending_closeout'), [
+            'return_reason' => 'Customer access required.',
+        ]);
+
+        $this->actingAs($dispatcher)->get(route('office.service-tickets.show', $legacy))
+            ->assertOk()
+            ->assertSee('Customer access required.')
+            ->assertSee('Not linked — historical closeout')
+            ->assertDontSee('Unfinished Work')
+            ->assertDontSee('Needed Parts / Equipment');
+
+        $followUp = $this->followUpTicket($legacy, $legacyCloseout);
+        $this->actingAs($dispatcher)->get(route('office.service-tickets.show', $followUp))
+            ->assertOk()
+            ->assertSee('Customer access required.')
+            ->assertDontSee('Unfinished Work')
+            ->assertDontSee('Needed Parts / Equipment');
+
+        $normal = $this->ticket($organization, $customer, $location);
+        $this->actingAs($dispatcher)->get(route('office.service-tickets.show', $normal))
+            ->assertOk()
+            ->assertDontSee('data-return-visit-section', false)
+            ->assertDontSee('data-return-follow-up-source', false);
+    }
+
+    public function test_middle_follow_up_ticket_renders_parent_and_child_links_with_normal_authorization(): void
+    {
+        [$dispatcher, $organization] = $this->userWithRole('dispatcher');
+        [$customer, , $location] = $this->customerGraph($organization);
+        $source = $this->ticket($organization, $customer, $location);
+        $firstCloseout = $this->returnCloseout($this->visit($source, 'pending_closeout'));
+        $middle = $this->followUpTicket($source, $firstCloseout);
+        $secondCloseout = $this->returnCloseout($this->visit($middle, 'pending_closeout'), ['return_reason' => 'A second return is required.']);
+        $last = $this->followUpTicket($middle, $secondCloseout);
+
+        $this->actingAs($dispatcher)->get(route('office.service-tickets.show', $middle))
+            ->assertOk()
+            ->assertSee(route('office.service-tickets.show', $source), false)
+            ->assertSee(route('office.service-tickets.show', $last), false);
+
+        [$otherDispatcher] = $this->userWithRole('dispatcher');
+        $this->actingAs($otherDispatcher)->get(route('office.service-tickets.show', $middle))->assertNotFound();
     }
 
     public function test_failed_initial_visit_rolls_back_ticket_and_sequence(): void
@@ -449,6 +532,47 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
     private function visit(ServiceTicket $ticket, string $status = 'planned', mixed $start = null, mixed $end = null): Visit
     {
         return Visit::query()->create(['organization_id' => $ticket->organization_id, 'service_ticket_id' => $ticket->id, 'service_location_id' => $ticket->service_location_id, 'status' => $status, 'timezone' => 'America/Chicago', 'scheduled_start_at' => $start, 'scheduled_end_at' => $end]);
+    }
+
+    private function returnCloseout(Visit $visit, array $attributes = []): Closeout
+    {
+        $closeout = Closeout::query()->create(array_merge([
+            'organization_id' => $visit->organization_id,
+            'visit_id' => $visit->id,
+            'version' => 1,
+            'status' => 'submitted',
+            'content_version' => 1,
+            'outcome' => 'needs_return_trip',
+            'work_performed' => 'Completed the available work.',
+            'return_reason' => 'Return work is required.',
+            'submitted_at' => now(),
+        ], $attributes));
+
+        $visit->update(['current_closeout_id' => $closeout->id]);
+
+        return $closeout;
+    }
+
+    private function followUpTicket(ServiceTicket $source, Closeout $closeout): ServiceTicket
+    {
+        return ServiceTicket::query()->create([
+            'organization_id' => $source->organization_id,
+            'customer_id' => $source->customer_id,
+            'service_location_id' => $source->service_location_id,
+            'contact_id' => $source->contact_id,
+            'ticket_number' => 'NDT-ST-2026-'.str_pad((string) (ServiceTicket::query()->count() + 1), 4, '0', STR_PAD_LEFT),
+            'title' => 'Return Visit — '.$source->title,
+            'description' => $closeout->return_reason,
+            'priority' => $source->priority,
+            'source' => 'internal',
+            'purpose' => $source->canonicalPurpose(),
+            'billing_disposition' => $source->billing_disposition ?? 'billable',
+            'status' => 'open',
+            'return_follow_up_source_ticket_id' => $source->id,
+            'return_follow_up_source_closeout_id' => $closeout->id,
+            'return_follow_up_original_purpose' => $source->purpose,
+            'return_follow_up_status' => 'needs_review',
+        ]);
     }
 
     private function ticketPayload(Customer $customer, ServiceLocation $location, array $extra = []): array

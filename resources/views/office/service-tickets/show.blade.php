@@ -8,10 +8,42 @@
     @if($ticket->originatingWorkItem)
         <div class="mt-4 rounded-lg border border-blue-200 bg-blue-50 p-4 text-sm text-blue-950">Created from Work Item on <a class="font-bold underline" href="{{ route('office.service-tickets.show', $ticket->originatingWorkItem->serviceTicket) }}#work-items">{{ $ticket->originatingWorkItem->serviceTicket->ticket_number }}</a>.</div>
     @endif
+    @if($ticket->isReturnFollowUp() && $ticket->returnFollowUpSourceTicket && $ticket->returnFollowUpSourceCloseout)
+        @php($sourceCloseout = $ticket->returnFollowUpSourceCloseout)
+        <section class="mt-4 border border-brand-orange bg-orange-50 p-5" data-return-follow-up-source>
+            <div class="flex flex-wrap items-start justify-between gap-3">
+                <div>
+                    <p class="text-xs font-bold uppercase tracking-[.12em] text-orange-800">Return Visit Follow-Up</p>
+                    <h2 class="mt-1 text-lg font-bold text-slate-950">Created from a return-required closeout</h2>
+                </div>
+                <span class="status-priority">{{ Str::headline($ticket->return_follow_up_status ?? 'needs_review') }}</span>
+            </div>
+            <dl class="mt-4 grid gap-4 text-sm sm:grid-cols-2">
+                <div><dt class="font-bold text-slate-600">Original Ticket</dt><dd><a class="inline-flex min-h-11 items-center break-words font-bold text-brand-blue underline" href="{{ route('office.service-tickets.show', $ticket->returnFollowUpSourceTicket) }}">{{ $ticket->returnFollowUpSourceTicket->ticket_number }}</a></dd></div>
+                <div><dt class="font-bold text-slate-600">Original Purpose</dt><dd class="mt-1 break-words font-semibold">{{ \App\Domain\ServiceTicketPurpose::label($ticket->return_follow_up_original_purpose) }}</dd></div>
+                <div class="sm:col-span-2"><dt class="font-bold text-slate-600">Return Reason</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $sourceCloseout->return_reason }}</dd></div>
+                @if(filled($sourceCloseout->unfinished_work))<div class="sm:col-span-2"><dt class="font-bold text-slate-600">Unfinished Work</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $sourceCloseout->unfinished_work }}</dd></div>@endif
+                @if(filled($sourceCloseout->needed_equipment))<div class="sm:col-span-2"><dt class="font-bold text-slate-600">Needed Parts / Equipment</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $sourceCloseout->needed_equipment }}</dd></div>@endif
+            </dl>
+        </section>
+    @endif
+    @php($returnCloseouts = $ticket->visits->pluck('currentCloseout')->filter(fn ($closeout) => $closeout?->status === 'submitted' && $closeout->outcome === 'needs_return_trip'))
     <div class="mt-6 grid gap-6 lg:grid-cols-[minmax(0,2fr)_minmax(300px,1fr)]">
         <div class="space-y-6">
             <section class="surface p-5"><h2 class="text-lg font-bold">Customer & location</h2><p class="mt-3 font-bold">{{ $ticket->customer->display_name }}</p><a class="mt-1 inline-flex min-h-11 items-center text-sm font-bold text-brand-blue" href="{{ route('office.locations.show', $ticket->serviceLocation) }}">{{ $ticket->serviceLocation->name }} · {{ $ticket->serviceLocation->formattedAddress() }}</a>@if($ticket->contact)<p class="mt-2 text-sm text-slate-600">Contact: {{ $ticket->contact->name }} @if($ticket->contact->phone)· {{ $ticket->contact->phone }}@endif</p>@endif</section>
             <section class="surface p-5"><h2 class="text-lg font-bold">Work scope</h2><p class="mt-3 whitespace-pre-line text-slate-700">{{ $ticket->description ?: 'No work scope recorded.' }}</p><div class="mt-5 grid gap-4 border-t border-slate-200 pt-5 sm:grid-cols-2"><div><p class="text-xs font-bold uppercase tracking-[.1em] text-slate-500">Purpose</p><p class="mt-1 font-semibold">{{ $purposes[$ticket->purpose] ?? ucfirst(str_replace('_',' ',$ticket->purpose)) }}</p></div><div><p class="text-xs font-bold uppercase tracking-[.1em] text-slate-500">Billing disposition</p><p class="mt-1 font-semibold">{{ $billingDispositions[$ticket->billing_disposition] ?? ucfirst(str_replace('_',' ',$ticket->billing_disposition)) }}</p></div></div>@if($ticket->customer_visible_summary)<h3 class="mt-5 text-sm font-bold uppercase tracking-[.1em] text-slate-500">Customer-visible summary</h3><p class="mt-2 whitespace-pre-line text-slate-700">{{ $ticket->customer_visible_summary }}</p>@endif</section>
+            @foreach($returnCloseouts as $returnCloseout)
+                @php($followUp = $ticket->returnFollowUpTickets->firstWhere('return_follow_up_source_closeout_id', $returnCloseout->id))
+                <section class="surface border-l-4 border-l-brand-orange p-5" data-return-visit-section>
+                    <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-[.12em] text-orange-700">Return Visit</p><h2 class="mt-1 text-lg font-bold">Required</h2></div>@if($followUp)<span class="{{ $followUp->status === 'open' ? 'status-active' : 'status-muted' }}">{{ Str::headline($followUp->status) }}</span>@endif</div>
+                    <dl class="mt-4 grid gap-4 text-sm">
+                        <div><dt class="font-bold text-slate-600">Return Reason</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $returnCloseout->return_reason }}</dd></div>
+                        @if(filled($returnCloseout->unfinished_work))<div><dt class="font-bold text-slate-600">Unfinished Work</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $returnCloseout->unfinished_work }}</dd></div>@endif
+                        @if(filled($returnCloseout->needed_equipment))<div><dt class="font-bold text-slate-600">Needed Parts / Equipment</dt><dd class="mt-1 whitespace-pre-line break-words">{{ $returnCloseout->needed_equipment }}</dd></div>@endif
+                        <div><dt class="font-bold text-slate-600">Follow-Up</dt><dd class="mt-1">@if($followUp)<a class="inline-flex min-h-11 items-center break-words font-bold text-brand-blue underline" href="{{ route('office.service-tickets.show', $followUp) }}">{{ $followUp->ticket_number }} · {{ Str::headline($followUp->status) }}</a>@else<span class="text-slate-600">Not linked — historical closeout</span>@endif</dd></div>
+                    </dl>
+                </section>
+            @endforeach
             <section id="work-items" class="surface scroll-mt-6 p-5">
                 <div class="flex flex-wrap items-start justify-between gap-3"><div><p class="text-xs font-bold uppercase tracking-wide text-slate-500">Additional work</p><h2 class="text-lg font-bold">Work Items</h2></div><span class="status-active">{{ $ticket->workItems->count() }} recorded</span></div>
                 <div class="mt-5 space-y-4">
