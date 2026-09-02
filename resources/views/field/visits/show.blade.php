@@ -3,9 +3,12 @@
         $closeout = $visit->currentCloseout;
         $selectedOutcome = old('outcome', $closeout?->outcome);
         $installationCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
+        $serviceVisitCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::SERVICE_VISIT;
         $outcomeLabels = $installationCloseout
             ? ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']
-            : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'];
+            : ($serviceVisitCloseout
+                ? ['resolved' => 'Resolved', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'Temporarily Resolved / On Hold']
+                : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']);
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
@@ -237,7 +240,7 @@
                     <input type="hidden" name="content_version" value="{{ $closeout?->content_version ?? 1 }}">
 
                     <fieldset class="space-y-4" data-outcome-selector data-closeout-field="outcome">
-                        <legend class="text-base font-bold text-slate-900">Visit outcome</legend>
+                        <legend class="text-base font-bold text-slate-900">{{ $serviceVisitCloseout ? 'Resolution Status' : 'Visit outcome' }}</legend>
                         <p class="text-sm text-slate-600">Choose the result that best describes this visit.</p>
                         <div class="grid grid-cols-1 gap-2 sm:grid-cols-2 {{ $closeoutFieldError('outcome') ? 'rounded-lg border border-red-500 bg-red-50 p-2' : '' }}">
                             @foreach ($outcomeLabels as $value => $label)
@@ -252,10 +255,10 @@
                     </fieldset>
 
                     <fieldset class="mt-6 space-y-4 border-t border-slate-200 pt-6">
-                        <legend class="px-1 text-base font-bold text-slate-900">{{ $installationCloseout ? 'Installation closeout' : 'Work summary' }}</legend>
-                        @foreach ($installationCloseout ? ['work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'] : ['diagnosis' => 'Diagnosis', 'work_performed' => 'Work performed', 'exceptions' => 'Exceptions', 'recommendations' => 'Recommendations'] as $field => $label)
+                        <legend class="px-1 text-base font-bold text-slate-900">{{ $installationCloseout ? 'Installation closeout' : ($serviceVisitCloseout ? 'Service Visit closeout' : 'Work summary') }}</legend>
+                        @foreach ($installationCloseout ? ['work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'] : ($serviceVisitCloseout ? ['diagnosis' => 'Diagnosis / Root Cause', 'work_performed' => 'Work Performed', 'recommendations' => 'Post-Visit Recommendations', 'exceptions' => 'Exceptions / Additional Work'] : ['diagnosis' => 'Diagnosis', 'work_performed' => 'Work performed', 'exceptions' => 'Exceptions', 'recommendations' => 'Recommendations']) as $field => $label)
                             <div data-closeout-field="{{ $field }}">
-                                <label class="form-label" for="{{ $field }}">{{ $label }} @if($installationCloseout && $field === 'work_performed')<span class="text-red-700">(required)</span>@elseif($installationCloseout)<span class="font-normal text-slate-500">(optional)</span>@endif</label>
+                                <label class="form-label" for="{{ $field }}">{{ $label }} @if(($installationCloseout && $field === 'work_performed') || ($serviceVisitCloseout && in_array($field, ['diagnosis', 'work_performed'], true)))<span class="text-red-700">(required)</span>@elseif($installationCloseout || $serviceVisitCloseout)<span class="font-normal text-slate-500">(optional)</span>@endif</label>
                                 <textarea class="form-textarea mt-1 {{ $closeoutFieldError($field) ? 'border-red-500 bg-red-50' : '' }}" id="{{ $field }}" name="{{ $field }}" @if($closeoutFieldError($field)) aria-invalid="true" aria-describedby="{{ $field }}-error" @endif>{{ old($field, $closeout?->$field) }}</textarea>
                                 <x-field-error :field="$field" :message="$closeoutMissing->get($field)" />
                             </div>

@@ -43,9 +43,6 @@ class CloseoutReadiness
             if (blank($closeout->hold_reason)) {
                 $errors['hold_reason'] = 'Hold reason is required.';
             }
-            if (blank($closeout->recommendations)) {
-                $errors['recommendations'] = 'Recommendations are required when work is placed on hold.';
-            }
         }
         if ($closeout->outcome === 'customer_unavailable') {
             if (blank($closeout->unavailable_category)) {

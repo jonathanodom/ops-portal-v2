@@ -20,6 +20,21 @@ document.querySelectorAll('[data-field-workspace-v2]').forEach((root) => {
     let dialogLauncher = null;
     let readinessErrors = {};
 
+    if (root.dataset.serviceVisit === 'true') {
+        const copy = new Map([
+            ['[data-v2-step="outcome"] h3', 'Resolution Status'],
+            ['[data-v2-step="summary"] h3', 'Service Visit closeout'],
+            ['label[for="v2_diagnosis"]', 'Diagnosis / Root Cause (required)'],
+            ['label[for="v2_work_performed"]', 'Work Performed (required)'],
+            ['label[for="v2_recommendations"]', 'Post-Visit Recommendations (optional)'],
+            ['label[for="v2_exceptions"]', 'Exceptions / Additional Work (optional)'],
+        ]);
+        copy.forEach((label, selector) => {
+            const element = root.querySelector(selector);
+            if (element) element.textContent = label;
+        });
+    }
+
     const activateTab = (name, focus = false) => {
         if (!tabs.some((tab) => tab.dataset.v2Tab === name)) name = 'overview';
         tabs.forEach((tab) => {

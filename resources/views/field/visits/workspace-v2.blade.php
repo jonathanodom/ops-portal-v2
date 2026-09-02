@@ -3,9 +3,12 @@
         $closeout = $visit->currentCloseout;
         $selectedOutcome = old('outcome', $closeout?->outcome);
         $installationCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::INSTALLATION_PROJECT;
+        $serviceVisitCloseout = $visit->serviceTicket->canonicalPurpose() === \App\Domain\ServiceTicketPurpose::SERVICE_VISIT;
         $outcomeLabels = $installationCloseout
             ? ['resolved' => 'Completed', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']
-            : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold'];
+            : ($serviceVisitCloseout
+                ? ['resolved' => 'Resolved', 'needs_return_trip' => 'Return Visit Required', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'Temporarily Resolved / On Hold']
+                : ['resolved' => 'Resolved', 'needs_return_trip' => 'Needs return trip', 'customer_unavailable' => 'Customer unavailable', 'on_hold' => 'On hold']);
         $contact = $visit->serviceTicket->contact ?? $visit->serviceLocation->primaryContact;
         $activeParts = $closeout?->parts?->whereNull('removed_at') ?? collect();
         $activeMedia = $closeout?->media?->where('state', 'stored') ?? collect();
@@ -26,7 +29,7 @@
         $mapsUrl = $visit->serviceLocation->mapsUrl();
     @endphp
 
-    <div data-field-workspace-v2 data-visit-id="{{ $visit->id }}">
+    <div data-field-workspace-v2 data-visit-id="{{ $visit->id }}" data-service-visit="{{ $serviceVisitCloseout ? 'true' : 'false' }}">
         <script type="application/json" data-v2-initial-readiness>@json($closeoutMissing)</script>
         @if(session('status'))<div class="mb-3 rounded-lg border border-emerald-400 bg-emerald-50 p-3 text-sm font-semibold text-emerald-950" role="status">{{ session('status') }}</div>@endif
         <x-form-errors />

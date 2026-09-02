@@ -421,6 +421,156 @@ class MobileFieldExecutionTest extends TestCase
             ->assertDontSee('name="diagnosis"', false);
     }
 
+    public function test_service_visit_submits_resolved_with_required_narrative_and_optional_follow_up_fields_blank(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'service_call']);
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [
+            'content_version' => 1,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Failed HDMI extender receiver.',
+            'work_performed' => 'Replaced extender receiver and tested all sources.',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Confirmed remotely',
+            'no_photo_category' => 'not_applicable',
+            'no_photo_detail' => 'No visual change',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $closeout = $visit->fresh()->currentCloseout;
+        $this->assertSame('submitted', $closeout->status);
+        $this->assertNull($closeout->recommendations);
+        $this->assertNull($closeout->exceptions);
+    }
+
+    public function test_service_visit_requires_resolution_diagnosis_and_work_performed(): void
+    {
+        [, $missingDiagnosisVisit, $lead] = $this->executionGraph();
+        $missingDiagnosisVisit->serviceTicket->update(['purpose' => 'service_call']);
+        $this->actingAs($lead)->post(route('field.visits.draft', $missingDiagnosisVisit), [
+            'content_version' => 1,
+            'work_performed' => 'Rebooted camera and restored connection.',
+        ])->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $missingDiagnosisVisit), ['submission_token' => (string) Str::uuid()])
+            ->assertSessionHasErrors('outcome');
+        $this->actingAs($lead)->post(route('field.visits.draft', $missingDiagnosisVisit), [
+            'content_version' => 2,
+            'outcome' => 'resolved',
+        ])->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $missingDiagnosisVisit), ['submission_token' => (string) Str::uuid()])
+            ->assertSessionHasErrors('diagnosis');
+
+        [, $missingWorkVisit, $secondLead] = $this->executionGraph();
+        $missingWorkVisit->serviceTicket->update(['purpose' => 'service_call']);
+        $this->actingAs($secondLead)->post(route('field.visits.draft', $missingWorkVisit), [
+            'content_version' => 1,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Camera power supply failed.',
+        ])->assertRedirect();
+        $this->actingAs($secondLead)->post(route('field.visits.submit', $missingWorkVisit), ['submission_token' => (string) Str::uuid()])
+            ->assertSessionHasErrors('work_performed');
+    }
+
+    public function test_service_visit_return_requires_reason_but_not_unfinished_work_or_equipment(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'service_call']);
+        $payload = [
+            'content_version' => 1,
+            'outcome' => 'needs_return_trip',
+            'diagnosis' => 'Outdoor access point has failed power circuitry.',
+            'work_performed' => 'Verified cabling and PoE output.',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Confirmed remotely',
+        ];
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), $payload)->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertSessionHasErrors('return_reason');
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [...$payload,
+            'content_version' => 2,
+            'return_reason' => 'Replacement access point must be ordered.',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $closeout = $visit->fresh()->currentCloseout;
+        $this->assertNull($closeout->unfinished_work);
+        $this->assertNull($closeout->needed_equipment);
+        $this->assertNotNull($closeout->return_visit_id);
+    }
+
+    public function test_service_visit_can_be_temporarily_resolved_on_hold_without_recommendations(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'service_call']);
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [
+            'content_version' => 1,
+            'outcome' => 'on_hold',
+            'diagnosis' => 'ISP connection is intermittently dropping.',
+            'work_performed' => 'Restarted gateway and verified temporary connectivity.',
+            'hold_reason' => 'Monitor connection pending ISP response.',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Confirmed remotely',
+        ])->assertRedirect()->assertSessionHasNoErrors();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('on_hold', $visit->fresh()->currentCloseout->outcome);
+        $this->assertSame('on_hold', $visit->serviceTicket->fresh()->status);
+        $this->assertNull($visit->fresh()->currentCloseout->recommendations);
+    }
+
+    public function test_service_visit_can_change_return_required_to_resolved_without_stale_validation(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'service_call']);
+
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [
+            'content_version' => 1,
+            'outcome' => 'needs_return_trip',
+            'diagnosis' => 'Intermittent network fault.',
+            'work_performed' => 'Isolated failing connection.',
+            'return_reason' => 'Additional monitoring initially required.',
+        ])->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.draft', $visit), [
+            'content_version' => 2,
+            'outcome' => 'resolved',
+            'diagnosis' => 'Loose uplink connection.',
+            'work_performed' => 'Reseated and secured uplink; verified stability.',
+            'ack_unavailable_category' => 'remote_service',
+            'ack_unavailable_detail' => 'Confirmed remotely',
+            'no_photo_category' => 'not_applicable',
+            'no_photo_detail' => 'No visual change',
+        ])->assertRedirect();
+        $this->actingAs($lead)->post(route('field.visits.submit', $visit), ['submission_token' => (string) Str::uuid()])
+            ->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertSame('resolved', $visit->fresh()->currentCloseout->outcome);
+        $this->assertNull($visit->fresh()->currentCloseout->return_visit_id);
+    }
+
+    public function test_service_visit_workspace_identifies_resolution_and_diagnostic_fields(): void
+    {
+        [, $visit, $lead] = $this->executionGraph();
+        $visit->serviceTicket->update(['purpose' => 'service_call']);
+
+        $this->actingAs($lead)->get(route('field.visits.show', $visit))
+            ->assertOk()
+            ->assertSee('data-service-visit="true"', false)
+            ->assertSee('Return Visit Required')
+            ->assertSee('Temporarily Resolved / On Hold');
+        $this->actingAs($lead)->get(route('field.visits.classic', $visit))
+            ->assertOk()
+            ->assertSee('Resolution Status')
+            ->assertSee('Diagnosis / Root Cause')
+            ->assertSee('Post-Visit Recommendations')
+            ->assertSee('Exceptions / Additional Work');
+    }
+
     public function test_all_submission_outcomes_apply_their_atomic_effects(): void
     {
         [$organization, $returnVisit, $lead] = $this->executionGraph('on_site');
