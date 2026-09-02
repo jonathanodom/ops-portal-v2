@@ -10,6 +10,7 @@ use App\Http\Controllers\Field\FieldVisitWorkspaceV2Controller;
 use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Field\VisitWorkItemController;
 use App\Http\Controllers\InvoicePresentationController;
+use App\Http\Controllers\NotificationCenterController;
 use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
 use App\Http\Controllers\Office\BillingSettingsController;
@@ -104,6 +105,14 @@ Route::prefix('proposals/{token}')->where(['token' => '[A-Za-z0-9]{64,120}'])->n
 
 Route::middleware(['auth', 'active.organization', 'record.operational.failures'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+    Route::prefix('notifications')->name('notifications.')->group(function (): void {
+        Route::get('/', [NotificationCenterController::class, 'index'])->name('index');
+        Route::get('/recent', [NotificationCenterController::class, 'recent'])->name('recent');
+        Route::get('/unread-count', [NotificationCenterController::class, 'unreadCount'])->name('unread-count');
+        Route::post('/read-all', [NotificationCenterController::class, 'readAll'])->name('read-all');
+        Route::post('/{notification}/read', [NotificationCenterController::class, 'read'])->whereNumber('notification')->name('read');
+        Route::post('/{notification}/open', [NotificationCenterController::class, 'open'])->whereNumber('notification')->name('open');
+    });
     Route::get('/organization-brand/{variant}', [OrganizationSettingsController::class, 'asset'])->whereIn('variant', ['full', 'mark'])->name('organization.brand.asset');
     Route::get('/closeout-acknowledgment-signatures/{signature}', CloseoutAcknowledgmentSignatureController::class)
         ->whereNumber('signature')->name('closeout-acknowledgment-signatures.show');

@@ -106,9 +106,12 @@
                             <p class="text-sm font-semibold text-slate-600">{{ $activeOrganization->name }}</p>
                         </div>
                     </div>
-                    @if ($activeMembership->hasCapability('experience.field.access'))
-                        <a href="{{ route('field.home') }}" class="button-secondary">Open field view</a>
-                    @endif
+                    <div class="flex items-center gap-2">
+                        <x-notification-center />
+                        @if ($activeMembership->hasCapability('experience.field.access'))
+                            <a href="{{ route('field.home') }}" class="button-secondary">Open field view</a>
+                        @endif
+                    </div>
                 </div>
             </header>
             <nav class="office-mobile-primary-nav flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">

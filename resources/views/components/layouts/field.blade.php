@@ -21,6 +21,7 @@
                 @if ($activeMembership->hasCapability('experience.office.access'))
                     <a href="{{ route('office.home') }}" class="button-secondary px-3 text-xs" aria-label="Return to office view">Office view</a>
                 @endif
+                <x-notification-center />
                 <p data-connectivity-status class="inline-flex min-h-11 items-center gap-2 rounded-full border border-emerald-300 bg-emerald-50 px-3 text-xs font-bold text-emerald-800" role="status" aria-live="polite">
                     <span class="h-2.5 w-2.5 rounded-full bg-emerald-600" aria-hidden="true"></span>
                     <span data-connectivity-label>Online</span>

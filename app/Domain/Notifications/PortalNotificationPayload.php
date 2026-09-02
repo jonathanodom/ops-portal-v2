@@ -41,8 +41,13 @@ final readonly class PortalNotificationPayload
         $this->assertText($category, 60, 'category');
         $this->assertText($title, 180, 'title');
         $this->assertText($body, 10000, 'body');
-        if ($actionUrl !== null && mb_strlen($actionUrl) > 2048) {
-            throw new InvalidArgumentException('Notification action URLs may not exceed 2048 characters.');
+        if ($actionUrl !== null && (
+            mb_strlen($actionUrl) > 2048
+            || ! str_starts_with($actionUrl, '/')
+            || str_starts_with($actionUrl, '//')
+            || preg_match('/[\x00-\x1F\x7F]/', $actionUrl) === 1
+        )) {
+            throw new InvalidArgumentException('Notification action URLs must be safe internal application paths.');
         }
         if (($relatedType === null) !== ($relatedId === null)) {
             throw new InvalidArgumentException('Notification related type and ID must be provided together.');

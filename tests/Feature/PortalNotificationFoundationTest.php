@@ -47,6 +47,19 @@ class PortalNotificationFoundationTest extends TestCase
         $this->payload(defaultChannels: ['sms']);
     }
 
+    public function test_payload_rejects_external_action_urls(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+
+        new PortalNotificationPayload(
+            eventKey: 'leads.received',
+            category: 'Leads',
+            title: 'New lead',
+            body: 'Open the lead.',
+            actionUrl: 'https://malicious.example.test',
+        );
+    }
+
     public function test_publisher_persists_scoped_event_recipients_and_channel_preferences(): void
     {
         $organization = Organization::factory()->create();
