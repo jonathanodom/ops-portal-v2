@@ -56,6 +56,114 @@ class CatalogProductTest extends TestCase
         ]);
     }
 
+    public function test_create_form_enables_sku_code_autofill_but_edit_form_does_not(): void
+    {
+        [$admin, , $organization] = $this->userWithRole('super_admin');
+        app(CatalogDefaults::class)->ensureFor($organization);
+        $unit = $this->unit($organization, 'each');
+        $product = $this->createProduct($organization, $unit);
+
+        $this->actingAs($admin)->get('/office/catalog/products/create')
+            ->assertOk()
+            ->assertSee('data-product-code-autofill', false)
+            ->assertSee("sku.addEventListener('input', synchronize)", false);
+        $this->actingAs($admin)->get("/office/catalog/products/{$product->id}/edit")
+            ->assertOk()
+            ->assertDontSee('data-product-code-autofill', false);
+    }
+
+    public function test_blank_product_code_defaults_to_sku_on_create(): void
+    {
+        [$admin, , $organization] = $this->userWithRole('super_admin');
+        app(CatalogDefaults::class)->ensureFor($organization);
+        $unit = $this->unit($organization, 'each');
+
+        $this->actingAs($admin)->post('/office/catalog/products', $this->productPayload($unit, [
+            'product_code' => '',
+            'sku' => 'u7-outdoor',
+            'name' => 'Outdoor Access Point',
+        ]))->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('catalog_products', [
+            'organization_id' => $organization->id,
+            'product_code' => 'U7-OUTDOOR',
+            'sku' => 'u7-outdoor',
+        ]);
+    }
+
+    public function test_blank_code_and_sku_default_to_manufacturer_and_model(): void
+    {
+        [$admin, , $organization] = $this->userWithRole('super_admin');
+        app(CatalogDefaults::class)->ensureFor($organization);
+        $unit = $this->unit($organization, 'each');
+
+        $this->actingAs($admin)->post('/office/catalog/products', $this->productPayload($unit, [
+            'product_code' => '',
+            'sku' => '',
+            'manufacturer' => 'ProView',
+            'model' => 'PROB-8SEKL28AD-S',
+            'name' => '8MP Bullet Camera',
+        ]))->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('catalog_products', [
+            'organization_id' => $organization->id,
+            'product_code' => 'PROVIEW-PROB-8SEKL28AD-S',
+        ]);
+    }
+
+    public function test_manual_product_code_override_is_preserved(): void
+    {
+        [$admin, , $organization] = $this->userWithRole('super_admin');
+        app(CatalogDefaults::class)->ensureFor($organization);
+        $unit = $this->unit($organization, 'each');
+
+        $this->actingAs($admin)->post('/office/catalog/products', $this->productPayload($unit, [
+            'product_code' => 'ndt-cam-8mp-bullet',
+            'sku' => 'PROB-8SEKL28AD-S',
+            'name' => 'Private Label Camera',
+        ]))->assertRedirect()->assertSessionHasNoErrors();
+
+        $this->assertDatabaseHas('catalog_products', [
+            'organization_id' => $organization->id,
+            'product_code' => 'NDT-CAM-8MP-BULLET',
+            'sku' => 'PROB-8SEKL28AD-S',
+        ]);
+    }
+
+    public function test_generated_product_code_still_enforces_organization_uniqueness(): void
+    {
+        [$admin, , $organization] = $this->userWithRole('super_admin');
+        app(CatalogDefaults::class)->ensureFor($organization);
+        $unit = $this->unit($organization, 'each');
+        $this->createProduct($organization, $unit, 'U7-OUTDOOR');
+
+        $this->actingAs($admin)->post('/office/catalog/products', $this->productPayload($unit, [
+            'product_code' => '',
+            'sku' => 'U7-OUTDOOR',
+            'name' => 'Duplicate Outdoor Access Point',
+        ]))->assertSessionHasErrors('product_code');
+
+        $this->assertSame(1, CatalogProduct::query()->forOrganization($organization->id)->where('product_code', 'U7-OUTDOOR')->count());
+    }
+
+    public function test_changing_sku_on_edit_does_not_rewrite_existing_product_code(): void
+    {
+        [$admin, , $organization] = $this->userWithRole('super_admin');
+        app(CatalogDefaults::class)->ensureFor($organization);
+        $unit = $this->unit($organization, 'each');
+        $product = $this->createProduct($organization, $unit, 'NDT-CAM-8MP-BULLET');
+
+        $this->actingAs($admin)->put("/office/catalog/products/{$product->id}", $this->productPayload($unit, [
+            'product_code' => 'NDT-CAM-8MP-BULLET',
+            'sku' => 'NEW-OEM-SKU',
+            'name' => $product->name,
+        ]))->assertRedirect()->assertSessionHasNoErrors();
+
+        $product->refresh();
+        $this->assertSame('NDT-CAM-8MP-BULLET', $product->product_code);
+        $this->assertSame('NEW-OEM-SKU', $product->sku);
+    }
+
     public function test_wire_purchase_units_convert_250_500_and_1000_foot_boxes_exactly(): void
     {
         [$admin, , $organization] = $this->userWithRole('super_admin');
