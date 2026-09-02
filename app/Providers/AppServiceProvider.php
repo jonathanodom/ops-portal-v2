@@ -4,6 +4,8 @@ namespace App\Providers;
 
 use App\Contracts\SquareConnectionClient;
 use App\Contracts\StripeConnectionClient;
+use App\Domain\Notifications\Contracts\NotificationRecipientResolver;
+use App\Domain\Notifications\EloquentNotificationRecipientResolver;
 use App\Domain\Projects\Contracts\CustomerDirectory;
 use App\Domain\Projects\Contracts\ServiceOperationsDirectory;
 use App\Domain\Projects\Support\EloquentCustomerDirectory;
@@ -53,6 +55,7 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(StripeConnectionClient::class, StripeOAuthConnectionClient::class);
         $this->app->bind(CustomerDirectory::class, EloquentCustomerDirectory::class);
         $this->app->bind(ServiceOperationsDirectory::class, EloquentServiceOperationsDirectory::class);
+        $this->app->bind(NotificationRecipientResolver::class, EloquentNotificationRecipientResolver::class);
     }
 
     /**

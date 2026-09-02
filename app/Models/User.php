@@ -43,4 +43,14 @@ class User extends Authenticatable
     {
         return $this->hasOne(TechnicianProfile::class);
     }
+
+    public function portalNotificationRecipients(): HasMany
+    {
+        return $this->hasMany(PortalNotificationRecipient::class);
+    }
+
+    public function portalNotificationPreferences(): HasMany
+    {
+        return $this->hasMany(PortalNotificationPreference::class);
+    }
 }
