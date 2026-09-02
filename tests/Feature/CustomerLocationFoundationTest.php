@@ -171,7 +171,7 @@ class CustomerLocationFoundationTest extends TestCase
             ->assertOk()
             ->assertSee('Service ticket history')
             ->assertSee($ticket->ticket_number)
-            ->assertSee('Site survey / sales visit')
+            ->assertSee('Site / Survey Visit')
             ->assertSee('Invoice history')
             ->assertSee('NDT-INV-2026-9001');
     }

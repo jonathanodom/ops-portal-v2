@@ -71,7 +71,7 @@ class ServiceTicketVisitControlPlaneTest extends TestCase
         $this->assertSame('non_billable', $ticket->billing_disposition);
         $this->actingAs($dispatcher)->get("/office/service-tickets/{$ticket->id}")
             ->assertOk()
-            ->assertSee('Site survey / sales visit')
+            ->assertSee('Site / Survey Visit')
             ->assertSee('Non-billable');
     }
 
