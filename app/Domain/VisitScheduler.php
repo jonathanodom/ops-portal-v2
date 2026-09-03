@@ -3,6 +3,7 @@
 namespace App\Domain;
 
 use App\Domain\Notifications\TicketAssignedNotifier;
+use App\Domain\Notifications\TicketScheduleChangedNotifier;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use App\Models\Visit;
@@ -20,6 +21,7 @@ class VisitScheduler
     public function __construct(
         private readonly AuditRecorder $audit,
         private readonly TicketAssignedNotifier $assignmentNotifications,
+        private readonly TicketScheduleChangedNotifier $scheduleNotifications,
     ) {}
 
     /**
@@ -109,6 +111,8 @@ class VisitScheduler
                 ->pluck('organization_membership_id')
                 ->map(fn ($id): int => (int) $id)
                 ->all();
+            $previousStart = $visit->scheduled_start_at?->copy();
+            $previousEnd = $visit->scheduled_end_at?->copy();
             $newMembershipIds = array_values(array_diff($membershipIds, $previousMembershipIds));
             $to = $window === null ? 'planned' : ($membershipIds === [] ? 'scheduled' : 'assigned');
             $scheduleChanged = $visit->scheduled_start_at?->getTimestamp() !== ($window ? $window['start']->getTimestamp() : null)
@@ -140,6 +144,36 @@ class VisitScheduler
                 'lead_assignment_mode' => $leadAssignmentMode,
                 'changed_fields' => ['scheduled_start_at', 'scheduled_end_at', 'assignments'],
             ]);
+            if ($scheduleChanged) {
+                $change = $previousStart === null
+                    ? ($window === null ? null : 'scheduled')
+                    : ($window === null ? 'unscheduled' : 'rescheduled');
+                $scheduleRecipientIds = $window === null ? $previousMembershipIds : $membershipIds;
+                if ($change !== null && $scheduleRecipientIds !== []) {
+                    DB::afterCommit(function () use ($visit, $scheduleRecipientIds, $actor, $assignmentEvent, $change, $previousStart, $previousEnd): void {
+                        try {
+                            $this->scheduleNotifications->notify(
+                                $visit,
+                                $scheduleRecipientIds,
+                                $actor,
+                                $assignmentEvent->id,
+                                $change,
+                                $previousStart,
+                                $previousEnd,
+                            );
+                        } catch (Throwable $exception) {
+                            Log::error('Ticket schedule notification publication failed.', [
+                                'organization_id' => $visit->organization_id,
+                                'ticket_id' => $visit->service_ticket_id,
+                                'visit_id' => $visit->id,
+                                'schedule_event_id' => $assignmentEvent->id,
+                                'change' => $change,
+                                'failure_type' => class_basename($exception),
+                            ]);
+                        }
+                    });
+                }
+            }
             if ($newMembershipIds !== []) {
                 DB::afterCommit(function () use ($visit, $newMembershipIds, $actor, $assignmentEvent): void {
                     try {

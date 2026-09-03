@@ -2,17 +2,22 @@
 
 namespace App\Domain;
 
+use App\Domain\Notifications\ReturnFollowUpCreatedNotifier;
 use App\Models\Closeout;
 use App\Models\ServiceTicket;
 use App\Models\User;
 use App\Support\AuditRecorder;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
+use Throwable;
 
 final class ReturnFollowUpCreator
 {
     public function __construct(
         private readonly ServiceTicketCreator $tickets,
         private readonly AuditRecorder $audit,
+        private readonly ReturnFollowUpCreatedNotifier $notifications,
     ) {}
 
     public function create(Closeout $closeout, User $actor): ServiceTicket
@@ -43,13 +48,26 @@ final class ReturnFollowUpCreator
             'return_follow_up_status' => ReturnFollowUpStatus::NEEDS_REVIEW,
         ]);
 
-        $this->audit->record($source->organization, $actor, 'service_ticket.return_follow_up_created', $followUp, [
+        $creationEvent = $this->audit->record($source->organization, $actor, 'service_ticket.return_follow_up_created', $followUp, [
             'source_ticket_id' => $source->id,
             'source_closeout_id' => $closeout->id,
             'source_visit_id' => $closeout->visit_id,
             'purpose' => $followUp->purpose,
             'follow_up_status' => $followUp->return_follow_up_status,
         ]);
+        DB::afterCommit(function () use ($followUp, $closeout, $actor, $creationEvent): void {
+            try {
+                $this->notifications->notify($followUp, $closeout, $actor, $creationEvent->id);
+            } catch (Throwable $exception) {
+                Log::error('Return follow-up notification publication failed.', [
+                    'organization_id' => $followUp->organization_id,
+                    'follow_up_ticket_id' => $followUp->id,
+                    'source_closeout_id' => $closeout->id,
+                    'creation_event_id' => $creationEvent->id,
+                    'failure_type' => class_basename($exception),
+                ]);
+            }
+        });
 
         return $followUp;
     }
