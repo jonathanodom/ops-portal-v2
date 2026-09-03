@@ -17,9 +17,10 @@ use App\Models\User;
 use App\Models\Visit;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\Schema;
+use RuntimeException;
 use Tests\TestCase;
 
 class TicketAssignmentNotificationTest extends TestCase
@@ -169,7 +170,11 @@ class TicketAssignmentNotificationTest extends TestCase
         Queue::fake();
         [$organization, $dispatcher, $visit] = $this->graph();
         [, $membership] = $this->member($organization, 'technician');
-        Schema::drop('portal_notification_events');
+        DB::listen(function ($query): void {
+            if (str_starts_with(strtolower(ltrim($query->sql)), 'insert') && str_contains($query->sql, 'portal_notification_events')) {
+                throw new RuntimeException('Simulated notification persistence failure.');
+            }
+        });
         Log::spy();
 
         $this->assign($dispatcher, $visit, [$membership->id])->assertRedirect();

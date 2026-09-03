@@ -15,10 +15,10 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Mail;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\Schema;
 use RuntimeException;
 use Tests\TestCase;
 
@@ -139,13 +139,17 @@ class NewLeadNotificationTest extends TestCase
         $this->assertDatabaseCount('portal_notification_events', 0);
         Queue::assertNothingPushed();
 
-        Schema::drop('portal_notification_events');
+        DB::listen(function ($query): void {
+            if (str_starts_with(strtolower(ltrim($query->sql)), 'insert') && str_contains($query->sql, 'portal_notification_events')) {
+                throw new RuntimeException('Simulated notification persistence failure.');
+            }
+        });
         Log::spy();
 
         $this->postJson(route('api.public.v1.leads.store'), $this->validPayload())->assertCreated();
         $this->assertDatabaseCount('commercial_lead_intakes', 1);
         Log::shouldHaveReceived('error')->once()->withArgs(fn (string $message, array $context): bool => $message === 'New lead notification publication failed.'
-            && $context['failure_type'] === 'QueryException');
+            && $context['failure_type'] === 'RuntimeException');
     }
 
     public function test_email_job_sends_branded_normalized_content_once_and_records_failure_safely(): void

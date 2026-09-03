@@ -13,10 +13,11 @@ use App\Models\Role;
 use App\Models\User;
 use Database\Seeders\AccessControlSeeder;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Queue;
-use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
+use RuntimeException;
 use Tests\TestCase;
 
 class OfficeUpdateTest extends TestCase
@@ -156,7 +157,11 @@ class OfficeUpdateTest extends TestCase
         $this->assertDatabaseCount('portal_notification_recipients', 1);
         Queue::assertNotPushed(DeliverPortalNotificationEmail::class);
 
-        Schema::drop('portal_notification_events');
+        DB::listen(function ($query): void {
+            if (str_starts_with(strtolower(ltrim($query->sql)), 'insert') && str_contains($query->sql, 'portal_notification_events')) {
+                throw new RuntimeException('Simulated notification persistence failure.');
+            }
+        });
         Log::spy();
         $this->actingAs($manager)->post(route('office-updates.store'), $this->payload([
             'publish_token' => (string) Str::uuid(),
