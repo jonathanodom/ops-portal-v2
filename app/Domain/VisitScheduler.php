@@ -2,6 +2,7 @@
 
 namespace App\Domain;
 
+use App\Domain\Notifications\TicketAssignedNotifier;
 use App\Models\OrganizationMembership;
 use App\Models\User;
 use App\Models\Visit;
@@ -10,11 +11,16 @@ use App\Support\AuditRecorder;
 use Carbon\CarbonInterface;
 use Illuminate\Support\Collection;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Validation\ValidationException;
+use Throwable;
 
 class VisitScheduler
 {
-    public function __construct(private readonly AuditRecorder $audit) {}
+    public function __construct(
+        private readonly AuditRecorder $audit,
+        private readonly TicketAssignedNotifier $assignmentNotifications,
+    ) {}
 
     /**
      * @param  array<int, int>  $membershipIds
@@ -99,6 +105,11 @@ class VisitScheduler
                 ]);
             }
             $from = $visit->status;
+            $previousMembershipIds = $visit->assignments()
+                ->pluck('organization_membership_id')
+                ->map(fn ($id): int => (int) $id)
+                ->all();
+            $newMembershipIds = array_values(array_diff($membershipIds, $previousMembershipIds));
             $to = $window === null ? 'planned' : ($membershipIds === [] ? 'scheduled' : 'assigned');
             $scheduleChanged = $visit->scheduled_start_at?->getTimestamp() !== ($window ? $window['start']->getTimestamp() : null)
                 || $visit->scheduled_end_at?->getTimestamp() !== ($window ? $window['end']->getTimestamp() : null);
@@ -120,7 +131,7 @@ class VisitScheduler
                     'assigned_by_id' => $actor->id,
                 ]);
             }
-            $this->audit->record($visit->serviceTicket->organization, $actor, 'visit.scheduled', $visit, [
+            $assignmentEvent = $this->audit->record($visit->serviceTicket->organization, $actor, 'visit.scheduled', $visit, [
                 'from' => $from,
                 'to' => $to,
                 'ticket_id' => $visit->service_ticket_id,
@@ -129,6 +140,21 @@ class VisitScheduler
                 'lead_assignment_mode' => $leadAssignmentMode,
                 'changed_fields' => ['scheduled_start_at', 'scheduled_end_at', 'assignments'],
             ]);
+            if ($newMembershipIds !== []) {
+                DB::afterCommit(function () use ($visit, $newMembershipIds, $actor, $assignmentEvent): void {
+                    try {
+                        $this->assignmentNotifications->notify($visit, $newMembershipIds, $actor, $assignmentEvent->id);
+                    } catch (Throwable $exception) {
+                        Log::error('Ticket assignment notification publication failed.', [
+                            'organization_id' => $visit->organization_id,
+                            'ticket_id' => $visit->service_ticket_id,
+                            'visit_id' => $visit->id,
+                            'assignment_event_id' => $assignmentEvent->id,
+                            'failure_type' => class_basename($exception),
+                        ]);
+                    }
+                });
+            }
             if ($confirmConflicts && $lockedConflicts->isNotEmpty()) {
                 $this->audit->record($visit->serviceTicket->organization, $actor, 'visit.schedule_conflict_overridden', $visit, [
                     'conflicting_visit_ids' => $lockedConflicts->pluck('id')->values()->all(),
