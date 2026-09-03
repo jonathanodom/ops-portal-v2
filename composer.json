@@ -12,6 +12,7 @@
         "laravel/framework": "^13.0",
         "laravel/sanctum": "^4.0",
         "laravel/tinker": "^3.0",
+        "minishlink/web-push": "^10.0",
         "square/square": "^46.0",
         "stripe/stripe-php": "^17.0"
     },

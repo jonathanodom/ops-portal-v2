@@ -35,4 +35,10 @@ return [
         ],
     ],
 
+    'web_push' => [
+        'vapid_subject' => env('WEB_PUSH_VAPID_SUBJECT', 'mailto:support@newdaytech.net'),
+        'vapid_public_key' => env('WEB_PUSH_VAPID_PUBLIC_KEY'),
+        'vapid_private_key' => env('WEB_PUSH_VAPID_PRIVATE_KEY'),
+    ],
+
 ];

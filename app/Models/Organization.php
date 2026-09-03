@@ -56,6 +56,21 @@ class Organization extends Model
         return $this->hasMany(Visit::class);
     }
 
+    public function portalNotificationEvents(): HasMany
+    {
+        return $this->hasMany(PortalNotificationEvent::class);
+    }
+
+    public function portalNotificationPreferences(): HasMany
+    {
+        return $this->hasMany(PortalNotificationPreference::class);
+    }
+
+    public function officeUpdates(): HasMany
+    {
+        return $this->hasMany(OfficeUpdate::class);
+    }
+
     public function billingSetting(): HasOne
     {
         return $this->hasOne(OrganizationBillingSetting::class);

@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\BrowserPushSubscriptionController;
 use App\Http\Controllers\CloseoutAcknowledgmentSignatureController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
@@ -10,6 +11,8 @@ use App\Http\Controllers\Field\FieldVisitWorkspaceV2Controller;
 use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Field\VisitWorkItemController;
 use App\Http\Controllers\InvoicePresentationController;
+use App\Http\Controllers\NotificationCenterController;
+use App\Http\Controllers\NotificationPreferenceController;
 use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
 use App\Http\Controllers\Office\BillingSettingsController;
@@ -37,6 +40,7 @@ use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\LeadIntakeController;
 use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\OfficeSearchController;
+use App\Http\Controllers\Office\OfficeUpdateController;
 use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\OpportunityAttachmentController;
 use App\Http\Controllers\Office\OpportunityController;
@@ -104,6 +108,25 @@ Route::prefix('proposals/{token}')->where(['token' => '[A-Za-z0-9]{64,120}'])->n
 
 Route::middleware(['auth', 'active.organization', 'record.operational.failures'])->group(function (): void {
     Route::post('/logout', [AuthenticatedSessionController::class, 'destroy'])->name('logout');
+    Route::prefix('notifications')->name('notifications.')->group(function (): void {
+        Route::get('/', [NotificationCenterController::class, 'index'])->name('index');
+        Route::get('/recent', [NotificationCenterController::class, 'recent'])->name('recent');
+        Route::get('/unread-count', [NotificationCenterController::class, 'unreadCount'])->name('unread-count');
+        Route::post('/read-all', [NotificationCenterController::class, 'readAll'])->name('read-all');
+        Route::post('/{notification}/read', [NotificationCenterController::class, 'read'])->whereNumber('notification')->name('read');
+        Route::post('/{notification}/open', [NotificationCenterController::class, 'open'])->whereNumber('notification')->name('open');
+        Route::get('/preferences', [NotificationPreferenceController::class, 'edit'])->name('preferences.edit');
+        Route::put('/preferences', [NotificationPreferenceController::class, 'update'])->name('preferences.update');
+        Route::get('/push/configuration', [BrowserPushSubscriptionController::class, 'configuration'])->name('push.configuration');
+        Route::post('/push/subscriptions', [BrowserPushSubscriptionController::class, 'store'])->name('push.subscriptions.store');
+        Route::delete('/push/subscriptions', [BrowserPushSubscriptionController::class, 'destroy'])->name('push.subscriptions.destroy');
+    });
+    Route::prefix('office-updates')->name('office-updates.')->group(function (): void {
+        Route::get('/', [OfficeUpdateController::class, 'index'])->name('index');
+        Route::get('/create', [OfficeUpdateController::class, 'create'])->name('create');
+        Route::post('/', [OfficeUpdateController::class, 'store'])->name('store');
+        Route::get('/{officeUpdate}', [OfficeUpdateController::class, 'show'])->whereNumber('officeUpdate')->name('show');
+    });
     Route::get('/organization-brand/{variant}', [OrganizationSettingsController::class, 'asset'])->whereIn('variant', ['full', 'mark'])->name('organization.brand.asset');
     Route::get('/closeout-acknowledgment-signatures/{signature}', CloseoutAcknowledgmentSignatureController::class)
         ->whereNumber('signature')->name('closeout-acknowledgment-signatures.show');

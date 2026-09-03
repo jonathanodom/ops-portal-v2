@@ -4,6 +4,10 @@ namespace App\Providers;
 
 use App\Contracts\SquareConnectionClient;
 use App\Contracts\StripeConnectionClient;
+use App\Domain\Notifications\Contracts\BrowserPushTransport;
+use App\Domain\Notifications\Contracts\NotificationRecipientResolver;
+use App\Domain\Notifications\EloquentNotificationRecipientResolver;
+use App\Domain\Notifications\MinishlinkBrowserPushTransport;
 use App\Domain\Projects\Contracts\CustomerDirectory;
 use App\Domain\Projects\Contracts\ServiceOperationsDirectory;
 use App\Domain\Projects\Support\EloquentCustomerDirectory;
@@ -14,6 +18,7 @@ use App\Models\Contact;
 use App\Models\Customer;
 use App\Models\CustomerServiceEnrollment;
 use App\Models\Invoice;
+use App\Models\OfficeUpdate;
 use App\Models\Opportunity;
 use App\Models\Project;
 use App\Models\ServiceLocation;
@@ -27,6 +32,7 @@ use App\Policies\ContactPolicy;
 use App\Policies\CustomerPolicy;
 use App\Policies\CustomerServiceEnrollmentPolicy;
 use App\Policies\InvoicePolicy;
+use App\Policies\OfficeUpdatePolicy;
 use App\Policies\OpportunityPolicy;
 use App\Policies\ProjectPolicy;
 use App\Policies\ServiceLocationPolicy;
@@ -53,6 +59,8 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind(StripeConnectionClient::class, StripeOAuthConnectionClient::class);
         $this->app->bind(CustomerDirectory::class, EloquentCustomerDirectory::class);
         $this->app->bind(ServiceOperationsDirectory::class, EloquentServiceOperationsDirectory::class);
+        $this->app->bind(NotificationRecipientResolver::class, EloquentNotificationRecipientResolver::class);
+        $this->app->bind(BrowserPushTransport::class, MinishlinkBrowserPushTransport::class);
     }
 
     /**
@@ -79,6 +87,7 @@ class AppServiceProvider extends ServiceProvider
         Gate::policy(CommercialLeadIntake::class, CommercialLeadIntakePolicy::class);
         Gate::policy(CustomerServiceEnrollment::class, CustomerServiceEnrollmentPolicy::class);
         Gate::policy(Invoice::class, InvoicePolicy::class);
+        Gate::policy(OfficeUpdate::class, OfficeUpdatePolicy::class);
         Gate::policy(Opportunity::class, OpportunityPolicy::class);
         Gate::policy(Project::class, ProjectPolicy::class);
         Gate::policy(Contact::class, ContactPolicy::class);
