@@ -1,6 +1,7 @@
 import './bootstrap';
 import './field-visit-workspace-v2';
 import './notification-center';
+import './browser-push';
 
 const officeSidebarRoot = document.documentElement;
 const officeSidebar = document.querySelector('[data-office-sidebar]');

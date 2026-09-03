@@ -56,7 +56,7 @@ class NewLeadNotificationTest extends TestCase
         $this->assertSame(['type' => 'capability', 'value' => 'opportunities.manage'], $event->audience);
         $this->assertEqualsCanonicalizing([$admin->id, $dispatcher->id], $event->recipients->pluck('user_id')->all());
         $this->assertNotContains($reviewer->id, $event->recipients->pluck('user_id')->all());
-        $event->recipients->each(fn ($recipient) => $this->assertSame(['in_app', 'email'], $recipient->channels));
+        $event->recipients->each(fn ($recipient) => $this->assertSame(['in_app', 'email', 'push'], $recipient->channels));
         Queue::assertPushed(DeliverPortalNotificationEmail::class, 2);
 
         $this->actingAs($dispatcher)->getJson(route('notifications.recent'))
@@ -75,6 +75,7 @@ class NewLeadNotificationTest extends TestCase
             'user_id' => $emailDisabled->id,
             'event_key' => 'lead.submitted',
             'email_enabled' => false,
+            'push_enabled' => false,
         ]);
 
         $this->postJson(route('api.public.v1.leads.store'), $this->validPayload())->assertCreated();
@@ -83,7 +84,7 @@ class NewLeadNotificationTest extends TestCase
         $disabledRecipient = $event->recipients->firstWhere('user_id', $emailDisabled->id);
         $missingRecipient = $event->recipients->firstWhere('user_id', $missingEmail->id);
         $this->assertSame(['in_app'], $disabledRecipient->channels);
-        $this->assertSame(['in_app', 'email'], $missingRecipient->channels);
+        $this->assertSame(['in_app', 'email', 'push'], $missingRecipient->channels);
         $this->assertNull($disabledRecipient->email_queued_at);
         $this->assertNull($missingRecipient->email_queued_at);
         Queue::assertNothingPushed();

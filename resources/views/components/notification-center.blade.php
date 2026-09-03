@@ -15,6 +15,18 @@
         </div>
         <p class="px-4 py-5 text-sm text-slate-600" role="status" aria-live="polite" data-notification-status>Loading notifications…</p>
         <div class="max-h-[26rem] divide-y divide-slate-200 overflow-y-auto" data-notification-list></div>
+        <section class="border-t border-slate-200 px-4 py-3" aria-labelledby="browser-push-heading" data-browser-push
+                 data-configuration-url="{{ route('notifications.push.configuration') }}"
+                 data-subscribe-url="{{ route('notifications.push.subscriptions.store') }}"
+                 data-unsubscribe-url="{{ route('notifications.push.subscriptions.destroy') }}">
+            <input type="hidden" value="{{ csrf_token() }}" data-browser-push-csrf>
+            <h3 id="browser-push-heading" class="text-sm font-bold text-slate-950">Browser notifications</h3>
+            <p class="mt-1 text-xs text-slate-600" role="status" aria-live="polite" data-browser-push-status>Checking browser support…</p>
+            <div class="mt-2 flex flex-wrap gap-2">
+                <button type="button" class="button-secondary min-h-11 px-3 text-xs" data-browser-push-enable>Enable browser notifications</button>
+                <button type="button" class="button-secondary min-h-11 px-3 text-xs" data-browser-push-disable hidden>Disable browser notifications</button>
+            </div>
+        </section>
         <a href="{{ route('notifications.index') }}" class="flex min-h-12 items-center justify-center border-t border-slate-200 px-4 text-sm font-bold text-brand-blue hover:bg-blue-50">View All Notifications</a>
     </section>
 </div>

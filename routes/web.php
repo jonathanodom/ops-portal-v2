@@ -3,6 +3,7 @@
 use App\Http\Controllers\Auth\AuthenticatedSessionController;
 use App\Http\Controllers\Auth\NewPasswordController;
 use App\Http\Controllers\Auth\PasswordResetLinkController;
+use App\Http\Controllers\BrowserPushSubscriptionController;
 use App\Http\Controllers\CloseoutAcknowledgmentSignatureController;
 use App\Http\Controllers\Field\CustomerDirectoryController as FieldCustomerDirectoryController;
 use App\Http\Controllers\Field\ExecutionController;
@@ -112,6 +113,9 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         Route::post('/read-all', [NotificationCenterController::class, 'readAll'])->name('read-all');
         Route::post('/{notification}/read', [NotificationCenterController::class, 'read'])->whereNumber('notification')->name('read');
         Route::post('/{notification}/open', [NotificationCenterController::class, 'open'])->whereNumber('notification')->name('open');
+        Route::get('/push/configuration', [BrowserPushSubscriptionController::class, 'configuration'])->name('push.configuration');
+        Route::post('/push/subscriptions', [BrowserPushSubscriptionController::class, 'store'])->name('push.subscriptions.store');
+        Route::delete('/push/subscriptions', [BrowserPushSubscriptionController::class, 'destroy'])->name('push.subscriptions.destroy');
     });
     Route::get('/organization-brand/{variant}', [OrganizationSettingsController::class, 'asset'])->whereIn('variant', ['full', 'mark'])->name('organization.brand.asset');
     Route::get('/closeout-acknowledgment-signatures/{signature}', CloseoutAcknowledgmentSignatureController::class)

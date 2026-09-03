@@ -53,4 +53,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(PortalNotificationPreference::class);
     }
+
+    public function browserPushSubscriptions(): HasMany
+    {
+        return $this->hasMany(BrowserPushSubscription::class);
+    }
 }

@@ -9,19 +9,16 @@ use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
 
 #[Fillable([
-    'organization_id', 'portal_notification_event_id', 'user_id', 'channels', 'read_at',
-    'email_queued_at', 'email_sent_at', 'email_failed_at',
+    'organization_id', 'user_id', 'endpoint', 'endpoint_sha256', 'public_key',
+    'auth_token', 'content_encoding', 'user_agent', 'last_registered_at', 'disabled_at',
 ])]
-class PortalNotificationRecipient extends Model
+class BrowserPushSubscription extends Model
 {
     protected function casts(): array
     {
         return [
-            'channels' => 'array',
-            'read_at' => 'datetime',
-            'email_queued_at' => 'datetime',
-            'email_sent_at' => 'datetime',
-            'email_failed_at' => 'datetime',
+            'last_registered_at' => 'datetime',
+            'disabled_at' => 'datetime',
         ];
     }
 
@@ -30,17 +27,12 @@ class PortalNotificationRecipient extends Model
         return $this->belongsTo(Organization::class);
     }
 
-    public function event(): BelongsTo
-    {
-        return $this->belongsTo(PortalNotificationEvent::class, 'portal_notification_event_id');
-    }
-
     public function user(): BelongsTo
     {
         return $this->belongsTo(User::class);
     }
 
-    public function pushDeliveries(): HasMany
+    public function deliveries(): HasMany
     {
         return $this->hasMany(PortalNotificationPushDelivery::class);
     }
@@ -48,5 +40,15 @@ class PortalNotificationRecipient extends Model
     public function scopeForOrganization(Builder $query, int $organizationId): Builder
     {
         return $query->where('organization_id', $organizationId);
+    }
+
+    /** @return array<string, mixed> */
+    public function subscriptionPayload(): array
+    {
+        return [
+            'endpoint' => $this->endpoint,
+            'keys' => ['p256dh' => $this->public_key, 'auth' => $this->auth_token],
+            'contentEncoding' => $this->content_encoding,
+        ];
     }
 }
