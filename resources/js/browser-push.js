@@ -13,8 +13,13 @@ if (root) {
         && 'PushManager' in window
         && 'Notification' in window;
 
-    const setState = (message, enabled = false, blocked = false) => {
-        status.textContent = message;
+    const subscriptionSummary = () => {
+        const count = Number(configuration?.active_subscriptions ?? 0);
+        return `${count} active browser${count === 1 ? '' : 's'} on your account.`;
+    };
+
+    const setState = (state, message, enabled = false, blocked = false) => {
+        status.textContent = `${state} — ${message}`;
         enable.hidden = enabled || blocked;
         disable.hidden = !enabled;
         enable.disabled = false;
@@ -48,13 +53,19 @@ if (root) {
         body: JSON.stringify(subscription.toJSON()),
     });
 
+    const refreshSubscriptionCount = async () => {
+        const response = await fetch(root.dataset.configurationUrl, { headers: { Accept: 'application/json' } });
+        if (!response.ok) throw new Error('configuration-failed');
+        configuration.active_subscriptions = (await response.json()).active_subscriptions;
+    };
+
     const initialize = async () => {
         if (!supported) {
-            setState('Browser notifications are not supported in this browser.', false, true);
+            setState('Unsupported', 'Browser notifications are not available in this browser.', false, true);
             return;
         }
         if (Notification.permission === 'denied') {
-            setState('Browser notifications are blocked in browser settings.', false, true);
+            setState('Blocked', 'Allow notifications in browser settings to enable them.', false, true);
             return;
         }
 
@@ -64,19 +75,20 @@ if (root) {
                 return response.json();
             });
             if (!configuration.configured) {
-                setState('Browser notifications are not configured.', false, true);
+                setState('Disabled', 'Browser notifications are not configured for this portal.', false, true);
                 return;
             }
             registration = await navigator.serviceWorker.register('/ops-notifications-sw.js', { scope: '/' });
             const subscription = await registration.pushManager.getSubscription();
             if (subscription) {
                 await persist(subscription);
-                setState('Browser notifications are enabled on this device.', true);
+                await refreshSubscriptionCount();
+                setState('Enabled', `This browser is subscribed. ${subscriptionSummary()}`, true);
             } else {
-                setState('Browser notifications are off on this device.');
+                setState('Disabled', `This browser is not subscribed. ${subscriptionSummary()}`);
             }
         } catch (_) {
-            setState('Browser notification status is unavailable. Try again.');
+            setState('Disabled', 'Browser notification status is unavailable. Try again.');
         }
     };
 
@@ -86,11 +98,11 @@ if (root) {
         try {
             const permission = await Notification.requestPermission();
             if (permission === 'denied') {
-                setState('Browser notifications are blocked in browser settings.', false, true);
+                setState('Blocked', 'Allow notifications in browser settings to enable them.', false, true);
                 return;
             }
             if (permission !== 'granted') {
-                setState('Browser notification permission was not granted.');
+                setState('Disabled', 'Browser notification permission was not granted.');
                 return;
             }
             registration ??= await navigator.serviceWorker.register('/ops-notifications-sw.js', { scope: '/' });
@@ -100,9 +112,10 @@ if (root) {
                 applicationServerKey: applicationServerKey(configuration.public_key),
             });
             await persist(subscription);
-            setState('Browser notifications are enabled on this device.', true);
+            await refreshSubscriptionCount();
+            setState('Enabled', `This browser is subscribed. ${subscriptionSummary()}`, true);
         } catch (_) {
-            setState('Browser notifications could not be enabled. Try again.');
+            setState('Disabled', 'Browser notifications could not be enabled. Try again.');
         }
     });
 
@@ -118,9 +131,10 @@ if (root) {
                 });
                 await subscription.unsubscribe();
             }
-            setState('Browser notifications are off on this device.');
+            await refreshSubscriptionCount();
+            setState('Disabled', `This browser is not subscribed. ${subscriptionSummary()}`);
         } catch (_) {
-            setState('Browser notifications could not be disabled. Try again.', true);
+            setState('Enabled', 'This browser could not be disabled. Try again.', true);
         }
     });
 

@@ -61,12 +61,15 @@ final class PortalNotificationPublisher
                 'deduplication_hash' => $deduplicationHash,
             ]);
 
-            foreach ($this->recipients->resolve($organization, $audience) as $user) {
+            $recipients = $this->recipients->resolve($organization, $audience);
+            $channels = $this->channels->selectMany($organization, $recipients, $payload);
+
+            foreach ($recipients as $user) {
                 PortalNotificationRecipient::query()->create([
                     'organization_id' => $organization->id,
                     'portal_notification_event_id' => $event->id,
                     'user_id' => $user->id,
-                    'channels' => $this->channels->select($organization, $user, $payload),
+                    'channels' => $channels[$user->id],
                 ]);
             }
 

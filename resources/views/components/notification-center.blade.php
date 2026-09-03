@@ -27,6 +27,9 @@
                 <button type="button" class="button-secondary min-h-11 px-3 text-xs" data-browser-push-disable hidden>Disable browser notifications</button>
             </div>
         </section>
-        <a href="{{ route('notifications.index') }}" class="flex min-h-12 items-center justify-center border-t border-slate-200 px-4 text-sm font-bold text-brand-blue hover:bg-blue-50">View All Notifications</a>
+        <div class="grid grid-cols-2 border-t border-slate-200">
+            <a href="{{ route('notifications.index') }}" class="flex min-h-12 items-center justify-center border-r border-slate-200 px-3 text-center text-sm font-bold text-brand-blue hover:bg-blue-50">View All Notifications</a>
+            <a href="{{ route('notifications.preferences.edit') }}" class="flex min-h-12 items-center justify-center px-3 text-center text-sm font-bold text-brand-blue hover:bg-blue-50">Preferences</a>
+        </div>
     </section>
 </div>

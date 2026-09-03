@@ -12,6 +12,7 @@ use App\Http\Controllers\Field\TodayController;
 use App\Http\Controllers\Field\VisitWorkItemController;
 use App\Http\Controllers\InvoicePresentationController;
 use App\Http\Controllers\NotificationCenterController;
+use App\Http\Controllers\NotificationPreferenceController;
 use App\Http\Controllers\Office\AdminManualCloseoutController;
 use App\Http\Controllers\Office\BillingHandoffController;
 use App\Http\Controllers\Office\BillingSettingsController;
@@ -114,6 +115,8 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         Route::post('/read-all', [NotificationCenterController::class, 'readAll'])->name('read-all');
         Route::post('/{notification}/read', [NotificationCenterController::class, 'read'])->whereNumber('notification')->name('read');
         Route::post('/{notification}/open', [NotificationCenterController::class, 'open'])->whereNumber('notification')->name('open');
+        Route::get('/preferences', [NotificationPreferenceController::class, 'edit'])->name('preferences.edit');
+        Route::put('/preferences', [NotificationPreferenceController::class, 'update'])->name('preferences.update');
         Route::get('/push/configuration', [BrowserPushSubscriptionController::class, 'configuration'])->name('push.configuration');
         Route::post('/push/subscriptions', [BrowserPushSubscriptionController::class, 'store'])->name('push.subscriptions.store');
         Route::delete('/push/subscriptions', [BrowserPushSubscriptionController::class, 'destroy'])->name('push.subscriptions.destroy');

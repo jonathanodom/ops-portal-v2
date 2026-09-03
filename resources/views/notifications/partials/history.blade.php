@@ -6,10 +6,13 @@
             <h1 class="mt-1 text-2xl font-bold text-slate-950">Notifications</h1>
             <p class="mt-1 text-sm text-slate-600">Operational updates delivered to your account.</p>
         </div>
-        <form method="POST" action="{{ route('notifications.read-all') }}">
-            @csrf
-            <button class="button-secondary w-full sm:w-auto">Mark all read</button>
-        </form>
+        <div class="flex flex-wrap gap-2">
+            <a href="{{ route('notifications.preferences.edit') }}" class="button-secondary">Preferences</a>
+            <form method="POST" action="{{ route('notifications.read-all') }}">
+                @csrf
+                <button class="button-secondary w-full sm:w-auto">Mark all read</button>
+            </form>
+        </div>
     </div>
 
     <div class="divide-y divide-slate-200 border border-slate-300 bg-white">
