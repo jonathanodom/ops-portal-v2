@@ -14,6 +14,7 @@
         || $activeMembership->hasCapability('proposal.templates.manage');
     $officeNavigation = array_values(array_filter([
         ['key' => 'home', 'label' => 'Home', 'mobile_label' => 'Home', 'icon' => 'home', 'href' => route('office.home'), 'active' => request()->routeIs('office.home', 'office.search')],
+        ['key' => 'updates', 'label' => 'Office Updates', 'mobile_label' => 'Updates', 'icon' => 'updates', 'href' => route('office-updates.index'), 'active' => request()->routeIs('office-updates.*')],
         $activeMembership->hasCapability('customers.view') ? ['key' => 'customers', 'label' => 'Customers', 'mobile_label' => 'Customers', 'icon' => 'customers', 'href' => route('office.customers.index'), 'active' => $customerWorkspaceActive] : null,
         $activeMembership->hasCapability('projects.view') ? ['key' => 'projects', 'label' => 'Projects', 'mobile_label' => 'Projects', 'icon' => 'projects', 'href' => route('office.projects.index'), 'active' => request()->routeIs('office.projects.*')] : null,
         $activeMembership->hasCapability('opportunities.view') ? ['key' => 'opportunities', 'label' => 'Opportunities', 'mobile_label' => 'Opportunities', 'icon' => 'opportunities', 'href' => route('office.opportunities.index'), 'active' => request()->routeIs('office.opportunities.*')] : null,

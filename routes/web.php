@@ -39,6 +39,7 @@ use App\Http\Controllers\Office\InvoiceController;
 use App\Http\Controllers\Office\LeadIntakeController;
 use App\Http\Controllers\Office\OfficeDashboardController;
 use App\Http\Controllers\Office\OfficeSearchController;
+use App\Http\Controllers\Office\OfficeUpdateController;
 use App\Http\Controllers\Office\OperationalHealthController;
 use App\Http\Controllers\Office\OpportunityAttachmentController;
 use App\Http\Controllers\Office\OpportunityController;
@@ -116,6 +117,12 @@ Route::middleware(['auth', 'active.organization', 'record.operational.failures']
         Route::get('/push/configuration', [BrowserPushSubscriptionController::class, 'configuration'])->name('push.configuration');
         Route::post('/push/subscriptions', [BrowserPushSubscriptionController::class, 'store'])->name('push.subscriptions.store');
         Route::delete('/push/subscriptions', [BrowserPushSubscriptionController::class, 'destroy'])->name('push.subscriptions.destroy');
+    });
+    Route::prefix('office-updates')->name('office-updates.')->group(function (): void {
+        Route::get('/', [OfficeUpdateController::class, 'index'])->name('index');
+        Route::get('/create', [OfficeUpdateController::class, 'create'])->name('create');
+        Route::post('/', [OfficeUpdateController::class, 'store'])->name('store');
+        Route::get('/{officeUpdate}', [OfficeUpdateController::class, 'show'])->whereNumber('officeUpdate')->name('show');
     });
     Route::get('/organization-brand/{variant}', [OrganizationSettingsController::class, 'asset'])->whereIn('variant', ['full', 'mark'])->name('organization.brand.asset');
     Route::get('/closeout-acknowledgment-signatures/{signature}', CloseoutAcknowledgmentSignatureController::class)

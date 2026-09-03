@@ -58,4 +58,14 @@ class User extends Authenticatable
     {
         return $this->hasMany(BrowserPushSubscription::class);
     }
+
+    public function officeUpdatesPublished(): HasMany
+    {
+        return $this->hasMany(OfficeUpdate::class, 'published_by_id');
+    }
+
+    public function officeUpdateRecipients(): HasMany
+    {
+        return $this->hasMany(OfficeUpdateRecipient::class);
+    }
 }

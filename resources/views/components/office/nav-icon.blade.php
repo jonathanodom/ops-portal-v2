@@ -14,6 +14,9 @@
         @case('opportunities')
             <rect x="3" y="7" width="18" height="13" rx="1"/><path d="M8 7V4h8v3M3 12h18M10 12v2h4v-2"/>
             @break
+        @case('updates')
+            <path d="M4 4h16v12H7l-3 3z"/><path d="M8 8h8M8 12h5"/>
+            @break
         @case('approvals')
             <path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/>
             @break
