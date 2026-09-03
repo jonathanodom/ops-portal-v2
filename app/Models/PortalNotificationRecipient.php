@@ -7,7 +7,10 @@ use Illuminate\Database\Eloquent\Builder;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 
-#[Fillable(['organization_id', 'portal_notification_event_id', 'user_id', 'channels', 'read_at'])]
+#[Fillable([
+    'organization_id', 'portal_notification_event_id', 'user_id', 'channels', 'read_at',
+    'email_queued_at', 'email_sent_at', 'email_failed_at',
+])]
 class PortalNotificationRecipient extends Model
 {
     protected function casts(): array
@@ -15,6 +18,9 @@ class PortalNotificationRecipient extends Model
         return [
             'channels' => 'array',
             'read_at' => 'datetime',
+            'email_queued_at' => 'datetime',
+            'email_sent_at' => 'datetime',
+            'email_failed_at' => 'datetime',
         ];
     }
 
