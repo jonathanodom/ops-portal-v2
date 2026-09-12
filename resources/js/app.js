@@ -34,6 +34,53 @@ if (officeSidebar && officeSidebarToggle) {
     });
 }
 
+const officeNavGroups = [...document.querySelectorAll('[data-office-nav-group]')];
+
+if (officeNavGroups.length > 0) {
+    let savedGroups = {};
+
+    try {
+        savedGroups = JSON.parse(localStorage.getItem(officeSidebarRoot.dataset.officeNavGroupsKey) || '{}');
+    } catch (_) {
+        savedGroups = {};
+    }
+
+    const applyGroupState = (group, open) => {
+        const toggle = group.querySelector('[data-office-nav-group-toggle]');
+        const children = group.querySelector('[data-office-nav-group-children]');
+        const expanded = group.dataset.officeNavGroupActive === 'true' || open;
+
+        toggle.setAttribute('aria-expanded', String(expanded));
+        children.hidden = !expanded;
+    };
+
+    const persistGroups = () => {
+        try {
+            const state = Object.fromEntries(officeNavGroups.map((group) => [
+                group.dataset.officeNavGroup,
+                group.querySelector('[data-office-nav-group-toggle]').getAttribute('aria-expanded') === 'true',
+            ]));
+            localStorage.setItem(officeSidebarRoot.dataset.officeNavGroupsKey, JSON.stringify(state));
+        } catch (_) {
+            // A blocked storage API must not prevent navigation disclosures from working.
+        }
+    };
+
+    officeNavGroups.forEach((group) => {
+        const key = group.dataset.officeNavGroup;
+        const toggle = group.querySelector('[data-office-nav-group-toggle]');
+        const defaultOpen = toggle.getAttribute('aria-expanded') === 'true';
+        const preferredOpen = Object.hasOwn(savedGroups, key) ? savedGroups[key] === true : defaultOpen;
+
+        applyGroupState(group, preferredOpen);
+        toggle.addEventListener('click', () => {
+            const open = toggle.getAttribute('aria-expanded') !== 'true';
+            applyGroupState(group, open);
+            persistGroups();
+        });
+    });
+}
+
 const connectivityBanner = document.querySelector('[data-connectivity-banner]');
 const connectivityStatus = document.querySelector('[data-connectivity-status]');
 const connectivityLabel = document.querySelector('[data-connectivity-label]');

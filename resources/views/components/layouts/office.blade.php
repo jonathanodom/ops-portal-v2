@@ -12,7 +12,7 @@
         || $activeMembership->hasCapability('payments.view')
         || $activeMembership->hasCapability('opportunities.admin')
         || $activeMembership->hasCapability('proposal.templates.manage');
-    $officeNavigation = array_values(array_filter([
+    $mobileNavigation = array_values(array_filter([
         ['key' => 'home', 'label' => 'Home', 'mobile_label' => 'Home', 'icon' => 'home', 'href' => route('office.home'), 'active' => request()->routeIs('office.home', 'office.search')],
         ['key' => 'updates', 'label' => 'Office Updates', 'mobile_label' => 'Updates', 'icon' => 'updates', 'href' => route('office-updates.index'), 'active' => request()->routeIs('office-updates.*')],
         $activeMembership->hasCapability('customers.view') ? ['key' => 'customers', 'label' => 'Customers', 'mobile_label' => 'Customers', 'icon' => 'customers', 'href' => route('office.customers.index'), 'active' => $customerWorkspaceActive] : null,
@@ -29,10 +29,47 @@
         $activeMembership->hasCapability('visits.archive.manage') ? ['key' => 'archive', 'label' => 'Admin Archive', 'mobile_label' => 'Archive', 'icon' => 'archive', 'href' => route('office.admin.archive.index'), 'active' => request()->routeIs('office.admin.archive.*')] : null,
         $settingsAccess ? ['key' => 'settings', 'label' => 'Settings', 'mobile_label' => 'Settings', 'icon' => 'settings', 'href' => route('office.settings.index'), 'active' => request()->routeIs('office.settings.*')] : null,
     ]));
+    $salesChildren = array_values(array_filter([
+        $activeMembership->hasCapability('opportunities.view') ? ['key' => 'leads', 'label' => 'Leads', 'icon' => 'opportunities', 'href' => route('office.leads.index'), 'active' => request()->routeIs('office.leads.*'), 'badge' => $unresolvedLeadCount ?? 0] : null,
+        $activeMembership->hasCapability('opportunities.view') ? ['key' => 'opportunities', 'label' => 'Opportunities', 'icon' => 'opportunities', 'href' => route('office.opportunities.index'), 'active' => request()->routeIs('office.opportunities.*')] : null,
+        $activeMembership->hasCapability('quotes.approve') ? ['key' => 'approvals', 'label' => 'Quote Approvals', 'icon' => 'approvals', 'href' => route('office.quote-approvals.index'), 'active' => request()->routeIs('office.quote-approvals.*')] : null,
+    ]));
+    $serviceChildren = array_values(array_filter([
+        $activeMembership->hasCapability('service_tickets.view') ? ['key' => 'tickets', 'label' => 'Service Tickets', 'icon' => 'tickets', 'href' => route('office.service-tickets.index'), 'active' => request()->routeIs('office.service-tickets.*') || request()->routeIs('office.visits.*')] : null,
+        $activeMembership->hasCapability('service_tickets.view') ? ['key' => 'dispatch', 'label' => 'Dispatch', 'icon' => 'dispatch', 'href' => route('office.dispatch.index'), 'active' => request()->routeIs('office.dispatch.*')] : null,
+        $activeMembership->hasCapability('closeouts.inspect') ? ['key' => 'review', 'label' => 'Review', 'icon' => 'review', 'href' => route('office.closeout-reviews.index'), 'active' => request()->routeIs('office.closeout-reviews.*')] : null,
+    ]));
+    $catalogChildren = array_values(array_filter([
+        $activeMembership->hasCapability('catalog.view') ? ['key' => 'catalog-products', 'label' => 'Products', 'icon' => 'catalog', 'href' => route('office.catalog.products.index'), 'active' => request()->routeIs('office.catalog.products.*')] : null,
+        $activeMembership->hasCapability('catalog.view') ? ['key' => 'catalog-services', 'label' => 'Services', 'icon' => 'catalog', 'href' => route('office.catalog.services.index'), 'active' => request()->routeIs('office.catalog.services.*')] : null,
+        $activeMembership->hasCapability('catalog.view') ? ['key' => 'catalog-packages', 'label' => 'Packages', 'icon' => 'catalog', 'href' => route('office.catalog.packages.index'), 'active' => request()->routeIs('office.catalog.packages.*')] : null,
+        $activeMembership->hasCapability('subscriptions.view') ? ['key' => 'subscriptions', 'label' => 'Subscriptions', 'icon' => 'catalog', 'href' => route('office.subscriptions.index'), 'active' => request()->routeIs('office.subscriptions.*')] : null,
+    ]));
+    $billingChildren = array_values(array_filter([
+        $activeMembership->hasCapability('invoices.view') ? ['key' => 'invoices', 'label' => 'Invoices', 'icon' => 'billing', 'href' => route('office.invoices.index'), 'active' => request()->routeIs('office.invoices.*')] : null,
+        $activeMembership->hasCapability('billing_handoffs.view') ? ['key' => 'billing-handoffs', 'label' => 'Billing Handoffs', 'icon' => 'billing', 'href' => route('office.billing-handoffs.index'), 'active' => request()->routeIs('office.billing-handoffs.*')] : null,
+    ]));
+    $operationsChildren = array_values(array_filter([
+        $activeMembership->hasCapability('operations.health.view') ? ['key' => 'health', 'label' => 'Health', 'icon' => 'health', 'href' => route('office.operations.health'), 'active' => request()->routeIs('office.operations.*')] : null,
+        $activeMembership->hasCapability('visits.archive.manage') ? ['key' => 'archive', 'label' => 'Admin Archive', 'icon' => 'archive', 'href' => route('office.admin.archive.index'), 'active' => request()->routeIs('office.admin.archive.*')] : null,
+    ]));
+    $officeNavigation = array_values(array_filter([
+        ['key' => 'home', 'type' => 'link', 'label' => 'Home', 'icon' => 'home', 'href' => route('office.home'), 'active' => request()->routeIs('office.home', 'office.search')],
+        ['key' => 'updates', 'type' => 'link', 'label' => 'Office Updates', 'icon' => 'updates', 'href' => route('office-updates.index'), 'active' => request()->routeIs('office-updates.*')],
+        $salesChildren !== [] ? ['key' => 'sales', 'type' => 'group', 'label' => 'Sales', 'icon' => 'opportunities', 'active' => request()->routeIs('office.leads.*', 'office.opportunities.*', 'office.quote-approvals.*'), 'children' => $salesChildren] : null,
+        $activeMembership->hasCapability('customers.view') ? ['key' => 'customers', 'type' => 'link', 'label' => 'Customers', 'icon' => 'customers', 'href' => route('office.customers.index'), 'active' => $customerWorkspaceActive] : null,
+        $serviceChildren !== [] ? ['key' => 'service', 'type' => 'group', 'label' => 'Service', 'icon' => 'tickets', 'active' => request()->routeIs('office.service-tickets.*', 'office.visits.*', 'office.dispatch.*', 'office.closeout-reviews.*'), 'children' => $serviceChildren] : null,
+        $activeMembership->hasCapability('projects.view') ? ['key' => 'projects', 'type' => 'link', 'label' => 'Projects', 'icon' => 'projects', 'href' => route('office.projects.index'), 'active' => request()->routeIs('office.projects.*')] : null,
+        $catalogChildren !== [] ? ['key' => 'catalog', 'type' => 'group', 'label' => 'Catalog', 'icon' => 'catalog', 'active' => request()->routeIs('office.catalog.*', 'office.subscriptions.*'), 'children' => $catalogChildren] : null,
+        $billingChildren !== [] ? ['key' => 'billing', 'type' => 'group', 'label' => 'Billing', 'icon' => 'billing', 'active' => request()->routeIs('office.invoices.*', 'office.billing-handoffs.*'), 'children' => $billingChildren] : null,
+        $operationsChildren !== [] ? ['key' => 'operations', 'type' => 'group', 'label' => 'Operations', 'icon' => 'health', 'active' => request()->routeIs('office.operations.*', 'office.admin.archive.*'), 'children' => $operationsChildren] : null,
+        $settingsAccess ? ['key' => 'settings', 'type' => 'link', 'label' => 'Settings', 'icon' => 'settings', 'href' => route('office.settings.index'), 'active' => request()->routeIs('office.settings.*') || request()->routeIs('office.billing.settings.*')] : null,
+    ]));
     $sidebarPreferenceKey = 'ndt:office-sidebar:'.auth()->id().':'.$activeOrganization->id;
+    $sidebarGroupsPreferenceKey = 'ndt:office-nav-groups:'.auth()->id().':'.$activeOrganization->id;
 @endphp
 <!DOCTYPE html>
-<html lang="en" data-office-sidebar-state="expanded" data-office-sidebar-key="{{ $sidebarPreferenceKey }}">
+<html lang="en" data-office-sidebar-state="expanded" data-office-sidebar-key="{{ $sidebarPreferenceKey }}" data-office-nav-groups-key="{{ $sidebarGroupsPreferenceKey }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -67,16 +104,51 @@
             <div class="office-sidebar-section-label mt-7 text-xs font-bold uppercase tracking-[0.14em] text-slate-600">Office workspace</div>
             <nav class="mt-3" aria-label="Office">
                 @foreach ($officeNavigation as $item)
-                    <a href="{{ $item['href'] }}"
-                       data-office-nav-key="{{ $item['key'] }}"
-                       data-office-tooltip="{{ $item['label'] }}"
-                       aria-label="{{ $item['label'] }}"
-                       @if($item['key'] === 'customers') data-office-primary-customers @endif
-                       @if($item['active']) aria-current="page" @endif
-                       class="office-nav-link mt-1 flex min-h-11 items-center gap-3 rounded-lg border-l-4 px-4 text-sm font-bold {{ $item['active'] ? 'is-active border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">
-                        <x-office.nav-icon :name="$item['icon']" />
-                        <span class="office-nav-label">{{ $item['label'] }}</span>
-                    </a>
+                    @if ($item['type'] === 'group')
+                        @php
+                            $groupActive = $item['active'] || collect($item['children'])->contains(fn ($child) => $child['active']);
+                            $groupOpen = $groupActive || $item['key'] === 'service';
+                            $groupPanelId = 'office-nav-group-'.$item['key'];
+                        @endphp
+                        <div class="office-nav-group" data-office-nav-group="{{ $item['key'] }}" data-office-nav-group-active="{{ $groupActive ? 'true' : 'false' }}">
+                            <button type="button"
+                                    class="office-nav-group-toggle mt-1 flex min-h-11 w-full items-center gap-3 rounded-lg border-l-4 border-transparent px-4 text-left text-sm font-bold {{ $groupActive ? 'text-slate-950' : 'text-slate-600 hover:bg-slate-50' }}"
+                                    aria-expanded="{{ $groupOpen ? 'true' : 'false' }}"
+                                    aria-controls="{{ $groupPanelId }}"
+                                    data-office-nav-group-toggle>
+                                <x-office.nav-icon :name="$item['icon']" />
+                                <span class="office-nav-label flex-1">{{ $item['label'] }}</span>
+                                <svg class="office-nav-group-chevron h-4 w-4 shrink-0" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 8 4 4 4-4" /></svg>
+                            </button>
+                            <div id="{{ $groupPanelId }}" class="office-nav-group-children" data-office-nav-group-children @if (! $groupOpen) hidden @endif>
+                                @foreach ($item['children'] as $child)
+                                    <a href="{{ $child['href'] }}"
+                                       data-office-nav-key="{{ $child['key'] }}"
+                                       data-office-tooltip="{{ $child['label'] }}"
+                                       aria-label="{{ $child['label'] }}"
+                                       @if($child['active']) aria-current="page" @endif
+                                       class="office-nav-link office-nav-child mt-1 flex min-h-11 items-center gap-3 rounded-lg border-l-4 px-4 text-sm font-bold {{ $child['active'] ? 'is-active border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">
+                                        <x-office.nav-icon :name="$child['icon']" />
+                                        <span class="office-nav-label min-w-0 flex-1 truncate">{{ $child['label'] }}</span>
+                                        @if (array_key_exists('badge', $child) && $child['badge'] > 0)
+                                            <span class="office-nav-label inline-flex min-w-6 items-center justify-center rounded-full bg-slate-200 px-1.5 py-0.5 text-xs font-bold text-slate-800" aria-label="{{ $child['badge'] }} unresolved">{{ $child['badge'] }}</span>
+                                        @endif
+                                    </a>
+                                @endforeach
+                            </div>
+                        </div>
+                    @else
+                        <a href="{{ $item['href'] }}"
+                           data-office-nav-key="{{ $item['key'] }}"
+                           data-office-tooltip="{{ $item['label'] }}"
+                           aria-label="{{ $item['label'] }}"
+                           @if($item['key'] === 'customers') data-office-primary-customers @endif
+                           @if($item['active']) aria-current="page" @endif
+                           class="office-nav-link mt-1 flex min-h-11 items-center gap-3 rounded-lg border-l-4 px-4 text-sm font-bold {{ $item['active'] ? 'is-active border-brand-blue bg-blue-50 text-brand-blue-dark' : 'border-transparent text-slate-600 hover:bg-slate-50' }}">
+                            <x-office.nav-icon :name="$item['icon']" />
+                            <span class="office-nav-label">{{ $item['label'] }}</span>
+                        </a>
+                    @endif
                 @endforeach
             </nav>
             <div class="office-sidebar-account mt-auto border-t border-slate-200 pt-5">
@@ -116,7 +188,7 @@
                 </div>
             </header>
             <nav class="office-mobile-primary-nav flex gap-2 overflow-x-auto border-b border-slate-200 bg-white px-4 py-2 lg:hidden" aria-label="Office mobile">
-                @foreach ($officeNavigation as $item)
+                @foreach ($mobileNavigation as $item)
                     <a href="{{ $item['href'] }}"
                        @if($item['key'] === 'customers') data-office-primary-customers @endif
                        @if($item['active']) aria-current="page" @endif

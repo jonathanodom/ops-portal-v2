@@ -29,6 +29,7 @@ class OfficeCollapsibleNavigationTest extends TestCase
             ->assertOk()
             ->assertSee('data-office-sidebar-state="expanded"', false)
             ->assertSee('data-office-sidebar-key="ndt:office-sidebar:'.$admin->id.':'.$organization->id.'"', false)
+            ->assertSee('data-office-nav-groups-key="ndt:office-nav-groups:'.$admin->id.':'.$organization->id.'"', false)
             ->assertSee('id="office-sidebar"', false)
             ->assertSee('data-office-shell-grid', false)
             ->assertSee('data-office-sidebar-toggle', false)
@@ -39,6 +40,22 @@ class OfficeCollapsibleNavigationTest extends TestCase
             ->assertSee('data-office-tooltip="Home"', false)
             ->assertSee('data-office-tooltip="Sign out"', false)
             ->assertSee('aria-label="Office mobile"', false)
+            ->assertSee('aria-current="page"', false);
+    }
+
+    public function test_desktop_navigation_renders_accessible_groups_and_opens_the_active_group(): void
+    {
+        $organization = Organization::factory()->create();
+        [$admin] = $this->userWithRole('super_admin', $organization);
+
+        $response = $this->actingAs($admin)->get(route('office.dispatch.index'));
+
+        $response->assertOk()
+            ->assertSee('data-office-nav-group="sales"', false)
+            ->assertSee('data-office-nav-group="service" data-office-nav-group-active="true"', false)
+            ->assertSee('aria-controls="office-nav-group-service"', false)
+            ->assertSee('id="office-nav-group-service"', false)
+            ->assertSee('data-office-nav-key="dispatch"', false)
             ->assertSee('aria-current="page"', false);
     }
 
@@ -58,6 +75,17 @@ class OfficeCollapsibleNavigationTest extends TestCase
             ->assertDontSee('data-office-sidebar-key="ndt:office-sidebar:'.$firstUser->id.':'.$firstOrganization->id.'"', false);
     }
 
+    public function test_secondary_catalog_routes_still_open_the_catalog_group(): void
+    {
+        $organization = Organization::factory()->create();
+        [$admin] = $this->userWithRole('super_admin', $organization);
+
+        $this->actingAs($admin)->get(route('office.catalog.units.index'))
+            ->assertOk()
+            ->assertSee('data-office-nav-group="catalog" data-office-nav-group-active="true"', false)
+            ->assertSee('aria-controls="office-nav-group-catalog"', false);
+    }
+
     public function test_collapsible_navigation_preserves_capability_gated_destinations(): void
     {
         $organization = Organization::factory()->create();
@@ -68,8 +96,10 @@ class OfficeCollapsibleNavigationTest extends TestCase
             ->assertSee('data-office-nav-key="customers"', false)
             ->assertSee('data-office-nav-key="projects"', false)
             ->assertSee('data-office-nav-key="review"', false)
+            ->assertSee('data-office-nav-group="service"', false)
             ->assertDontSee('data-office-nav-key="health"', false)
             ->assertDontSee('data-office-nav-key="archive"', false)
+            ->assertDontSee('data-office-nav-group="operations"', false)
             ->assertDontSee('data-office-nav-key="settings"', false);
     }
 
