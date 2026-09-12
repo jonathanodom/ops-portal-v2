@@ -17,9 +17,14 @@ A group is omitted when the active membership cannot access any of its children.
 
 Disclosure preferences are stored in browser local storage under `ndt:office-nav-groups:{user_id}:{organization_id}`. Service is open by default for first-time users; other groups are collapsed unless they contain the active route. An active route always forces its group open, regardless of a saved collapsed preference.
 
-In collapsed icon-only sidebar mode, group headers are hidden and authorized child links remain available as the existing icon-and-tooltip navigation. Group flyouts and a grouped mobile drawer are intentionally deferred.
+## Slice 2: collapsed sidebar flyouts
+
+In collapsed icon-only mode, direct destinations remain icon links and each authorized group renders as one icon button. Activating a group opens a viewport-bounded flyout containing its server-rendered authorized children. A second activation closes it; opening another group closes the first; clicking outside, scrolling, resizing, or pressing Escape dismisses it. Escape restores focus to the originating group button.
+
+The active group icon retains a restrained blue indication without opening automatically. Active child links keep `aria-current="page"` inside the flyout. Tooltips remain available while flyouts are closed and are suppressed for the open group to prevent overlapping floating layers.
+
+Flyout state is intentionally ephemeral. Collapsing the sidebar closes expanded disclosures, while expanding it closes flyouts and restores Slice 1 group preferences with the active-route override.
 
 ## Deferred work
 
-- Slice 2: grouped icon-only flyouts, focus handling, and tooltip integration.
 - Slice 3: grouped mobile drawer with account, sign-out, and Field switching.

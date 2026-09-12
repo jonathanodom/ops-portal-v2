@@ -6,6 +6,118 @@ import './browser-push';
 const officeSidebarRoot = document.documentElement;
 const officeSidebar = document.querySelector('[data-office-sidebar]');
 const officeSidebarToggle = document.querySelector('[data-office-sidebar-toggle]');
+const officeNavGroups = [...document.querySelectorAll('[data-office-nav-group]')];
+let savedOfficeNavGroups = {};
+
+try {
+    savedOfficeNavGroups = JSON.parse(localStorage.getItem(officeSidebarRoot.dataset.officeNavGroupsKey) || '{}');
+} catch (_) {
+    savedOfficeNavGroups = {};
+}
+
+const officeNavDefaultStates = new Map(officeNavGroups.map((group) => [
+    group.dataset.officeNavGroup,
+    group.querySelector('[data-office-nav-group-toggle]').getAttribute('aria-expanded') === 'true',
+]));
+
+const closeOfficeNavFlyout = (group, restoreFocus = false) => {
+    const toggle = group.querySelector('[data-office-nav-group-toggle]');
+    const children = group.querySelector('[data-office-nav-group-children]');
+
+    group.removeAttribute('data-office-nav-flyout-open');
+    toggle.setAttribute('aria-expanded', 'false');
+    children.hidden = true;
+    children.style.removeProperty('left');
+    children.style.removeProperty('top');
+    if (restoreFocus) toggle.focus();
+};
+
+const closeAllOfficeNavFlyouts = (except = null) => {
+    officeNavGroups.forEach((group) => {
+        if (group !== except && group.hasAttribute('data-office-nav-flyout-open')) {
+            closeOfficeNavFlyout(group);
+        }
+    });
+};
+
+const positionOfficeNavFlyout = (group) => {
+    const toggle = group.querySelector('[data-office-nav-group-toggle]');
+    const children = group.querySelector('[data-office-nav-group-children]');
+    const triggerRect = toggle.getBoundingClientRect();
+    const viewportPadding = 8;
+    const maximumTop = Math.max(viewportPadding, window.innerHeight - children.offsetHeight - viewportPadding);
+
+    children.style.left = `${Math.round(triggerRect.right + viewportPadding)}px`;
+    children.style.top = `${Math.round(Math.min(Math.max(triggerRect.top, viewportPadding), maximumTop))}px`;
+};
+
+const openOfficeNavFlyout = (group) => {
+    const toggle = group.querySelector('[data-office-nav-group-toggle]');
+    const children = group.querySelector('[data-office-nav-group-children]');
+
+    closeAllOfficeNavFlyouts(group);
+    group.setAttribute('data-office-nav-flyout-open', 'true');
+    toggle.setAttribute('aria-expanded', 'true');
+    children.hidden = false;
+    positionOfficeNavFlyout(group);
+};
+
+const applyExpandedOfficeNavGroupState = (group) => {
+    const key = group.dataset.officeNavGroup;
+    const toggle = group.querySelector('[data-office-nav-group-toggle]');
+    const children = group.querySelector('[data-office-nav-group-children]');
+    const preferredOpen = Object.hasOwn(savedOfficeNavGroups, key)
+        ? savedOfficeNavGroups[key] === true
+        : officeNavDefaultStates.get(key) === true;
+    const expanded = group.dataset.officeNavGroupActive === 'true' || preferredOpen;
+
+    group.removeAttribute('data-office-nav-flyout-open');
+    children.style.removeProperty('left');
+    children.style.removeProperty('top');
+    toggle.setAttribute('aria-expanded', String(expanded));
+    children.hidden = !expanded;
+};
+
+const syncOfficeNavGroupsForSidebarState = () => {
+    if (officeSidebarRoot.dataset.officeSidebarState === 'collapsed') {
+        officeNavGroups.forEach((group) => closeOfficeNavFlyout(group));
+        return;
+    }
+
+    officeNavGroups.forEach(applyExpandedOfficeNavGroupState);
+};
+
+const persistOfficeNavGroups = () => {
+    try {
+        localStorage.setItem(officeSidebarRoot.dataset.officeNavGroupsKey, JSON.stringify(savedOfficeNavGroups));
+    } catch (_) {
+        // A blocked storage API must not prevent navigation disclosures from working.
+    }
+};
+
+officeNavGroups.forEach((group) => {
+    const key = group.dataset.officeNavGroup;
+    const toggle = group.querySelector('[data-office-nav-group-toggle]');
+
+    toggle.addEventListener('click', () => {
+        if (officeSidebarRoot.dataset.officeSidebarState === 'collapsed') {
+            if (group.hasAttribute('data-office-nav-flyout-open')) {
+                closeOfficeNavFlyout(group);
+            } else {
+                openOfficeNavFlyout(group);
+            }
+            return;
+        }
+
+        savedOfficeNavGroups[key] = toggle.getAttribute('aria-expanded') !== 'true';
+        persistOfficeNavGroups();
+        applyExpandedOfficeNavGroupState(group);
+    });
+
+    group.querySelectorAll('[data-office-nav-group-children] a').forEach((link) => {
+        link.addEventListener('click', () => closeOfficeNavFlyout(group));
+    });
+});
 
 if (officeSidebar && officeSidebarToggle) {
     const applyOfficeSidebarState = (requestedState, persist = false) => {
@@ -17,6 +129,7 @@ if (officeSidebar && officeSidebarToggle) {
         officeSidebarToggle.setAttribute('aria-expanded', String(expanded));
         officeSidebarToggle.setAttribute('aria-label', label);
         officeSidebarToggle.setAttribute('title', label);
+        syncOfficeNavGroupsForSidebarState();
 
         if (persist) {
             try {
@@ -34,52 +147,23 @@ if (officeSidebar && officeSidebarToggle) {
     });
 }
 
-const officeNavGroups = [...document.querySelectorAll('[data-office-nav-group]')];
-
-if (officeNavGroups.length > 0) {
-    let savedGroups = {};
-
-    try {
-        savedGroups = JSON.parse(localStorage.getItem(officeSidebarRoot.dataset.officeNavGroupsKey) || '{}');
-    } catch (_) {
-        savedGroups = {};
+document.addEventListener('click', (event) => {
+    if (officeSidebarRoot.dataset.officeSidebarState === 'collapsed' && !event.target.closest('[data-office-nav-group]')) {
+        closeAllOfficeNavFlyouts();
     }
+});
 
-    const applyGroupState = (group, open) => {
-        const toggle = group.querySelector('[data-office-nav-group-toggle]');
-        const children = group.querySelector('[data-office-nav-group-children]');
-        const expanded = group.dataset.officeNavGroupActive === 'true' || open;
+document.addEventListener('keydown', (event) => {
+    if (event.key !== 'Escape' || officeSidebarRoot.dataset.officeSidebarState !== 'collapsed') return;
+    const openGroup = officeNavGroups.find((group) => group.hasAttribute('data-office-nav-flyout-open'));
+    if (!openGroup) return;
 
-        toggle.setAttribute('aria-expanded', String(expanded));
-        children.hidden = !expanded;
-    };
+    event.preventDefault();
+    closeOfficeNavFlyout(openGroup, true);
+});
 
-    const persistGroups = () => {
-        try {
-            const state = Object.fromEntries(officeNavGroups.map((group) => [
-                group.dataset.officeNavGroup,
-                group.querySelector('[data-office-nav-group-toggle]').getAttribute('aria-expanded') === 'true',
-            ]));
-            localStorage.setItem(officeSidebarRoot.dataset.officeNavGroupsKey, JSON.stringify(state));
-        } catch (_) {
-            // A blocked storage API must not prevent navigation disclosures from working.
-        }
-    };
-
-    officeNavGroups.forEach((group) => {
-        const key = group.dataset.officeNavGroup;
-        const toggle = group.querySelector('[data-office-nav-group-toggle]');
-        const defaultOpen = toggle.getAttribute('aria-expanded') === 'true';
-        const preferredOpen = Object.hasOwn(savedGroups, key) ? savedGroups[key] === true : defaultOpen;
-
-        applyGroupState(group, preferredOpen);
-        toggle.addEventListener('click', () => {
-            const open = toggle.getAttribute('aria-expanded') !== 'true';
-            applyGroupState(group, open);
-            persistGroups();
-        });
-    });
-}
+window.addEventListener('resize', () => closeAllOfficeNavFlyouts());
+window.addEventListener('scroll', () => closeAllOfficeNavFlyouts(), { passive: true });
 
 const connectivityBanner = document.querySelector('[data-connectivity-banner]');
 const connectivityStatus = document.querySelector('[data-connectivity-status]');

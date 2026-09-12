@@ -2,6 +2,7 @@
 
 namespace Tests\Feature;
 
+use App\Models\Capability;
 use App\Models\Organization;
 use App\Models\OrganizationMembership;
 use App\Models\Role;
@@ -54,9 +55,29 @@ class OfficeCollapsibleNavigationTest extends TestCase
             ->assertSee('data-office-nav-group="sales"', false)
             ->assertSee('data-office-nav-group="service" data-office-nav-group-active="true"', false)
             ->assertSee('aria-controls="office-nav-group-service"', false)
+            ->assertSee('aria-haspopup="true"', false)
+            ->assertSee('data-office-tooltip="Service"', false)
+            ->assertSee('class="office-nav-flyout-title hidden', false)
             ->assertSee('id="office-nav-group-service"', false)
             ->assertSee('data-office-nav-key="dispatch"', false)
             ->assertSee('aria-current="page"', false);
+    }
+
+    public function test_collapsed_flyout_markup_reuses_only_authorized_group_children(): void
+    {
+        $organization = Organization::factory()->create();
+        [$reviewer, $reviewerMembership] = $this->userWithRole('reviewer', $organization);
+        $reviewerMembership->capabilityOverrides()->attach(
+            Capability::query()->where('key', 'service_tickets.view')->firstOrFail(),
+            ['effect' => 'deny'],
+        );
+
+        $this->actingAs($reviewer)->get(route('office.home'))
+            ->assertOk()
+            ->assertSee('aria-label="Service navigation"', false)
+            ->assertSee('data-office-nav-key="review"', false)
+            ->assertDontSee('data-office-nav-key="dispatch"', false)
+            ->assertDontSee('data-office-nav-group="operations"', false);
     }
 
     public function test_navigation_preference_key_is_isolated_by_user_and_organization(): void
