@@ -112,15 +112,19 @@
                         @endphp
                         <div class="office-nav-group" data-office-nav-group="{{ $item['key'] }}" data-office-nav-group-active="{{ $groupActive ? 'true' : 'false' }}">
                             <button type="button"
-                                    class="office-nav-group-toggle mt-1 flex min-h-11 w-full items-center gap-3 rounded-lg border-l-4 border-transparent px-4 text-left text-sm font-bold {{ $groupActive ? 'text-slate-950' : 'text-slate-600 hover:bg-slate-50' }}"
+                                    class="office-nav-group-toggle mt-1 flex min-h-11 w-full items-center gap-3 rounded-lg border-l-4 border-transparent px-4 text-left text-sm font-bold {{ $groupActive ? 'is-active-group bg-blue-50 text-brand-blue-dark' : 'text-slate-600 hover:bg-slate-50' }}"
                                     aria-expanded="{{ $groupOpen ? 'true' : 'false' }}"
                                     aria-controls="{{ $groupPanelId }}"
+                                    aria-haspopup="true"
+                                    aria-label="{{ $item['label'] }} navigation"
+                                    data-office-tooltip="{{ $item['label'] }}"
                                     data-office-nav-group-toggle>
                                 <x-office.nav-icon :name="$item['icon']" />
                                 <span class="office-nav-label flex-1">{{ $item['label'] }}</span>
                                 <svg class="office-nav-group-chevron h-4 w-4 shrink-0" aria-hidden="true" viewBox="0 0 20 20" fill="none" stroke="currentColor" stroke-width="2"><path d="m6 8 4 4 4-4" /></svg>
                             </button>
                             <div id="{{ $groupPanelId }}" class="office-nav-group-children" data-office-nav-group-children @if (! $groupOpen) hidden @endif>
+                                <div class="office-nav-flyout-title hidden border-b border-slate-200 px-4 py-3 text-sm font-bold text-slate-950">{{ $item['label'] }}</div>
                                 @foreach ($item['children'] as $child)
                                     <a href="{{ $child['href'] }}"
                                        data-office-nav-key="{{ $child['key'] }}"
